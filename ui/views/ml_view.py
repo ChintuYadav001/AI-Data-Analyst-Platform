@@ -1063,6 +1063,11 @@ def render_ml_view():
         rep_target = st.session_state.get("ml_target_col", "Target")
         r_col1, r_col2, r_col3 = st.columns(3)
 
+        bench_data = st.session_state.get("ml_benchmark_results") or {}
+        champ_models = bench_data.get("models") or {}
+        champ_exp_id = champ.get("experiment_id") if champ else ""
+        champ_feat_imp = (champ_models.get(champ_exp_id) or {}).get("feature_importance", [])
+
         report_payload = {
             "dataset_name": proj_name,
             "target_col": rep_target,
@@ -1071,8 +1076,8 @@ def render_ml_view():
             "total_rows": len(df),
             "feature_count": len(df.columns) - 1,
             "champion_name": champ.get("model_name") if champ else "Evaluated Model",
-            "leaderboard": st.session_state.get("ml_benchmark_results", {}).get("leaderboard", []),
-            "feature_importance": st.session_state.get("ml_benchmark_results", {}).get("models", {}).get(champ.get("experiment_id") if champ else "", {}).get("feature_importance", []),
+            "leaderboard": bench_data.get("leaderboard", []),
+            "feature_importance": champ_feat_imp,
             "forecast_results": st.session_state.get("ml_forecast_results"),
         }
 
