@@ -192,6 +192,15 @@ def render_ml_view():
             st.markdown("##### 4. Forecast & Scenarios")
             st.caption("Generate future projections and counterfactual What-If tests.")
 
+        st.markdown("<br>", unsafe_allow_html=True)
+        q_c1, q_c2 = st.columns([3, 1])
+        with q_c1:
+            st.info("💡 **Have questions about how any ML model works or which model to pick?** Ask our AI Copilot & Voice Assistant on the bottom right!")
+        with q_c2:
+            if st.button("🤖 Open AI Model Copilot", type="primary", use_container_width=True):
+                st.session_state["copilot_open"] = True
+                st.rerun()
+
     # =========================================================================
     # TAB 2: ML READINESS
     # =========================================================================

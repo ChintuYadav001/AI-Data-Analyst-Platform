@@ -381,3 +381,7 @@ else:
 
     dispatch_active_view(active)
 
+    # Persistent Floating AI Model Copilot & Voice Assistant on bottom right
+    from ui.copilot_widget import render_floating_ai_copilot
+    render_floating_ai_copilot()
+
