@@ -433,136 +433,221 @@ def render_ml_view():
             st.plotly_chart(fig_fs, use_container_width=True)
 
     # =========================================================================
-    # TAB 5: DIMENSIONALITY (PCA & BEYOND)
+    # TAB 5: DIMENSIONALITY (PCA) & ANOMALY DETECTION
     # =========================================================================
     with tabs[4]:
-        st.subheader("🌐 Dimensionality Reduction & PCA Suite")
-        st.caption("Linear and non-linear manifold decomposition (PCA, Truncated SVD, Kernel PCA, ICA, NMF, t-SNE).")
+        st.subheader("🌐 Dimensionality (PCA) & Unsupervised Outlier Detection")
+        st.caption("Linear and non-linear manifold decomposition (PCA, Truncated SVD, Kernel PCA, ICA, NMF, t-SNE) & anomaly detection (Isolation Forest, One-Class SVM, LOF, Elliptic Envelope).")
+
+        t5_pca, t5_anomaly = st.tabs([
+            "🌐 PCA & Manifold Decomposition",
+            "🚨 Unsupervised Anomaly & Outlier Detection",
+        ])
 
         num_features = df.select_dtypes(include=[np.number]).columns.tolist()
         target_col = st.session_state.get("ml_target_col")
         if target_col in num_features:
             num_features.remove(target_col)
 
-        if len(num_features) < 2:
-            st.info("Dimensionality reduction requires at least 2 numeric feature columns.")
-        else:
-            p_col1, p_col2, p_col3 = st.columns([2, 1, 1])
-            with p_col1:
-                decomp_method = st.selectbox(
-                    "Decomposition Algorithm:",
-                    options=list(METHOD_METADATA.keys()),
-                    format_func=lambda k: METHOD_METADATA[k]["name"],
-                    index=0,
-                )
-            with p_col2:
-                n_comps = st.slider("Component Dimensions:", min_value=2, max_value=min(10, len(num_features)), value=2)
-            with p_col3:
-                st.write("")
-                st.write("")
-                run_pca_btn = st.button("⚡ Run Decomposition", type="primary", use_container_width=True)
+        with t5_pca:
+            if len(num_features) < 2:
+                st.info("Dimensionality reduction requires at least 2 numeric feature columns.")
+            else:
+                p_col1, p_col2, p_col3 = st.columns([2, 1, 1])
+                with p_col1:
+                    decomp_method = st.selectbox(
+                        "Decomposition Algorithm:",
+                        options=list(METHOD_METADATA.keys()),
+                        format_func=lambda k: METHOD_METADATA[k]["name"],
+                        index=0,
+                    )
+                with p_col2:
+                    n_comps = st.slider("Component Dimensions:", min_value=2, max_value=min(10, len(num_features)), value=2)
+                with p_col3:
+                    st.write("")
+                    st.write("")
+                    run_pca_btn = st.button("⚡ Run Decomposition", type="primary", use_container_width=True)
 
-            if run_pca_btn:
-                with st.spinner("Executing dimensionality reduction & calculating loadings..."):
-                    try:
-                        pca_res = run_dimensionality_reduction(
-                            df=df,
-                            feature_cols=num_features,
-                            method=decomp_method,
-                            n_components=n_comps,
-                            target_col=target_col,
+                if run_pca_btn:
+                    with st.spinner("Executing dimensionality reduction & calculating loadings..."):
+                        try:
+                            pca_res = run_dimensionality_reduction(
+                                df=df,
+                                feature_cols=num_features,
+                                method=decomp_method,
+                                n_components=n_comps,
+                                target_col=target_col,
+                            )
+                            st.session_state["ml_pca_results"] = pca_res
+                            st.success(f"Successfully decomposed {len(num_features)} features into {n_comps} dimensions using {METHOD_METADATA[decomp_method]['name']}.")
+                        except Exception as e:
+                            st.error(f"Decomposition error: {str(e)}")
+
+                pca_res = st.session_state.get("ml_pca_results")
+                if pca_res:
+                    summary = pca_res["comparison_summary"]
+                    sm1, sm2, sm3, sm4 = st.columns(4)
+                    with sm1:
+                        st.metric("Original Features", summary["original_features_count"])
+                    with sm2:
+                        st.metric("Reduced Dimensions", summary["reduced_dimensions_count"])
+                    with sm3:
+                        st.metric("Compression Ratio", f"{summary['compression_ratio_pct']}%")
+                    with sm4:
+                        st.metric("Variance Retained", f"{summary['variance_retained_pct']}%")
+
+                    # Scree Plot (if linear PCA/SVD)
+                    if pca_res.get("scree_data"):
+                        st.markdown("#### 📉 Scree Plot & Cumulative Variance")
+                        scree_df = pd.DataFrame(pca_res["scree_data"])
+                        fig_scree = go.Figure()
+                        fig_scree.add_trace(go.Bar(
+                            x=scree_df["component"],
+                            y=scree_df["variance_pct"],
+                            name="Explained Variance %",
+                            marker_color="#00F0FF",
+                        ))
+                        fig_scree.add_trace(go.Scatter(
+                            x=scree_df["component"],
+                            y=scree_df["cumulative_pct"],
+                            name="Cumulative Variance %",
+                            mode="lines+markers",
+                            line=dict(color="#F59E0B", width=2),
+                        ))
+                        fig_scree.update_layout(
+                            title="Explained Variance by Component",
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            plot_bgcolor="rgba(15,23,42,0.6)",
+                            font_color="#E2E8F0",
                         )
-                        st.session_state["ml_pca_results"] = pca_res
-                        st.success(f"Successfully decomposed {len(num_features)} features into {n_comps} dimensions using {METHOD_METADATA[decomp_method]['name']}.")
-                    except Exception as e:
-                        st.error(f"Decomposition error: {str(e)}")
+                        st.plotly_chart(fig_scree, use_container_width=True)
 
-            pca_res = st.session_state.get("ml_pca_results")
-            if pca_res:
-                summary = pca_res["comparison_summary"]
-                sm1, sm2, sm3, sm4 = st.columns(4)
-                with sm1:
-                    st.metric("Original Features", summary["original_features_count"])
-                with sm2:
-                    st.metric("Reduced Dimensions", summary["reduced_dimensions_count"])
-                with sm3:
-                    st.metric("Compression Ratio", f"{summary['compression_ratio_pct']}%")
-                with sm4:
-                    st.metric("Variance Retained", f"{summary['variance_retained_pct']}%")
-
-                # Scree Plot (if linear PCA/SVD)
-                if pca_res.get("scree_data"):
-                    st.markdown("#### 📉 Scree Plot & Cumulative Variance")
-                    scree_df = pd.DataFrame(pca_res["scree_data"])
-                    fig_scree = go.Figure()
-                    fig_scree.add_trace(go.Bar(
-                        x=scree_df["component"],
-                        y=scree_df["variance_pct"],
-                        name="Explained Variance %",
-                        marker_color="#00F0FF",
-                    ))
-                    fig_scree.add_trace(go.Scatter(
-                        x=scree_df["component"],
-                        y=scree_df["cumulative_pct"],
-                        name="Cumulative Variance %",
-                        mode="lines+markers",
-                        line=dict(color="#F59E0B", width=2),
-                    ))
-                    fig_scree.update_layout(
-                        title="Explained Variance by Component",
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(15,23,42,0.6)",
-                        font_color="#E2E8F0",
-                    )
-                    st.plotly_chart(fig_scree, use_container_width=True)
-
-                # 2D & 3D Projections
-                st.markdown("#### 🗺️ Low-Dimensional Space Projection")
-                p_tab2d, p_tab3d = st.tabs(["2D Projection Scatter", "3D Interactive Orbit"])
-                with p_tab2d:
-                    proj_2d_df = pd.DataFrame(pca_res["proj_2d"])
-                    fig_2d = px.scatter(
-                        proj_2d_df,
-                        x="dim1",
-                        y="dim2",
-                        color="target",
-                        title=f"{pca_res['metadata']['name']} (2D Space)",
-                        hover_data=["index"],
-                        color_discrete_sequence=px.colors.qualitative.Prism,
-                    )
-                    fig_2d.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
-                    st.plotly_chart(fig_2d, use_container_width=True)
-
-                with p_tab3d:
-                    if pca_res.get("proj_3d"):
-                        proj_3d_df = pd.DataFrame(pca_res["proj_3d"])
-                        fig_3d = px.scatter_3d(
-                            proj_3d_df,
+                    # 2D & 3D Projections
+                    st.markdown("#### 🗺️ Low-Dimensional Space Projection")
+                    p_tab2d, p_tab3d = st.tabs(["2D Projection Scatter", "3D Interactive Orbit"])
+                    with p_tab2d:
+                        proj_2d_df = pd.DataFrame(pca_res["proj_2d"])
+                        fig_2d = px.scatter(
+                            proj_2d_df,
                             x="dim1",
                             y="dim2",
-                            z="dim3",
                             color="target",
-                            title=f"{pca_res['metadata']['name']} (3D Manifold)",
+                            title=f"{pca_res['metadata']['name']} (2D Space)",
                             hover_data=["index"],
                             color_discrete_sequence=px.colors.qualitative.Prism,
                         )
-                        fig_3d.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#E2E8F0")
-                        st.plotly_chart(fig_3d, use_container_width=True)
-                    else:
-                        st.info("3D projection requires selecting at least 3 component dimensions.")
+                        fig_2d.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                        st.plotly_chart(fig_2d, use_container_width=True)
 
-                # Loadings Matrix Heatmap
-                if pca_res.get("loadings"):
-                    st.markdown("#### 🧬 Component Loadings (Feature Contributions)")
-                    loadings_df = pd.DataFrame(pca_res["loadings"])
-                    fig_load = px.imshow(
-                        loadings_df.T,
-                        aspect="auto",
-                        color_continuous_scale="RdBu_r",
-                        title="Feature Loadings Matrix ($V^T$)",
+                    with p_tab3d:
+                        if pca_res.get("proj_3d"):
+                            proj_3d_df = pd.DataFrame(pca_res["proj_3d"])
+                            fig_3d = px.scatter_3d(
+                                proj_3d_df,
+                                x="dim1",
+                                y="dim2",
+                                z="dim3",
+                                color="target",
+                                title=f"{pca_res['metadata']['name']} (3D Manifold)",
+                                hover_data=["index"],
+                                color_discrete_sequence=px.colors.qualitative.Prism,
+                            )
+                            fig_3d.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#E2E8F0")
+                            st.plotly_chart(fig_3d, use_container_width=True)
+                        else:
+                            st.info("3D projection requires selecting at least 3 component dimensions.")
+
+                    # Loadings Matrix Heatmap
+                    if pca_res.get("loadings"):
+                        st.markdown("#### 🧬 Component Loadings (Feature Contributions)")
+                        loadings_df = pd.DataFrame(pca_res["loadings"])
+                        fig_load = px.imshow(
+                            loadings_df.T,
+                            aspect="auto",
+                            color_continuous_scale="RdBu_r",
+                            title="Feature Loadings Matrix ($V^T$)",
+                        )
+                        fig_load.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#E2E8F0")
+                        st.plotly_chart(fig_load, use_container_width=True)
+
+        with t5_anomaly:
+            if len(num_features) < 2:
+                st.info("Anomaly detection requires at least 2 numeric feature columns.")
+            else:
+                an_col1, an_col2, an_col3 = st.columns([2, 1, 1])
+                with an_col1:
+                    an_algo = st.selectbox(
+                        "Anomaly Algorithm:",
+                        options=list(ANOMALY_ALGORITHMS.keys()),
+                        format_func=lambda k: f"{ANOMALY_ALGORITHMS[k]['name']} ({ANOMALY_ALGORITHMS[k]['family']})",
+                        index=0,
+                        key="ml_anomaly_algo_select",
                     )
-                    fig_load.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#E2E8F0")
-                    st.plotly_chart(fig_load, use_container_width=True)
+                with an_col2:
+                    an_contam = st.slider(
+                        "Expected Contamination:",
+                        min_value=0.01,
+                        max_value=0.20,
+                        value=0.05,
+                        step=0.01,
+                        format="%.2f",
+                        key="ml_anomaly_contam_slider",
+                        help="Estimated proportion of outliers in the data.",
+                    )
+                with an_col3:
+                    st.write("")
+                    st.write("")
+                    run_an_btn = st.button("🚨 Detect Anomalies", type="primary", use_container_width=True, key="ml_run_anomaly_btn")
+
+                if run_an_btn:
+                    with st.spinner("Computing robust multi-dimensional outlier distances..."):
+                        try:
+                            an_res = run_anomaly_detection(
+                                df=df,
+                                feature_cols=num_features,
+                                algorithm=an_algo,
+                                contamination=an_contam,
+                            )
+                            st.session_state["ml_anomaly_results"] = an_res
+                            st.success(an_res["summary"])
+                        except Exception as e:
+                            st.error(f"Anomaly detection failed: {str(e)}")
+
+                an_res = st.session_state.get("ml_anomaly_results")
+                if an_res:
+                    an_m1, an_m2, an_m3, an_m4 = st.columns(4)
+                    with an_m1:
+                        st.metric("Total Records", f"{an_res['total_records']:,}")
+                    with an_m2:
+                        st.metric("Detected Anomalies", f"{an_res['anomaly_count']:,}", delta=f"-{an_res['anomaly_rate_pct']}%", delta_color="inverse")
+                    with an_m3:
+                        st.metric("Nominal Inliers", f"{an_res['inlier_count']:,}")
+                    with an_m4:
+                        st.metric("Algorithm", an_res["algorithm_name"][:16])
+
+                    # 2D PCA Outlier Projection Scatter
+                    if an_res.get("pca_projection"):
+                        st.markdown("#### 🗺️ 2D Outlier Spatial Distribution")
+                        an_proj_df = pd.DataFrame(an_res["pca_projection"])
+                        fig_an = px.scatter(
+                            an_proj_df,
+                            x="pca_dim1",
+                            y="pca_dim2",
+                            color="status",
+                            title=f"Outlier Boundary Projection ({an_res['algorithm_name']})",
+                            color_discrete_map={"Anomaly": "#EF4444", "Inlier": "#00F0FF"},
+                            hover_data=["index", "score"],
+                        )
+                        fig_an.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                        st.plotly_chart(fig_an, use_container_width=True)
+
+                    # Top Anomalous Records Table
+                    if an_res.get("top_anomalies"):
+                        st.markdown("#### 🚨 Top Ranked Outlier Records")
+                        top_an_df = pd.DataFrame(an_res["top_anomalies"])
+                        st.dataframe(top_an_df, use_container_width=True)
+                        csv_an = top_an_df.to_csv(index=False).encode("utf-8")
+                        st.download_button("📥 Export Anomalies (CSV)", data=csv_an, file_name="detected_anomalies.csv", mime="text/csv")
 
     # =========================================================================
     # TAB 6: MODELS & CONFIG
