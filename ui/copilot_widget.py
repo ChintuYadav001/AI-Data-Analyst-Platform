@@ -1,10 +1,15 @@
 """
 ui.copilot_widget
 =================
-Floating AI Model Copilot & Voice Assistant Widget for Quantum Analyst.
-Renders an ultra-visible floating pill on the bottom-right of the screen that expands
-into an AI Assistant specialized in explaining models in simple language with real-world
-business uses, intuitive analogies, and native Web Speech Voice Input & Output.
+High-Quality, Project-Aware Quantum AI Data Analyst & Voice Assistant.
+Renders an ultra-modern floating launcher button [ ✨ AI ] at the bottom-right of the screen.
+When opened, presents an institutional-grade AI Data Assistant equipped with:
+- Natural language chat & Web Speech voice assistance (STT & TTS)
+- Context-awareness of the active page, dataset, target, and champion model
+- 18 controlled calculation tools (DuckDB, Profiler, Quality, Cleaning, EDA, ML, Forecasting)
+- Simple Language Mode with intuitive analogies
+- Structured Answer -> Evidence -> Explanation -> Recommendation output
+- Dynamic follow-up action buttons and context-aware suggestion chips
 """
 
 import json
@@ -12,195 +17,317 @@ from typing import Optional, Dict, Any, List
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
-from core.ml.model_copilot import ModelCopilotEngine
+
+from core.ai.quantum_ai_engine import QuantumAIEngine
 from core.ml.experiment_tracker import get_active_champion
 
 
 def init_copilot_state():
-    """Initializes session state variables for the floating AI Copilot."""
+    """Initializes session state variables for Quantum AI Assistant."""
     if "copilot_open" not in st.session_state:
         st.session_state["copilot_open"] = False
+    if "copilot_minimized" not in st.session_state:
+        st.session_state["copilot_minimized"] = False
+    if "copilot_voice_active" not in st.session_state:
+        st.session_state["copilot_voice_active"] = False
+    if "copilot_voice_to_play" not in st.session_state:
+        st.session_state["copilot_voice_to_play"] = None
+    if "copilot_stop_speech" not in st.session_state:
+        st.session_state["copilot_stop_speech"] = False
+    if "copilot_pending_query" not in st.session_state:
+        st.session_state["copilot_pending_query"] = None
     if "copilot_messages" not in st.session_state:
         st.session_state["copilot_messages"] = [
             {
                 "role": "assistant",
                 "content": (
-                    "👋 **Hello! I am your AI Model Copilot & Voice Assistant.**\n\n"
-                    "I can explain every machine learning algorithm in simple, everyday words, "
-                    "give you intuitive analogies, break down business use cases, or explain why "
-                    "your champion model won on this dataset.\n\n"
-                    "Click any prompt chip below, type a question, or click the **🎙️ Microphone** to talk!"
+                    "### ✨ Hello! I am Quantum AI\n"
+                    "**Your Intelligent Data Analyst & Predictive Analytics Assistant.**\n\n"
+                    "I can help you analyze your data, audit quality, discover EDA patterns, "
+                    "train machine learning models, forecast future numbers, or explain how Quantum Analyst works in simple words.\n\n"
+                    "💡 *Click a suggested chip below, type a question, or click the **🎙️ Microphone** to talk hands-free!*"
                 ),
-                "voice_text": (
-                    "Hello! I am your AI Model Copilot. You can ask me to explain any model in simple language, "
-                    "compare algorithms like Random Forest and XGBoost, or explain PCA and anomaly detection."
-                ),
+                "voice_text": "Hello! I am Quantum AI, your intelligent data analyst. You can ask me to analyze your data, check data quality, explain models in simple words, or forecast future numbers.",
+                "actions": ["What does this project do?", "Summarize my dataset", "What is PCA?"],
             }
         ]
-    if "copilot_voice_to_play" not in st.session_state:
-        st.session_state["copilot_voice_to_play"] = None
-    if "copilot_pending_query" not in st.session_state:
-        st.session_state["copilot_pending_query"] = None
+
+
+def get_context_suggested_questions(current_page: str, has_data: bool) -> List[str]:
+    """Generates dynamic suggestion chips tailored specifically to the user's active page."""
+    if not has_data:
+        return [
+            "💡 What does this project do?",
+            "📷 What is PCA?",
+            "🌲 What is Random Forest?",
+            "⚡ Why is DuckDB used?",
+        ]
+
+    page_clean = (current_page or "").lower()
+
+    if "profile" in page_clean or "upload" in page_clean:
+        return [
+            "📋 Summarize my dataset",
+            "🛡️ Are there data-quality problems?",
+            "🧹 What should I clean?",
+            "💡 Explain the workflow",
+        ]
+    elif "quality" in page_clean:
+        return [
+            "🛡️ Find the biggest problem in my data",
+            "❓ Why is my quality score this value?",
+            "🧹 What should I clean first?",
+            "📋 What are the missing values?",
+        ]
+    elif "cleaning" in page_clean:
+        return [
+            "🧹 What cleaning actions do you recommend?",
+            "🛡️ How will cleaning improve ML accuracy?",
+            "❓ Why was this column modified?",
+            "📋 Check duplicate records",
+        ]
+    elif "eda" in page_clean:
+        return [
+            "🔬 What are the main insights?",
+            "🚨 Find unusual patterns and outliers",
+            "📊 Which variables have strong correlation?",
+            "📷 What is PCA?",
+        ]
+    elif "feature" in page_clean:
+        return [
+            "⚙️ What features should I engineer?",
+            "📊 Which features are most important?",
+            "📈 Explain power transforms (Yeo-Johnson)",
+            "⚖️ Regression vs Classification",
+        ]
+    elif "machine" in page_clean or "ml" in page_clean:
+        return [
+            "🏆 Which model is best for my data?",
+            "🌲 Random Forest vs XGBoost",
+            "🎯 What are the most important features?",
+            "⚖️ Difference between Regression & Classification",
+        ]
+    elif "forecast" in page_clean:
+        return [
+            "📈 Explain this forecast trajectory",
+            "🔮 What is the expected trend and growth?",
+            "⏱️ How does the forecasting engine work?",
+            "📊 Show confidence intervals",
+        ]
+    elif "sql" in page_clean:
+        return [
+            "⚡ Show top 5 categories by sales",
+            "📊 Average numbers grouped by region",
+            "🔍 Explain how Natural Language to SQL works",
+            "⚡ Why is DuckDB so fast?",
+        ]
+    elif "dashboard" in page_clean or "report" in page_clean:
+        return [
+            "📊 Summarize this dashboard",
+            "🎯 What are the most important KPIs?",
+            "📄 Generate an executive report",
+            "💡 How does AI generate insights?",
+        ]
+    else:
+        return [
+            "📋 Summarize my dataset",
+            "🛡️ Check data quality",
+            "🏆 Which model is best?",
+            "💡 What does this project do?",
+        ]
 
 
 def render_floating_ai_copilot():
-    """Renders the persistent floating AI Copilot on the bottom-right corner."""
+    """
+    Renders the persistent floating launcher button [ ✨ AI ] anchored at the bottom-right.
+    Expands into the full Quantum AI Data Analyst Assistant window.
+    """
     init_copilot_state()
 
     df = st.session_state.get("df")
+    current_page = st.session_state.get("active_nav", "Dashboard")
     champ_info = get_active_champion()
-    bench_res = st.session_state.get("ml_benchmark_results")
-    copilot_engine = ModelCopilotEngine()
+    dataset_name = st.session_state.get("current_project_name", "Active Dataset")
+    target_col = st.session_state.get("ml_target_col")
 
-    # Handle pending query from quick suggestion chip or voice
+    ai_engine = QuantumAIEngine()
+
+    # Handle pending query from chips, quick prompts, or voice
     if st.session_state.get("copilot_pending_query"):
         user_q = st.session_state["copilot_pending_query"]
         st.session_state["copilot_pending_query"] = None
-        _process_copilot_question(user_q, copilot_engine, df, champ_info, bench_res)
+        _process_question(user_q, ai_engine, df, current_page, champ_info, dataset_name, target_col)
 
-    # If audio voice synthesis is triggered, render invisible Web Speech audio tag
+    # Handle voice playback
     if st.session_state.get("copilot_voice_to_play"):
         voice_script = st.session_state["copilot_voice_to_play"]
         st.session_state["copilot_voice_to_play"] = None
         _render_speech_synthesis(voice_script)
 
-    is_open = st.session_state.get("copilot_open", False)
+    if st.session_state.get("copilot_stop_speech"):
+        st.session_state["copilot_stop_speech"] = False
+        _render_stop_speech()
 
-    # 1. Inject Bulletproof CSS for Fixed Bottom-Right Positioning
+    is_open = st.session_state.get("copilot_open", False)
+    is_minimized = st.session_state.get("copilot_minimized", False)
+
+    # 1. Bulletproof CSS for Floating Launcher & Window
     st.markdown("""
     <style>
-    /* Fixed Floating Copilot Launcher Container */
-    div[data-testid="stElementContainer"]:has(.copilot-marker-pin) {
+    /* Floating Launcher Marker */
+    div[data-testid="stElementContainer"]:has(.quantum-ai-anchor) {
         display: none !important;
     }
 
-    div[data-testid="stElementContainer"]:has(.copilot-marker-pin) + div[data-testid="stElementContainer"] {
+    div[data-testid="stElementContainer"]:has(.quantum-ai-anchor) + div[data-testid="stElementContainer"] {
         position: fixed !important;
         bottom: 24px !important;
         right: 28px !important;
         z-index: 9999999 !important;
         width: auto !important;
-        background: transparent !important;
-        display: block !important;
     }
 
-    div[data-testid="stElementContainer"]:has(.copilot-marker-pin) + div[data-testid="stElementContainer"] button {
+    div[data-testid="stElementContainer"]:has(.quantum-ai-anchor) + div[data-testid="stElementContainer"] button {
         background: linear-gradient(135deg, #00F0FF 0%, #0284C7 100%) !important;
         color: #0B0F19 !important;
         font-weight: 800 !important;
         font-size: 0.95rem !important;
         border-radius: 50px !important;
         padding: 12px 24px !important;
-        box-shadow: 0 4px 25px rgba(0, 240, 255, 0.75) !important;
-        border: 2px solid rgba(255, 255, 255, 0.7) !important;
+        box-shadow: 0 6px 30px rgba(0, 240, 255, 0.8) !important;
+        border: 2px solid rgba(255, 255, 255, 0.85) !important;
         cursor: pointer !important;
         display: flex !important;
         align-items: center !important;
         gap: 8px !important;
-        transition: all 0.25s ease-in-out !important;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
     }
 
-    div[data-testid="stElementContainer"]:has(.copilot-marker-pin) + div[data-testid="stElementContainer"] button:hover {
+    div[data-testid="stElementContainer"]:has(.quantum-ai-anchor) + div[data-testid="stElementContainer"] button:hover {
         transform: scale(1.06) translateY(-2px) !important;
-        box-shadow: 0 6px 35px rgba(0, 240, 255, 0.95) !important;
+        box-shadow: 0 8px 40px rgba(0, 240, 255, 1) !important;
     }
 
-    /* Pinned Slide-Up Copilot Chat Window */
-    div[data-testid="stElementContainer"]:has(.copilot-drawer-pin) {
+    /* Pinned Slide-Up Quantum AI Window */
+    div[data-testid="stElementContainer"]:has(.quantum-ai-window-pin) {
         display: none !important;
     }
 
-    div[data-testid="stVerticalBlock"]:has(> div[data-testid="stElementContainer"] .copilot-drawer-pin) {
+    div[data-testid="stVerticalBlock"]:has(> div[data-testid="stElementContainer"] .quantum-ai-window-pin) {
         position: fixed !important;
-        bottom: 78px !important;
+        bottom: 82px !important;
         right: 28px !important;
         z-index: 9999998 !important;
-        width: 520px !important;
+        width: 530px !important;
         max-width: calc(100vw - 36px) !important;
-        max-height: 82vh !important;
+        max-height: 84vh !important;
         overflow-y: auto !important;
         background: rgba(11, 15, 25, 0.98) !important;
-        backdrop-filter: blur(20px) !important;
-        -webkit-backdrop-filter: blur(20px) !important;
+        backdrop-filter: blur(25px) !important;
+        -webkit-backdrop-filter: blur(25px) !important;
         border: 2px solid #00F0FF !important;
-        border-radius: 18px !important;
-        box-shadow: 0 15px 50px rgba(0, 0, 0, 0.95), 0 0 35px rgba(0, 240, 255, 0.45) !important;
-        padding: 18px !important;
+        border-radius: 20px !important;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.95), 0 0 35px rgba(0, 240, 255, 0.45) !important;
+        padding: 16px !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    # 2. Inject DOM Floating Pill via JS into Parent Document
-    # This guarantees that even if CSS selectors are ignored by older browsers,
-    # the floating button is 100% visible in the bottom-right corner!
-    _render_dom_floating_pill(is_open)
+    # 2. Render Floating Trigger Button [ ✨ AI ]
+    st.markdown('<div class="quantum-ai-anchor"></div>', unsafe_allow_html=True)
+    launcher_label = "✖ Close AI" if is_open else "✨ AI"
+    if st.button(
+        launcher_label,
+        key="quantum_ai_floating_launcher_btn",
+        type="primary" if not is_open else "secondary",
+        help="Quantum AI - Intelligent Data Analyst Assistant",
+    ):
+        st.session_state["copilot_open"] = not is_open
+        st.session_state["copilot_minimized"] = False
+        st.rerun()
 
-    # 3. Streamlit Native Trigger Button Container
-    with st.container():
-        st.markdown('<div class="copilot-marker-pin"></div>', unsafe_allow_html=True)
-        btn_label = "✖ Close AI Copilot" if is_open else "🤖 AI Model Copilot (Voice Ready)"
-        if st.button(btn_label, key="copilot_floating_btn", type="primary" if not is_open else "secondary"):
-            st.session_state["copilot_open"] = not is_open
-            st.rerun()
-
-    # 4. If Open, render the Copilot Window pinned to bottom right
+    # 3. If Open, render the Quantum AI Assistant Window
     if is_open:
         with st.container():
-            st.markdown('<div class="copilot-drawer-pin"></div>', unsafe_allow_html=True)
+            st.markdown('<div class="quantum-ai-window-pin"></div>', unsafe_allow_html=True)
 
-            # Window Header
-            h_c1, h_c2 = st.columns([8, 2])
-            with h_c1:
+            # Window Header with Controls: Minimize, New Chat, Clear, Close
+            h_col_info, h_col_actions = st.columns([6.5, 3.5])
+            with h_col_info:
                 st.markdown("""
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 1.4rem;">🤖</span>
+                    <span style="font-size: 1.4rem;">✨</span>
                     <div>
-                        <div style="font-weight: 800; color: #FFFFFF; font-size: 1.05rem;">Quantum AI Model Copilot</div>
-                        <div style="font-size: 0.72rem; color: #00F0FF; font-weight: 700; letter-spacing: 0.05em;">● VOICE & REASONING ENGINE ACTIVE</div>
+                        <div style="font-weight: 800; color: #FFFFFF; font-size: 1.05rem; letter-spacing: -0.01em;">Quantum Analyst AI</div>
+                        <div style="font-size: 0.72rem; color: #00F0FF; font-weight: 700; letter-spacing: 0.05em;">YOUR INTELLIGENT DATA ASSISTANT</div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-            with h_c2:
-                if st.button("🧹 Clear", key="copilot_clear_chat_btn_2", use_container_width=True):
-                    st.session_state["copilot_messages"] = []
-                    st.rerun()
 
-            # Active Context Ribbon
-            ds_name = st.session_state.get("current_project_name", "No Active Dataset")
-            champ_name = champ_info.get("model_name") if champ_info else (bench_res.get("champion_name") if bench_res else "None Trained")
-            target_v = st.session_state.get("ml_target_col", "None")
+            with h_col_actions:
+                c_min, c_new, c_clear = st.columns([1, 1, 1.3], gap="small")
+                with c_min:
+                    min_icon = "＋" if is_minimized else "−"
+                    if st.button(min_icon, key="copilot_min_btn", help="Minimize / Expand Assistant"):
+                        st.session_state["copilot_minimized"] = not is_minimized
+                        st.rerun()
+                with c_new:
+                    if st.button("➕", key="copilot_new_chat_btn", help="Start New Conversation"):
+                        st.session_state["copilot_messages"] = [
+                            {
+                                "role": "assistant",
+                                "content": "✨ **New Chat Started.** Ask anything about your data, current page, or machine learning algorithms!",
+                                "voice_text": "New chat started. What would you like to analyze or explore?",
+                                "actions": ["Summarize dataset", "Check data quality", "Which model is best?"],
+                            }
+                        ]
+                        st.rerun()
+                with c_clear:
+                    if st.button("🧹", key="copilot_clear_chat_btn", help="Clear Conversation"):
+                        st.session_state["copilot_messages"] = []
+                        st.rerun()
 
+            # If Minimized, don't show body
+            if is_minimized:
+                st.caption("Assistant minimized. Click '＋' or '✨ AI' to expand.")
+                return
+
+            # Active Telemetry & Page Context Ribbon
+            champ_name = champ_info.get("model_name", "None") if champ_info else "None"
+            target_str = str(target_col) if target_col else "Auto"
             st.markdown(f"""
-            <div style="background: rgba(0, 240, 255, 0.06); border: 1px solid rgba(0, 240, 255, 0.2); border-radius: 8px; padding: 6px 12px; margin: 10px 0; font-size: 0.78rem; color: #CBD5E1; display: flex; justify-content: space-between;">
-                <div>📁 <b>Data:</b> {ds_name}</div>
-                <div>🏆 <b>Model:</b> {champ_name}</div>
-                <div>🎯 <b>Target:</b> {target_v}</div>
+            <div style="background: rgba(0, 240, 255, 0.06); border: 1px solid rgba(0, 240, 255, 0.25); border-radius: 9px; padding: 6px 12px; margin: 8px 0; font-size: 0.76rem; color: #CBD5E1; display: flex; justify-content: space-between; align-items: center;">
+                <div>📍 <b>Page:</b> <span style="color: #00F0FF;">{current_page}</span></div>
+                <div>📁 <b>Data:</b> {dataset_name[:12]}</div>
+                <div>🏆 <b>Model:</b> {champ_name[:12]}</div>
             </div>
             """, unsafe_allow_html=True)
 
-            # Quick Question Chips
-            st.markdown("<div style='font-size: 0.74rem; font-weight: 700; color: #94A3B8; margin-bottom: 4px;'>POPULAR INQUIRIES:</div>", unsafe_allow_html=True)
-            q1, q2 = st.columns(2)
-            with q1:
-                if st.button("💡 Explain all models simply", key="chip_1", use_container_width=True):
-                    st.session_state["copilot_pending_query"] = "Explain all models in simple words"
+            # Suggested Questions (Context-Aware based on active page)
+            suggestions = get_context_suggested_questions(current_page, has_data=(df is not None and not df.empty))
+            st.markdown("<div style='font-size: 0.72rem; font-weight: 700; color: #94A3B8; margin: 4px 0 2px 0;'>SUGGESTED QUESTIONS:</div>", unsafe_allow_html=True)
+
+            q_c1, q_c2 = st.columns(2)
+            with q_c1:
+                if st.button(suggestions[0], key="sugg_chip_0", use_container_width=True):
+                    st.session_state["copilot_pending_query"] = suggestions[0].split(" ", 1)[-1]
                     st.rerun()
-                if st.button("🌲 Random Forest vs XGBoost", key="chip_2", use_container_width=True):
-                    st.session_state["copilot_pending_query"] = "Compare Random Forest vs XGBoost in simple language"
+                if st.button(suggestions[1], key="sugg_chip_1", use_container_width=True):
+                    st.session_state["copilot_pending_query"] = suggestions[1].split(" ", 1)[-1]
                     st.rerun()
-            with q2:
-                if st.button("📷 Explain PCA in 1 minute", key="chip_3", use_container_width=True):
-                    st.session_state["copilot_pending_query"] = "Explain PCA simply with analogy"
+            with q_c2:
+                if st.button(suggestions[2], key="sugg_chip_2", use_container_width=True):
+                    st.session_state["copilot_pending_query"] = suggestions[2].split(" ", 1)[-1]
                     st.rerun()
-                if st.button("🚨 Anomaly detection in business", key="chip_4", use_container_width=True):
-                    st.session_state["copilot_pending_query"] = "How does anomaly detection work in business?"
+                if st.button(suggestions[3], key="sugg_chip_3", use_container_width=True):
+                    st.session_state["copilot_pending_query"] = suggestions[3].split(" ", 1)[-1]
                     st.rerun()
 
-            st.markdown("<hr style='border-color: #1E293B; margin: 10px 0;'>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin: 8px 0; border-color: #1E293B;'>", unsafe_allow_html=True)
 
-            # Message Feed
-            msg_box = st.container(height=320)
-            with msg_box:
+            # Scrollable Message Feed
+            msg_feed = st.container(height=310)
+            with msg_feed:
                 for idx, msg in enumerate(st.session_state["copilot_messages"]):
                     if msg["role"] == "user":
                         st.markdown(f"""
@@ -213,143 +340,188 @@ def render_floating_ai_copilot():
                     else:
                         st.markdown(f"""
                         <div style="display: flex; justify-content: flex-start; margin-bottom: 10px;">
-                            <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(0, 240, 255, 0.35); color: #F1F5F9; padding: 12px 16px; border-radius: 14px 14px 14px 2px; max-width: 95%; font-size: 0.88rem; line-height: 1.5;">
-                                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-                                    <span style="color: #00F0FF; font-weight: 800; font-size: 0.74rem;">🤖 QUANTUM MODEL COPILOT</span>
+                            <div style="background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(0, 240, 255, 0.35); color: #F1F5F9; padding: 12px 16px; border-radius: 14px 14px 14px 2px; max-width: 95%; font-size: 0.88rem; line-height: 1.55;">
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                                    <span style="color: #00F0FF; font-weight: 800; font-size: 0.74rem; letter-spacing: 0.05em;">✨ QUANTUM AI</span>
+                                    <span style="font-size: 0.68rem; color: #64748B;">{msg.get('tool_badge', 'Calculated Engine')}</span>
                                 </div>
                                 {msg['content']}
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
 
-                        if msg.get("voice_text"):
-                            if st.button(f"🔊 Listen to Voice Explanation", key=f"voice_speak_{idx}"):
-                                st.session_state["copilot_voice_to_play"] = msg["voice_text"]
-                                st.rerun()
+                        # Display tabular data if attached
+                        if msg.get("data") is not None:
+                            try:
+                                st.dataframe(msg["data"], use_container_width=True)
+                            except Exception:
+                                pass
 
-            st.markdown("<hr style='border-color: #1E293B; margin: 10px 0;'>", unsafe_allow_html=True)
+                        # Action Buttons and Voice playback bar
+                        act_c1, act_c2 = st.columns([7, 3])
+                        with act_c1:
+                            actions = msg.get("actions", [])
+                            if actions:
+                                act_cols = st.columns(min(3, len(actions)))
+                                for a_idx, act_label in enumerate(actions[:3]):
+                                    with act_cols[a_idx]:
+                                        if st.button(f"👉 {act_label}", key=f"act_btn_{idx}_{a_idx}", use_container_width=True):
+                                            st.session_state["copilot_pending_query"] = act_label.replace("👉", "").strip()
+                                            st.rerun()
 
-            # Voice Input + Question Input
-            c_mic, c_input, c_btn = st.columns([1.2, 6.8, 2])
+                        with act_c2:
+                            if msg.get("voice_text"):
+                                v_b1, v_b2 = st.columns([1.2, 1])
+                                with v_b1:
+                                    if st.button("🔊 Listen", key=f"voice_play_{idx}", use_container_width=True):
+                                        st.session_state["copilot_voice_to_play"] = msg["voice_text"]
+                                        st.rerun()
+                                with v_b2:
+                                    if st.button("⏹️", key=f"voice_stop_{idx}", help="Stop Speech"):
+                                        st.session_state["copilot_stop_speech"] = True
+                                        st.rerun()
+
+            st.markdown("<hr style='margin: 8px 0; border-color: #1E293B;'>", unsafe_allow_html=True)
+
+            # Voice Input + Question Input Bar
+            c_mic, c_input, c_btn = st.columns([1.1, 7.1, 1.8])
             with c_mic:
                 _render_voice_input_button()
             with c_input:
                 user_text = st.text_input(
-                    "Your question:",
-                    placeholder="Type or click 🎙️ to talk: e.g. What is the best model? Explain Ridge vs Lasso...",
+                    "Ask anything about your data:",
+                    placeholder="Ask anything or click 🎙️ to talk...",
                     label_visibility="collapsed",
-                    key="copilot_text_input_bottom",
+                    key="quantum_ai_text_input_main",
                 )
             with c_btn:
-                if st.button("⚡ Ask AI", type="primary", use_container_width=True, key="copilot_send_btn_bottom"):
-                    if user_text.strip():
-                        _process_copilot_question(user_text, copilot_engine, df, champ_info, bench_res)
+                if st.button("➤ Send", type="primary", use_container_width=True, key="quantum_ai_send_btn"):
+                    if user_text and user_text.strip():
+                        _process_question(user_text.strip(), ai_engine, df, current_page, champ_info, dataset_name, target_col)
                         st.rerun()
 
-            # Direct shortcut to Full-Page Copilot View
-            st.markdown("<div style='margin-top: 6px;'></div>", unsafe_allow_html=True)
-            if st.button("↗️ Open Dedicated Full-Page Copilot", key="drawer_open_fullpage_btn", use_container_width=True):
+            # Dedicated full-page view switch
+            if st.button("↗️ Open Dedicated Full-Page Workspace", key="copilot_full_view_link_btn", use_container_width=True):
                 st.session_state["copilot_open"] = False
                 st.session_state["active_nav"] = "AI Model Copilot"
                 st.rerun()
 
 
-def _process_copilot_question(
+def _process_question(
     question: str,
-    engine: ModelCopilotEngine,
+    engine: QuantumAIEngine,
     df: Optional[pd.DataFrame],
+    current_page: str,
     champ_info: Optional[Dict[str, Any]],
-    bench_res: Optional[Dict[str, Any]],
+    dataset_name: Optional[str],
+    target_col: Optional[str],
 ):
-    """Processes question through ModelCopilotEngine and appends to conversation."""
+    """Processes user question through QuantumAIEngine and updates conversation."""
     st.session_state["copilot_messages"].append({
         "role": "user",
         "content": question,
     })
 
-    ans_dict = engine.answer_model_question(
+    ans_dict = engine.process_query(
         query=question,
         df=df,
+        current_page=current_page,
+        conversation_history=st.session_state["copilot_messages"],
         champ_info=champ_info,
-        benchmark_results=bench_res,
+        dataset_name=dataset_name,
+        target_col=target_col,
     )
 
     st.session_state["copilot_messages"].append({
         "role": "assistant",
         "content": ans_dict["markdown"],
         "voice_text": ans_dict.get("voice_text"),
+        "tool_badge": f"Tool: {ans_dict.get('tool_used', 'Calculated Engine')}",
+        "data": ans_dict.get("data"),
+        "actions": ans_dict.get("actions", []),
     })
 
-    # Auto-play speech for newly answered question
+    # Auto-queue spoken response
     if ans_dict.get("voice_text"):
         st.session_state["copilot_voice_to_play"] = ans_dict["voice_text"]
 
 
-def _render_dom_floating_pill(is_open: bool):
-    """Direct DOM anchor helper to guarantee bottom-right fixed positioning across all browsers."""
-    script = """
+def _process_copilot_question(
+    question: str,
+    engine: Any = None,
+    df: Optional[pd.DataFrame] = None,
+    champ_info: Optional[Dict[str, Any]] = None,
+    bench_res: Optional[Dict[str, Any]] = None,
+    current_page: str = "AI Model Copilot",
+    dataset_name: Optional[str] = None,
+    target_col: Optional[str] = None,
+):
+    """Bridge for both QuantumAIEngine and legacy copilot calls."""
+    if not isinstance(engine, QuantumAIEngine):
+        real_engine = QuantumAIEngine()
+    else:
+        real_engine = engine
+
+    _process_question(
+        question=question,
+        engine=real_engine,
+        df=df if df is not None else st.session_state.get("df"),
+        current_page=current_page,
+        champ_info=champ_info or get_active_champion(),
+        dataset_name=dataset_name or st.session_state.get("current_project_name", "Active Dataset"),
+        target_col=target_col or st.session_state.get("ml_target_col"),
+    )
+
+
+def _render_speech_synthesis(text: str):
+    """Injects Web Speech API Text-to-Speech into the browser."""
+    clean_json_text = json.dumps(text)
+    script_html = f"""
+    <script>
+    (function() {{
+        try {{
+            const win = window.parent || window;
+            if ('speechSynthesis' in win) {{
+                win.speechSynthesis.cancel();
+                const msg = new win.SpeechSynthesisUtterance({clean_json_text});
+                msg.rate = 1.0;
+                msg.pitch = 1.0;
+                msg.lang = 'en-US';
+
+                const voices = win.speechSynthesis.getVoices();
+                const preferredVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha')));
+                if (preferredVoice) msg.voice = preferredVoice;
+
+                win.speechSynthesis.speak(msg);
+            }}
+        }} catch(e) {{
+            console.warn("Speech synthesis error: ", e);
+        }}
+    }})();
+    </script>
+    """
+    components.html(script_html, height=0, width=0)
+
+
+def _render_stop_speech():
+    """Cancels any active speech playback."""
+    script_html = """
     <script>
     (function() {
         try {
-            const markers = document.querySelectorAll('.copilot-marker-pin');
-            markers.forEach(m => {
-                const elem = m.closest('[data-testid="stElementContainer"]');
-                if (elem && elem.nextElementSibling) {
-                    const btnBox = elem.nextElementSibling;
-                    btnBox.style.setProperty('position', 'fixed', 'important');
-                    btnBox.style.setProperty('bottom', '24px', 'important');
-                    btnBox.style.setProperty('right', '28px', 'important');
-                    btnBox.style.setProperty('z-index', '9999999', 'important');
-                    btnBox.style.setProperty('width', 'auto', 'important');
-                }
-            });
+            const win = window.parent || window;
+            if ('speechSynthesis' in win) {
+                win.speechSynthesis.cancel();
+            }
         } catch(e) {}
     })();
     </script>
     """
-    try:
-        st.html(script, unsafe_allow_javascript=True)
-    except Exception:
-        pass
-
-
-def _render_speech_synthesis(text: str):
-    """Injects Web Speech API Text-to-Speech into browser to speak text aloud."""
-    clean_json_text = json.dumps(text)
-    components.html(
-        f"""
-        <script>
-        (function() {{
-            try {{
-                const targetWindow = window.parent || window;
-                if ('speechSynthesis' in targetWindow) {{
-                    targetWindow.speechSynthesis.cancel();
-                    const msg = new targetWindow.SpeechSynthesisUtterance({clean_json_text});
-                    msg.rate = 1.0;
-                    msg.pitch = 1.0;
-                    msg.lang = 'en-US';
-
-                    const voices = targetWindow.speechSynthesis.getVoices();
-                    const preferredVoice = voices.find(v => v.lang === 'en-US' && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha')));
-                    if (preferredVoice) {{
-                        msg.voice = preferredVoice;
-                    }}
-
-                    targetWindow.speechSynthesis.speak(msg);
-                }}
-            }} catch(e) {{
-                console.warn("Speech synthesis error: ", e);
-            }}
-        }})();
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
+    components.html(script_html, height=0, width=0)
 
 
 def _render_voice_input_button():
-    """Renders interactive Web Speech Recognition microphone trigger in browser."""
+    """Renders interactive Web Speech Recognition microphone trigger in browser with active status states."""
     components.html(
         """
         <!DOCTYPE html>
@@ -397,7 +569,7 @@ def _render_voice_input_button():
                 const SpeechRecognition = targetWindow.SpeechRecognition || targetWindow.webkitSpeechRecognition || window.SpeechRecognition || window.webkitSpeechRecognition;
 
                 if (!SpeechRecognition) {
-                    btn.title = "Speech recognition not supported in this browser.";
+                    btn.title = "Speech recognition not supported in this browser. You can type instead.";
                     btn.style.opacity = "0.5";
                 } else {
                     const recognition = new SpeechRecognition();
@@ -408,19 +580,22 @@ def _render_voice_input_button():
                     btn.addEventListener('click', () => {
                         try {
                             btn.classList.add('listening');
+                            btn.title = "Listening... Speak your question now";
                             recognition.start();
                         } catch(e) {
                             recognition.stop();
                             btn.classList.remove('listening');
+                            btn.title = "Speak Question (Voice Input)";
                         }
                     });
 
                     recognition.onresult = (event) => {
                         btn.classList.remove('listening');
+                        btn.title = "Speak Question (Voice Input)";
                         const transcript = event.results[0][0].transcript;
                         const parentInputs = targetWindow.document.querySelectorAll('input[type="text"]');
                         for (let inp of parentInputs) {
-                            if (inp.placeholder && (inp.placeholder.includes('talk') || inp.placeholder.includes('model') || inp.placeholder.includes('Ask') || inp.placeholder.includes('question') || inp.placeholder.includes('Which'))) {
+                            if (inp.placeholder && (inp.placeholder.includes('Ask') || inp.placeholder.includes('talk') || inp.placeholder.includes('data') || inp.placeholder.includes('question'))) {
                                 inp.value = transcript;
                                 inp.dispatchEvent(new Event('input', { bubbles: true }));
                                 inp.dispatchEvent(new Event('change', { bubbles: true }));
@@ -431,10 +606,12 @@ def _render_voice_input_button():
 
                     recognition.onerror = () => {
                         btn.classList.remove('listening');
+                        btn.title = "Microphone access disabled or unavailable. You can type instead.";
                     };
 
                     recognition.onend = () => {
                         btn.classList.remove('listening');
+                        btn.title = "Speak Question (Voice Input)";
                     };
                 }
             </script>
