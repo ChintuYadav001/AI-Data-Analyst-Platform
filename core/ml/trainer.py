@@ -117,10 +117,15 @@ def train_single_model(
     if len(X) * test_size < 3:
         actual_test_size = max(0.15, min(0.35, 3.0 / len(X)))
 
-    # Train / Test split
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, y, test_size=actual_test_size, random_state=random_state, stratify=stratify
-    )
+    # Train / Test split with robust stratification fallback
+    try:
+        X_train, X_val, y_train, y_val = train_test_split(
+            X, y, test_size=actual_test_size, random_state=random_state, stratify=stratify
+        )
+    except Exception:
+        X_train, X_val, y_train, y_val = train_test_split(
+            X, y, test_size=actual_test_size, random_state=random_state, stratify=None
+        )
 
     # Build and fit preprocessing pipeline on X_train only
     preprocessor, col_types = build_preprocessor(

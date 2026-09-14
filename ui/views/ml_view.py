@@ -831,6 +831,7 @@ def render_ml_view():
                         scaler_type=st.session_state.get("ml_scaler", "standard"),
                         cat_encoding=st.session_state.get("ml_cat_encoding", "onehot"),
                         model_subset=st.session_state.get("ml_selected_models"),
+                        dataset_name=proj_name,
                     )
                     prog_bar.progress(85, text="Registering model artifacts and computing diagnostics...")
                     st.session_state["ml_benchmark_results"] = bench_res
@@ -845,14 +846,41 @@ def render_ml_view():
             st.markdown(f"""
             <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 14px; margin: 16px 0;">
                 <div style="color: #10B981; font-weight: 800; font-size: 0.8rem; text-transform: uppercase;">🏆 Production Champion Selected</div>
-                <div style="font-size: 1.3rem; font-weight: 800; color: #FFFFFF; margin: 4px 0;">{bench_res['champion_name']}</div>
-                <div style="font-size: 0.85rem; color: #94A3B8;">{bench_res['champion_reason']}</div>
+                <div style="font-size: 1.3rem; font-weight: 800; color: #FFFFFF; margin: 4px 0;">{bench_res.get('champion_name', 'Evaluated Champion')}</div>
+                <div style="font-size: 0.85rem; color: #94A3B8;">{bench_res.get('champion_reason', '')}</div>
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown("#### 📊 Benchmark Leaderboard")
-            lb_df = pd.DataFrame(bench_res["leaderboard"])
-            st.dataframe(lb_df, use_container_width=True)
+            st.markdown("#### 📊 Benchmark Leaderboard & Comparative Ranking")
+            lb_df = pd.DataFrame(bench_res.get("leaderboard", []))
+            if not lb_df.empty:
+                fig_lb = px.bar(
+                    lb_df,
+                    x="score",
+                    y="model_name",
+                    orientation="h",
+                    color="is_champion",
+                    color_discrete_map={True: "#00F0FF", False: "#64748B"},
+                    title=f"Comparative Benchmark Performance ({bench_res.get('primary_metric', 'Score').upper()})",
+                    labels={"score": bench_res.get("primary_metric", "Score").upper(), "model_name": "Model", "is_champion": "Champion"},
+                )
+                fig_lb.update_layout(
+                    yaxis={"categoryorder": "total ascending"},
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(15,23,42,0.6)",
+                    font_color="#E2E8F0",
+                )
+                st.plotly_chart(fig_lb, use_container_width=True)
+
+                display_cols = ["rank", "model_name", "score", "training_time", "is_overfitting"]
+                available_disp = [c for c in display_cols if c in lb_df.columns]
+                st.dataframe(lb_df[available_disp].rename(columns={
+                    "rank": "Rank",
+                    "model_name": "Model",
+                    "score": f"Validation {bench_res.get('primary_metric', 'Score').upper()}",
+                    "training_time": "Training Latency (s)",
+                    "is_overfitting": "Overfitting Risk",
+                }), use_container_width=True)
 
     # =========================================================================
     # TAB 8: EVALUATION & DIAGNOSTICS
@@ -864,15 +892,23 @@ def render_ml_view():
         if not bench_res:
             st.info("Execute model training in the **Training & AutoML** tab to view diagnostics.")
         else:
-            models_dict = bench_res.get("models", {})
-            active_m_id = st.selectbox(
-                "Inspect Specific Model Diagnostics:",
-                options=list(models_dict.keys()),
-                format_func=lambda mid: models_dict[mid].get("model_name", mid),
-                index=0,
-            )
-            m_data = models_dict[active_m_id]
-            metrics = m_data.get("metrics", {})
+            models_dict = bench_res.get("models") or bench_res.get("all_results") or {}
+            if not models_dict:
+                st.warning("No model evaluation diagnostics available. Please re-run training.")
+            else:
+                default_idx = 0
+                keys_list = list(models_dict.keys())
+                champ_id = bench_res.get("champion_id")
+                if champ_id in keys_list:
+                    default_idx = keys_list.index(champ_id)
+                active_m_id = st.selectbox(
+                    "Inspect Specific Model Diagnostics:",
+                    options=keys_list,
+                    format_func=lambda mid: models_dict[mid].get("model_name", mid),
+                    index=default_idx,
+                )
+                m_data = models_dict.get(active_m_id, {})
+                metrics = m_data.get("metrics", {})
 
             # Metric cards
             met_cols = st.columns(4)
@@ -926,8 +962,9 @@ def render_ml_view():
         if not bench_res:
             st.info("Execute training to inspect global feature importance and local SHAP explanations.")
         else:
-            active_m_id = bench_res["champion_id"]
-            m_data = bench_res["models"].get(active_m_id, {})
+            models_dict = bench_res.get("models") or bench_res.get("all_results") or {}
+            active_m_id = bench_res.get("champion_id") or (list(models_dict.keys())[0] if models_dict else None)
+            m_data = models_dict.get(active_m_id, {})
             feat_imp = m_data.get("feature_importance", [])
 
             st.markdown("#### 🌐 Global Feature Importance (Tree MDI & Permutation)")
@@ -983,10 +1020,12 @@ def render_ml_view():
         if not bench_res:
             st.info("Train a model first to run single-record simulations or batch CSV/XLSX predictions.")
         else:
-            active_m_id = bench_res["champion_id"]
-            pipe = bench_res["models"][active_m_id]["pipeline"]
-            feat_cols = bench_res.get("feature_cols", [])
-            task_t = bench_res.get("task_type", "regression")
+            models_dict = bench_res.get("models") or bench_res.get("all_results") or {}
+            active_m_id = bench_res.get("champion_id") or (list(models_dict.keys())[0] if models_dict else None)
+            m_data = models_dict.get(active_m_id, {})
+            pipe = m_data.get("pipeline")
+            feat_cols = bench_res.get("feature_cols") or m_data.get("feature_cols") or [c for c in df.columns if c != st.session_state.get("ml_target_col")]
+            task_t = bench_res.get("task_type") or m_data.get("task_type", "regression")
 
             p_sub1, p_sub2 = st.tabs(["Interactive Single Record Simulator", "Batch File Prediction Engine"])
 
@@ -1163,14 +1202,17 @@ def render_ml_view():
         if not bench_res:
             st.info("Train a model in the **Training & AutoML** tab first to run What-If simulations.")
         else:
-            active_m_id = bench_res["champion_id"]
-            pipe = bench_res["models"][active_m_id]["pipeline"]
-            feat_cols = bench_res.get("feature_cols", [])
-            task_t = bench_res.get("task_type", "regression")
+            models_dict = bench_res.get("models") or bench_res.get("all_results") or {}
+            active_m_id = bench_res.get("champion_id") or (list(models_dict.keys())[0] if models_dict else None)
+            m_data = models_dict.get(active_m_id, {})
+            pipe = m_data.get("pipeline")
+            feat_cols = bench_res.get("feature_cols") or m_data.get("feature_cols") or [c for c in df.columns if c != st.session_state.get("ml_target_col")]
+            task_t = bench_res.get("task_type") or m_data.get("task_type", "regression")
+            valid_feats = [c for c in feat_cols if c in df.columns]
 
             # Baseline record selection
             b_row_idx = st.slider("Select Baseline Record:", min_value=0, max_value=min(100, len(df) - 1), value=0)
-            base_record = df[feat_cols].iloc[b_row_idx].to_dict()
+            base_record = df[valid_feats].iloc[b_row_idx].to_dict()
 
             st.markdown("##### Counterfactual Feature Perturbations")
             modifications = {}
