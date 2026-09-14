@@ -174,11 +174,9 @@ def render_floating_ai_copilot():
     # 1. Bulletproof CSS for Floating Launcher & Window
     st.markdown("""
     <style>
-    /* Floating Launcher Marker */
-    div[data-testid="stElementContainer"]:has(.quantum-ai-anchor) {
-        display: none !important;
-    }
-
+    /* Floating Launcher Key-Based & Marker Selectors */
+    .st-key-quantum_ai_floating_launcher_btn,
+    div[class*="st-key-quantum_ai_floating_launcher_btn"],
     div[data-testid="stElementContainer"]:has(.quantum-ai-anchor) + div[data-testid="stElementContainer"] {
         position: fixed !important;
         bottom: 24px !important;
@@ -186,8 +184,19 @@ def render_floating_ai_copilot():
         z-index: 9999999 !important;
         width: 62px !important;
         height: 62px !important;
+        min-width: 62px !important;
+        min-height: 62px !important;
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
 
+    div[data-testid="stElementContainer"]:has(.quantum-ai-anchor) {
+        display: none !important;
+    }
+
+    .st-key-quantum_ai_floating_launcher_btn button,
+    div[class*="st-key-quantum_ai_floating_launcher_btn"] button,
     div[data-testid="stElementContainer"]:has(.quantum-ai-anchor) + div[data-testid="stElementContainer"] button {
         background: linear-gradient(135deg, #00F0FF 0%, #0284C7 100%) !important;
         color: #0B0F19 !important;
@@ -198,7 +207,11 @@ def render_floating_ai_copilot():
         height: 62px !important;
         min-width: 62px !important;
         min-height: 62px !important;
+        max-width: 62px !important;
+        max-height: 62px !important;
+        aspect-ratio: 1 / 1 !important;
         padding: 0 !important;
+        margin: 0 !important;
         box-shadow: 0 8px 30px rgba(0, 240, 255, 0.75), 0 0 16px rgba(0, 240, 255, 0.45) !important;
         border: 2.5px solid rgba(255, 255, 255, 0.95) !important;
         cursor: pointer !important;
@@ -215,6 +228,8 @@ def render_floating_ai_copilot():
         100% { box-shadow: 0 0 0 0 rgba(0, 240, 255, 0), 0 8px 30px rgba(0, 240, 255, 0.75); }
     }
 
+    .st-key-quantum_ai_floating_launcher_btn button:hover,
+    div[class*="st-key-quantum_ai_floating_launcher_btn"] button:hover,
     div[data-testid="stElementContainer"]:has(.quantum-ai-anchor) + div[data-testid="stElementContainer"] button:hover {
         transform: scale(1.14) translateY(-3px) !important;
         box-shadow: 0 12px 45px rgba(0, 240, 255, 1), 0 0 25px rgba(0, 240, 255, 0.8) !important;
@@ -225,6 +240,8 @@ def render_floating_ai_copilot():
         display: none !important;
     }
 
+    .st-key-quantum_ai_window_container,
+    div[class*="st-key-quantum_ai_window_container"],
     div[data-testid="stVerticalBlock"]:has(> div[data-testid="stElementContainer"] .quantum-ai-window-pin) {
         position: fixed !important;
         bottom: 96px !important;
@@ -241,6 +258,13 @@ def render_floating_ai_copilot():
         border-radius: 20px !important;
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.95), 0 0 35px rgba(0, 240, 255, 0.45) !important;
         padding: 16px !important;
+    }
+
+    /* Voice toggle button styling */
+    .st-key-copilot_voice_toggle_btn button {
+        border-radius: 8px !important;
+        font-weight: 700 !important;
+        font-size: 0.80rem !important;
     }
 
     /* Audio Wave Visualizer Animation */
@@ -269,7 +293,6 @@ def render_floating_ai_copilot():
     </style>
     """, unsafe_allow_html=True)
 
-    # 2. Render Floating Trigger Button (Round Action Button)
     st.markdown('<div class="quantum-ai-anchor"></div>', unsafe_allow_html=True)
     launcher_label = "✖" if is_open else "✨"
     if st.button(
@@ -282,9 +305,11 @@ def render_floating_ai_copilot():
         st.session_state["copilot_minimized"] = False
         st.rerun()
 
+    _render_dom_floating_round_btn(is_open)
+
     # 3. If Open, render the Quantum AI Assistant Window
     if is_open:
-        with st.container():
+        with st.container(key="quantum_ai_window_container"):
             st.markdown('<div class="quantum-ai-window-pin"></div>', unsafe_allow_html=True)
 
             is_voice_active = st.session_state.get("copilot_voice_active", False)
@@ -709,3 +734,146 @@ def _render_voice_input_button():
         height=40,
         width=45,
     )
+
+
+def _render_dom_floating_round_btn(is_open: bool):
+    """Guarantees bottom-right circular button and slide-up window positioning via direct host DOM styling."""
+    script = """
+    <script>
+    (function() {
+        function pinRoundButton() {
+            try {
+                const pDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+
+                // 1. Inject or update persistent style tag in parent document head
+                let styleTag = pDoc.getElementById('quantum-ai-fab-injected-style');
+                if (!styleTag) {
+                    styleTag = pDoc.createElement('style');
+                    styleTag.id = 'quantum-ai-fab-injected-style';
+                    pDoc.head.appendChild(styleTag);
+                }
+                styleTag.textContent = `
+                    /* Quantum AI Round Floating Button Container */
+                    .st-key-quantum_ai_floating_launcher_btn,
+                    div[class*="st-key-quantum_ai_floating_launcher_btn"] {
+                        position: fixed !important;
+                        bottom: 24px !important;
+                        right: 28px !important;
+                        z-index: 9999999 !important;
+                        width: 62px !important;
+                        height: 62px !important;
+                        min-width: 62px !important;
+                        min-height: 62px !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        display: block !important;
+                    }
+
+                    /* Quantum AI Round Floating Button */
+                    .st-key-quantum_ai_floating_launcher_btn button,
+                    div[class*="st-key-quantum_ai_floating_launcher_btn"] button {
+                        width: 62px !important;
+                        height: 62px !important;
+                        min-width: 62px !important;
+                        min-height: 62px !important;
+                        max-width: 62px !important;
+                        max-height: 62px !important;
+                        border-radius: 50% !important;
+                        background: linear-gradient(135deg, #00F0FF 0%, #0284C7 100%) !important;
+                        color: #0B0F19 !important;
+                        font-size: 26px !important;
+                        font-weight: 900 !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        padding: 0 !important;
+                        margin: 0 !important;
+                        border: 2.5px solid #FFFFFF !important;
+                        box-shadow: 0 8px 30px rgba(0, 240, 255, 0.85), 0 0 16px rgba(0, 240, 255, 0.45) !important;
+                        cursor: pointer !important;
+                        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+                        animation: quantum-pulse 2.8s infinite !important;
+                    }
+
+                    .st-key-quantum_ai_floating_launcher_btn button:hover,
+                    div[class*="st-key-quantum_ai_floating_launcher_btn"] button:hover {
+                        transform: scale(1.14) translateY(-3px) !important;
+                        box-shadow: 0 12px 45px rgba(0, 240, 255, 1), 0 0 25px rgba(0, 240, 255, 0.8) !important;
+                    }
+
+                    /* Quantum AI Slide-Up Window Container */
+                    .st-key-quantum_ai_window_container,
+                    div[class*="st-key-quantum_ai_window_container"],
+                    div[data-testid="stVerticalBlock"]:has(> div[data-testid="stElementContainer"] .quantum-ai-window-pin) {
+                        position: fixed !important;
+                        bottom: 96px !important;
+                        right: 28px !important;
+                        z-index: 9999998 !important;
+                        width: 530px !important;
+                        max-width: calc(100vw - 36px) !important;
+                        max-height: 84vh !important;
+                        overflow-y: auto !important;
+                        background: rgba(11, 15, 25, 0.98) !important;
+                        backdrop-filter: blur(25px) !important;
+                        -webkit-backdrop-filter: blur(25px) !important;
+                        border: 2px solid #00F0FF !important;
+                        border-radius: 20px !important;
+                        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.95), 0 0 35px rgba(0, 240, 255, 0.45) !important;
+                        padding: 16px !important;
+                    }
+                `;
+
+                // 2. Direct inline styles as extra insurance
+                const btnContainers = pDoc.querySelectorAll('.st-key-quantum_ai_floating_launcher_btn, [class*="st-key-quantum_ai_floating_launcher_btn"]');
+                btnContainers.forEach(c => {
+                    c.style.setProperty('position', 'fixed', 'important');
+                    c.style.setProperty('bottom', '24px', 'important');
+                    c.style.setProperty('right', '28px', 'important');
+                    c.style.setProperty('z-index', '9999999', 'important');
+                    c.style.setProperty('width', '62px', 'important');
+                    c.style.setProperty('height', '62px', 'important');
+
+                    const b = c.querySelector('button');
+                    if (b) {
+                        b.style.setProperty('width', '62px', 'important');
+                        b.style.setProperty('height', '62px', 'important');
+                        b.style.setProperty('min-width', '62px', 'important');
+                        b.style.setProperty('min-height', '62px', 'important');
+                        b.style.setProperty('border-radius', '50%', 'important');
+                        b.style.setProperty('background', 'linear-gradient(135deg, #00F0FF 0%, #0284C7 100%)', 'important');
+                        b.style.setProperty('border', '2.5px solid #FFFFFF', 'important');
+                        b.style.setProperty('box-shadow', '0 8px 30px rgba(0, 240, 255, 0.85)', 'important');
+                    }
+                });
+
+                const win = pDoc.querySelector('.st-key-quantum_ai_window_container, [class*="st-key-quantum_ai_window_container"]');
+                if (win) {
+                    win.style.setProperty('position', 'fixed', 'important');
+                    win.style.setProperty('bottom', '96px', 'important');
+                    win.style.setProperty('right', '28px', 'important');
+                    win.style.setProperty('z-index', '9999998', 'important');
+                    win.style.setProperty('width', '530px', 'important');
+                    win.style.setProperty('max-width', 'calc(100vw - 36px)', 'important');
+                    win.style.setProperty('max-height', '84vh', 'important');
+                    win.style.setProperty('background', 'rgba(11, 15, 25, 0.98)', 'important');
+                    win.style.setProperty('border', '2px solid #00F0FF', 'important');
+                    win.style.setProperty('border-radius', '20px', 'important');
+                }
+            } catch(e) {}
+        }
+
+        pinRoundButton();
+        setTimeout(pinRoundButton, 50);
+        setTimeout(pinRoundButton, 150);
+        setTimeout(pinRoundButton, 350);
+        setTimeout(pinRoundButton, 800);
+
+        try {
+            const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+            const observer = new MutationObserver(pinRoundButton);
+            observer.observe(targetDoc.body, { childList: true, subtree: true });
+        } catch(e) {}
+    })();
+    </script>
+    """
+    components.html(script, height=0, width=0)
