@@ -94,6 +94,63 @@
         }
       },
       "active_version": "dataset_v1"
+    },
+    "ds_dafc683c": {
+      "dataset_id": "ds_dafc683c",
+      "name": "Finance Data",
+      "dataset_hash": "97f5dfae139737aa",
+      "created_at": 1789378789.734064,
+      "versions": {
+        "dataset_v1": {
+          "parquet_path": "D:\\antigrevity_project\\data analyse\\data\\parquet\\97f5dfae139737aa.parquet",
+          "rows": 40,
+          "columns": 24,
+          "registered_at": 1789378789.734074,
+          "lineage": {
+            "source_file": "Finance_data.csv",
+            "source_type": "csv"
+          }
+        }
+      },
+      "active_version": "dataset_v1"
+    },
+    "ds_4f788338": {
+      "dataset_id": "ds_4f788338",
+      "name": "Sample - Superstore",
+      "dataset_hash": "a98aed91784974ec",
+      "created_at": 1789379785.0405216,
+      "versions": {
+        "dataset_v1": {
+          "parquet_path": "D:\\antigrevity_project\\data analyse\\data\\parquet\\a98aed91784974ec.parquet",
+          "rows": 9994,
+          "columns": 21,
+          "registered_at": 1789379785.0405307,
+          "lineage": {
+            "source_file": "Sample - Superstore.xlsx",
+            "source_type": "xlsx"
+          }
+        }
+      },
+      "active_version": "dataset_v1"
+    },
+    "ds_6e69a7a9": {
+      "dataset_id": "ds_6e69a7a9",
+      "name": "Ml-Dataset (1)",
+      "dataset_hash": "e90ad92359001b26",
+      "created_at": 1789379947.1695204,
+      "versions": {
+        "dataset_v1": {
+          "parquet_path": "D:\\antigrevity_project\\data analyse\\data\\parquet\\e90ad92359001b26.parquet",
+          "rows": 400,
+          "columns": 28,
+          "registered_at": 1789379947.1695304,
+          "lineage": {
+            "source_file": "ML-Dataset (1).csv",
+            "source_type": "csv"
+          }
+        }
+      },
+      "active_version": "dataset_v1"
     }
   },
   "hashes": {
@@ -101,6 +158,9 @@
     "b7023dfb6a09560f": "ds_07c9874d",
     "10a90d26b6f6cada": "ds_f0fc83ff",
     "2d594c24215cd8d6": "ds_d4c1e5d6",
-    "4a437fde05fe5264": "ds_9c3b8718"
+    "4a437fde05fe5264": "ds_9c3b8718",
+    "97f5dfae139737aa": "ds_dafc683c",
+    "a98aed91784974ec": "ds_4f788338",
+    "e90ad92359001b26": "ds_6e69a7a9"
   }
 }

@@ -4,6 +4,7 @@ from ui.components import (
     render_saas_hero,
     render_workflow_stepper,
     render_dataset_header_card,
+    render_autonomous_intelligence_banner,
     render_quick_actions,
     render_recent_projects_cards,
     render_ai_analyst_card,
@@ -209,10 +210,13 @@ def render_dashboard_view():
     # 1. Prominent Current Dataset Header Card
     render_dataset_header_card(df, project_name=project_name, quality_score=quality_score)
 
-    # 2. Dynamic Workflow Progress Bar
+    # 2. Autonomous Real-Time Dataset Intelligence Banner
+    render_autonomous_intelligence_banner(df, quality)
+
+    # 3. Dynamic Workflow Progress Bar
     render_workflow_stepper(df_loaded=True)
 
-    # 3. High-Speed Sub-Millisecond KPI Cards
+    # 4. High-Speed Sub-Millisecond KPI Cards
     kpis = DashboardModel.compute_kpis(df)
     if kpis:
         cols = st.columns(len(kpis))
@@ -229,7 +233,7 @@ def render_dashboard_view():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # 4. Multi-Dimension Slicing Filter Engine
+    # 5. Multi-Dimension Slicing Filter Engine
     dimensions = DashboardModel.detect_filter_dimensions(df)
     active_filters = {}
     if dimensions:
@@ -255,9 +259,10 @@ def render_dashboard_view():
     if len(active_df) < len(df):
         st.info(f"Filtering active: displaying **{len(active_df):,}** of {len(df):,} records ({round((len(active_df)/len(df))*100, 1)}% slice).")
 
-    # 5. Visual Matrix, Architecture & Data Preview Tabs
-    tab_charts, tab_spec, tab_data = st.tabs([
+    # 6. Visual Matrix, Health & Data Preview Tabs
+    tab_charts, tab_health, tab_spec, tab_data = st.tabs([
         "📈 Executive Visual Matrix",
+        "🧬 Deep Intelligence & Column Vitals",
         "📋 Requirement Architecture & Lineage",
         "👁️ Data Preview & Schema"
     ])
@@ -282,6 +287,54 @@ def render_dashboard_view():
                         st.markdown(f"**Target KPI:** {rec.get('kpi_alignment', 'N/A')}")
         else:
             st.info("Ingest dataset to view automated executive charts.")
+
+    with tab_health:
+        st.markdown("#### 🧬 Column Vital Signs & Diagnostic Health")
+        st.caption("Sub-second structural audit across all telemetry dimensions:")
+        
+        # Build health summary table
+        vitals_data = []
+        for col in df.columns:
+            dtype_str = str(df[col].dtype)
+            missing_cnt = int(df[col].isnull().sum())
+            missing_pct = round((missing_cnt / len(df)) * 100, 1)
+            unique_cnt = int(df[col].nunique())
+            
+            # Quick summary metric
+            if pd.api.types.is_numeric_dtype(df[col]):
+                sem_type = "Numeric"
+                valid_s = df[col].dropna()
+                summary_val = f"μ={valid_s.mean():.1f}, σ={valid_s.std():.1f}" if len(valid_s) > 0 else "Empty"
+            elif pd.api.types.is_datetime64_any_dtype(df[col]):
+                sem_type = "DateTime"
+                summary_val = f"{df[col].min()} → {df[col].max()}"
+            else:
+                sem_type = "Categorical"
+                top_v = df[col].mode().iloc[0] if len(df[col].dropna()) > 0 else "N/A"
+                summary_val = f"Top: {str(top_v)[:15]}"
+
+            health_status = "🟢 Pristine" if missing_cnt == 0 else ("🟡 Moderate" if missing_pct < 20 else "🔴 Critical")
+
+            vitals_data.append({
+                "Column": col,
+                "Semantic Type": sem_type,
+                "Health": health_status,
+                "Completeness": f"{100 - missing_pct:.1f}%",
+                "Missing Rows": f"{missing_cnt:,}",
+                "Unique Values": f"{unique_cnt:,}",
+                "Distribution Summary": summary_val
+            })
+
+        vitals_df = pd.DataFrame(vitals_data)
+        st.dataframe(vitals_df, use_container_width=True, hide_index=True)
+
+        c_act1, c_act2 = st.columns([2, 3])
+        with c_act1:
+            if st.button("🧹 Launch AI Data Cleaning on these columns", type="primary", use_container_width=True):
+                st.session_state["active_nav"] = "Data Cleaning"
+                st.rerun()
+        with c_act2:
+            st.caption("Auto-clean uses vectorized NumPy/Pandas pipelines to impute missing values, reconcile categorical casing, and strip anomalies.")
 
     with tab_spec:
         spec = DashboardModel.generate_dashboard_specification(df)
