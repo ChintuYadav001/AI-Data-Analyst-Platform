@@ -20,14 +20,77 @@ class AIChatModel:
         msg_lower = user_message.lower().strip()
 
         # 0. Machine Learning & Predictive Analytics queries
-        if any(w in msg_lower for w in ["predict", "forecast", "machine learning", "train model", "best model", "champion model", "ml readiness", "feature importance"]):
+        if any(w in msg_lower for w in ["predict", "forecast", "machine learning", "train model", "best model", "champion model", "ml readiness", "feature importance", "pca", "dimensionality", "anomaly", "outlier", "feature selection"]):
             try:
-                from core.ml.ai_ml_tools import prepare_ml_data, generate_ml_executive_summary
+                import core.ml.ai_ml_tools as ai_tools
                 from core.ml.experiment_tracker import get_active_champion
-                
-                # Check for active champion model
+
+                # A. PCA / Dimensionality Reduction Query
+                if any(w in msg_lower for w in ["pca", "principal component", "dimensionality"]):
+                    pca_res = ai_tools.run_pca(df, n_components=2)
+                    top_d = pca_res.get("top_drivers", {})
+                    resp = (
+                        f"📊 **Principal Component Analysis (PCA) Results**:\n"
+                        f"- **Decomposition Method:** PCA (Orthogonal Linear Projection)\n"
+                        f"- **Total Variance Retained:** **{pca_res.get('variance_retained')}%** across 2 components.\n"
+                        f"- **Dimensionality Compression:** {pca_res.get('compression_ratio')}% feature space reduction.\n\n"
+                        f"Explore interactive scree curves, 2D/3D projections, and component loadings in **🤖 ML Cockpit → Dimensionality (PCA)**."
+                    )
+                    return {
+                        "tool_used": "run_pca(df, n_components=2)",
+                        "response": resp,
+                        "data": pd.DataFrame([pca_res.get("top_drivers", {})]) if pca_res.get("top_drivers") else None,
+                    }
+
+                # B. Anomaly / Outlier Query
+                if any(w in msg_lower for w in ["anomaly", "outlier", "fraud", "irregular"]):
+                    from core.ml.anomaly_detection import run_anomaly_detection
+                    anom_res = run_anomaly_detection(df, algorithm="isolation_forest", contamination=0.05)
+                    resp = (
+                        f"🚨 **Automated Anomaly Audit (Isolation Forest)**:\n"
+                        f"- **Identified Outliers:** **{anom_res['anomaly_count']:,}** records ({anom_res['anomaly_pct']}% of dataset).\n"
+                        f"- **Algorithm:** Isolation Forest ensemble with 5% contamination threshold.\n\n"
+                        f"Inspect the 2D cluster projection and anomalous record profiles in **🤖 ML Cockpit → Anomaly & Outliers**."
+                    )
+                    return {
+                        "tool_used": "run_anomaly_detection(df, algorithm='isolation_forest')",
+                        "response": resp,
+                        "data": pd.DataFrame(anom_res.get("top_records", [])).head(5),
+                    }
+
+                # C. Future Forecasting Query
+                if any(w in msg_lower for w in ["forecast", "future", "projection", "next month", "next week", "next year"]):
+                    date_cols = df.select_dtypes(include=["datetime", "object"]).columns.tolist()
+                    num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+                    found_date = None
+                    for c in date_cols:
+                        if any(k in c.lower() for k in ["date", "time", "day", "month", "year"]):
+                            found_date = c
+                            break
+                    if not found_date and len(df.columns) > 0:
+                        found_date = df.columns[0]
+                    target_candidate = num_cols[0] if num_cols else None
+
+                    if found_date and target_candidate:
+                        fc_res = ai_tools.forecast(df, date_col=found_date, target_col=target_candidate, horizon=14)
+                        resp = (
+                            f"📈 **Time-Series Forecast Trajectory: `{target_candidate}`**\n"
+                            f"- **Best Model:** {fc_res.get('best_model')}\n"
+                            f"- **Projected Horizon:** {fc_res.get('horizon')} periods ({fc_res.get('frequency')})\n"
+                            f"- **Direction & Growth:** **{fc_res.get('metrics', {}).get('projected_growth_pct'):+.1f}%** ({fc_res.get('metrics', {}).get('growth_direction')})\n"
+                            f"- **Expected Mean:** {fc_res.get('metrics', {}).get('expected_mean')}\n"
+                            f"- **Backtest Accuracy:** MAE {fc_res.get('metrics', {}).get('mae')}\n\n"
+                            f"Review interactive confidence intervals in **🤖 ML Cockpit → Future Forecasting**."
+                        )
+                        return {
+                            "tool_used": "forecast(df, date_col, target_col)",
+                            "response": resp,
+                            "data": pd.DataFrame(fc_res.get("forecast", [])).head(5),
+                        }
+
+                # D. Champion / Best Model Query
                 champ = get_active_champion()
-                readiness = prepare_ml_data(df)
+                readiness = ai_tools.prepare_ml_data(df)
 
                 if "champion" in msg_lower or "best model" in msg_lower:
                     if champ:
@@ -51,10 +114,16 @@ class AIChatModel:
                 # General ML readiness / prediction summary
                 target = readiness.get("selected_target")
                 if target:
-                    summary = generate_ml_executive_summary(df, target)
+                    summary = (
+                        f"### 🤖 Quantum ML Executive Briefing: `{target}`\n"
+                        f"- **Identified ML Task:** {readiness.get('detected_task', 'N/A').replace('_', ' ').title()}\n"
+                        f"- **Readiness Health Score:** {readiness.get('overall_score')}/100\n"
+                        f"- **Scale:** {readiness.get('total_rows'):,} rows across {readiness.get('total_columns')} features.\n\n"
+                        f"Navigate to **🤖 ML & Predictive Analytics** in the sidebar to benchmark models and run predictions."
+                    )
                     return {
                         "tool_used": "prepare_ml_data()",
-                        "response": summary + "\n\nNavigate to **🤖 ML & Predictive Analytics** in the sidebar to benchmark models and run predictions.",
+                        "response": summary,
                         "data": pd.DataFrame(readiness.get("target_candidates", [])).head(5),
                     }
             except Exception:

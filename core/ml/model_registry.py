@@ -1,15 +1,24 @@
 """
 core.ml.model_registry
 ======================
-Model Catalog and Factory supporting Regression, Classification, Clustering,
-and Dimensionality Reduction with Fast / Balanced / Deep compute profiles.
+Institutional Model Catalog and Factory supporting Regression, Classification,
+Clustering, Anomaly Detection, and Dimensionality Reduction.
 """
 
 from typing import Dict, Any, List, Optional, Type
 from dataclasses import dataclass
 
-# Base Scikit-Learn
-from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet, LogisticRegression
+# Base Scikit-Learn Estimators
+from sklearn.linear_model import (
+    LinearRegression,
+    Ridge,
+    Lasso,
+    ElasticNet,
+    HuberRegressor,
+    BayesianRidge,
+    LogisticRegression,
+    SGDClassifier,
+)
 from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
 from sklearn.ensemble import (
     RandomForestRegressor,
@@ -20,11 +29,15 @@ from sklearn.ensemble import (
     GradientBoostingClassifier,
     HistGradientBoostingRegressor,
     HistGradientBoostingClassifier,
+    IsolationForest,
 )
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KNeighborsRegressor, KNeighborsClassifier, LocalOutlierFactor
+from sklearn.svm import SVR, SVC, OneClassSVM
+from sklearn.covariance import EllipticEnvelope
 from sklearn.naive_bayes import GaussianNB
 from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, TruncatedSVD, KernelPCA, FastICA, NMF
+from sklearn.manifold import TSNE
 
 # Optional Advanced Libraries
 try:
@@ -44,8 +57,8 @@ except ImportError:
 class ModelInfo:
     id: str
     name: str
-    task: str  # regression, binary_classification, multiclass_classification, clustering, pca
-    family: str  # linear, tree, ensemble, boosting, distance, probabilistic, clustering, decomposition
+    task: str  # regression, binary_classification, multiclass_classification, clustering, anomaly, decomposition
+    family: str  # linear, tree, ensemble, boosting, distance, probabilistic, svm, anomaly, decomposition
     speed: str  # Fast, Moderate, Slow
     complexity: str  # Low, Medium, High
     description: str
@@ -99,6 +112,50 @@ REGISTRY: Dict[str, ModelInfo] = {
         description="Linear regression combining L1 and L2 penalties.",
         default_params={"alpha": 1.0, "l1_ratio": 0.5, "random_state": 42},
         param_grid={"alpha": [0.01, 0.1, 1.0], "l1_ratio": [0.2, 0.5, 0.8]},
+    ),
+    "huber_regressor": ModelInfo(
+        id="huber_regressor",
+        name="Huber Regressor",
+        task="regression",
+        family="linear",
+        speed="Fast",
+        complexity="Low",
+        description="Robust linear regression resistant to heavy-tailed outliers.",
+        default_params={"epsilon": 1.35, "max_iter": 300},
+        param_grid={"epsilon": [1.1, 1.35, 1.75], "alpha": [0.0001, 0.001, 0.01]},
+    ),
+    "bayesian_ridge": ModelInfo(
+        id="bayesian_ridge",
+        name="Bayesian Ridge Regression",
+        task="regression",
+        family="linear",
+        speed="Fast",
+        complexity="Low",
+        description="Probabilistic regression estimating parameter posterior distributions.",
+        default_params={"max_iter": 300},
+        param_grid={"alpha_1": [1e-6, 1e-4], "lambda_1": [1e-6, 1e-4]},
+    ),
+    "knn_regressor": ModelInfo(
+        id="knn_regressor",
+        name="KNN Regressor",
+        task="regression",
+        family="distance",
+        speed="Moderate",
+        complexity="Low",
+        description="Instance-based regression predicting average of k-nearest neighbors.",
+        default_params={"n_neighbors": 5},
+        param_grid={"n_neighbors": [3, 5, 7, 11]},
+    ),
+    "svr": ModelInfo(
+        id="svr",
+        name="Support Vector Regression (SVR)",
+        task="regression",
+        family="svm",
+        speed="Moderate",
+        complexity="Medium",
+        description="Epsilon-support vector regression with RBF non-linear kernel.",
+        default_params={"C": 1.0, "epsilon": 0.1},
+        param_grid={"C": [0.1, 1.0, 10.0], "epsilon": [0.01, 0.1, 0.2]},
     ),
     "decision_tree_regressor": ModelInfo(
         id="decision_tree_regressor",
@@ -190,6 +247,17 @@ REGISTRY: Dict[str, ModelInfo] = {
         default_params={"C": 1.0, "max_iter": 1000, "random_state": 42},
         param_grid={"C": [0.01, 0.1, 1.0, 10.0]},
     ),
+    "sgd_classifier": ModelInfo(
+        id="sgd_classifier",
+        name="SGD Classifier (Log Loss)",
+        task="binary_classification",
+        family="linear",
+        speed="Fast",
+        complexity="Low",
+        description="Stochastic Gradient Descent classifier with probabilistic log loss.",
+        default_params={"loss": "log_loss", "max_iter": 1000, "random_state": 42},
+        param_grid={"alpha": [1e-4, 1e-3, 1e-2], "penalty": ["l2", "l1", "elasticnet"]},
+    ),
     "naive_bayes": ModelInfo(
         id="naive_bayes",
         name="Gaussian Naive Bayes",
@@ -211,6 +279,17 @@ REGISTRY: Dict[str, ModelInfo] = {
         description="Non-parametric instance-based classifier.",
         default_params={"n_neighbors": 5},
         param_grid={"n_neighbors": [3, 5, 7, 11]},
+    ),
+    "svm_classifier": ModelInfo(
+        id="svm_classifier",
+        name="Support Vector Classifier (SVC)",
+        task="binary_classification",
+        family="svm",
+        speed="Moderate",
+        complexity="Medium",
+        description="Support vector classification with RBF kernel and probability calibration.",
+        default_params={"C": 1.0, "probability": True, "random_state": 42},
+        param_grid={"C": [0.1, 1.0, 10.0], "gamma": ["scale", "auto"]},
     ),
     "decision_tree_classifier": ModelInfo(
         id="decision_tree_classifier",
@@ -290,7 +369,7 @@ REGISTRY: Dict[str, ModelInfo] = {
         param_grid={"learning_rate": [0.03, 0.1, 0.2], "num_leaves": [15, 31, 63]},
     ),
 
-    # ------------------ UNSUPERVISED ------------------
+    # ------------------ UNSUPERVISED CLUSTERING ------------------
     "kmeans": ModelInfo(
         id="kmeans",
         name="K-Means Clustering",
@@ -298,7 +377,7 @@ REGISTRY: Dict[str, ModelInfo] = {
         family="clustering",
         speed="Fast",
         complexity="Low",
-        description="Centroid-based partition clustering.",
+        description="Centroid-based partition clustering minimizing inertia.",
         default_params={"n_clusters": 3, "random_state": 42, "n_init": "auto"},
         param_grid={"n_clusters": [2, 3, 4, 5, 8]},
     ),
@@ -320,20 +399,123 @@ REGISTRY: Dict[str, ModelInfo] = {
         family="clustering",
         speed="Slow",
         complexity="Medium",
-        description="Hierarchical bottom-up tree clustering.",
+        description="Hierarchical bottom-up tree clustering using Ward linkage.",
         default_params={"n_clusters": 3},
         param_grid={"n_clusters": [2, 3, 4, 5]},
     ),
+
+    # ------------------ ANOMALY DETECTION ------------------
+    "isolation_forest": ModelInfo(
+        id="isolation_forest",
+        name="Isolation Forest",
+        task="anomaly",
+        family="anomaly",
+        speed="Fast",
+        complexity="Low",
+        description="Ensemble isolating anomalies via recursive random feature splits.",
+        default_params={"n_estimators": 100, "contamination": 0.05, "random_state": 42},
+        param_grid={"contamination": [0.01, 0.05, 0.1]},
+    ),
+    "local_outlier_factor": ModelInfo(
+        id="local_outlier_factor",
+        name="Local Outlier Factor (LOF)",
+        task="anomaly",
+        family="anomaly",
+        speed="Moderate",
+        complexity="Medium",
+        description="Density-based anomaly detection measuring local density deviation.",
+        default_params={"n_neighbors": 20, "contamination": 0.05, "novelty": True},
+        param_grid={"n_neighbors": [10, 20, 35]},
+    ),
+    "one_class_svm": ModelInfo(
+        id="one_class_svm",
+        name="One-Class SVM",
+        task="anomaly",
+        family="anomaly",
+        speed="Moderate",
+        complexity="Medium",
+        description="Kernel-based support vector boundary enclosing the normal data envelope.",
+        default_params={"nu": 0.05, "kernel": "rbf", "gamma": "scale"},
+        param_grid={"nu": [0.01, 0.05, 0.1]},
+    ),
+    "elliptic_envelope": ModelInfo(
+        id="elliptic_envelope",
+        name="Elliptic Envelope",
+        task="anomaly",
+        family="anomaly",
+        speed="Fast",
+        complexity="Low",
+        description="Robust Mahalanobis covariance estimation for Gaussian outlier detection.",
+        default_params={"contamination": 0.05, "random_state": 42},
+        param_grid={"contamination": [0.01, 0.05, 0.1]},
+    ),
+
+    # ------------------ DIMENSIONALITY REDUCTION ------------------
     "pca": ModelInfo(
         id="pca",
-        name="Principal Component Analysis",
-        task="pca",
+        name="Principal Component Analysis (PCA)",
+        task="decomposition",
         family="decomposition",
         speed="Fast",
         complexity="Low",
-        description="Orthogonal linear transformation for dimensionality reduction.",
+        description="Linear orthogonal projection maximizing explained variance.",
         default_params={"n_components": 2, "random_state": 42},
         param_grid={"n_components": [2, 3, 5]},
+    ),
+    "truncated_svd": ModelInfo(
+        id="truncated_svd",
+        name="Truncated SVD",
+        task="decomposition",
+        family="decomposition",
+        speed="Fast",
+        complexity="Low",
+        description="Singular Value Decomposition robust to sparse and non-centered matrices.",
+        default_params={"n_components": 2, "random_state": 42},
+        param_grid={"n_components": [2, 3, 5]},
+    ),
+    "kernel_pca": ModelInfo(
+        id="kernel_pca",
+        name="Kernel PCA",
+        task="decomposition",
+        family="decomposition",
+        speed="Moderate",
+        complexity="Medium",
+        description="Non-linear dimensionality reduction via RBF kernel trick.",
+        default_params={"n_components": 2, "kernel": "rbf", "random_state": 42},
+        param_grid={"n_components": [2, 3], "kernel": ["rbf", "poly", "cosine"]},
+    ),
+    "fast_ica": ModelInfo(
+        id="fast_ica",
+        name="Independent Component Analysis (ICA)",
+        task="decomposition",
+        family="decomposition",
+        speed="Fast",
+        complexity="Medium",
+        description="Separates multivariate signals into statistically independent subcomponents.",
+        default_params={"n_components": 2, "random_state": 42},
+        param_grid={"n_components": [2, 3]},
+    ),
+    "nmf": ModelInfo(
+        id="nmf",
+        name="Non-Negative Matrix Factorization (NMF)",
+        task="decomposition",
+        family="decomposition",
+        speed="Moderate",
+        complexity="Medium",
+        description="Factorizes non-negative matrices into additive part-based representations.",
+        default_params={"n_components": 2, "random_state": 42, "max_iter": 300},
+        param_grid={"n_components": [2, 3]},
+    ),
+    "tsne": ModelInfo(
+        id="tsne",
+        name="t-Distributed Stochastic Neighbor Embedding (t-SNE)",
+        task="decomposition",
+        family="decomposition",
+        speed="Slow",
+        complexity="High",
+        description="Non-linear manifold visualization preserving local neighborhood structure.",
+        default_params={"n_components": 2, "random_state": 42, "perplexity": 30.0},
+        param_grid={"perplexity": [15.0, 30.0, 50.0]},
     ),
 }
 
@@ -341,12 +523,24 @@ REGISTRY: Dict[str, ModelInfo] = {
 # Compute Profile Candidate Subsets
 PROFILE_CANDIDATES = {
     "Fast": {
-        "regression": ["linear_regression", "ridge_regression", "decision_tree_regressor", "hist_gradient_boosting_regressor"],
-        "classification": ["logistic_regression", "naive_bayes", "decision_tree_classifier", "hist_gradient_boosting_classifier"],
+        "regression": [
+            "linear_regression",
+            "ridge_regression",
+            "decision_tree_regressor",
+            "hist_gradient_boosting_regressor",
+        ],
+        "classification": [
+            "logistic_regression",
+            "naive_bayes",
+            "decision_tree_classifier",
+            "hist_gradient_boosting_classifier",
+        ],
+        "anomaly": ["isolation_forest", "elliptic_envelope"],
     },
     "Balanced": {
         "regression": [
             "ridge_regression",
+            "huber_regressor",
             "decision_tree_regressor",
             "random_forest_regressor",
             "extra_trees_regressor",
@@ -354,15 +548,20 @@ PROFILE_CANDIDATES = {
         ],
         "classification": [
             "logistic_regression",
+            "sgd_classifier",
             "decision_tree_classifier",
             "random_forest_classifier",
             "extra_trees_classifier",
             "hist_gradient_boosting_classifier",
         ],
+        "anomaly": ["isolation_forest", "local_outlier_factor", "elliptic_envelope"],
     },
     "Deep": {
         "regression": [
             "ridge_regression",
+            "bayesian_ridge",
+            "knn_regressor",
+            "svr",
             "random_forest_regressor",
             "gradient_boosting_regressor",
             "hist_gradient_boosting_regressor",
@@ -372,19 +571,27 @@ PROFILE_CANDIDATES = {
         "classification": [
             "logistic_regression",
             "knn_classifier",
+            "svm_classifier",
             "random_forest_classifier",
             "gradient_boosting_classifier",
             "hist_gradient_boosting_classifier",
             "xgboost_classifier",
             "lightgbm_classifier",
         ],
+        "anomaly": ["isolation_forest", "local_outlier_factor", "one_class_svm", "elliptic_envelope"],
     },
 }
 
 
 def get_candidate_models(task: str, compute_profile: str = "Balanced") -> List[str]:
     """Get list of model IDs according to task and compute profile."""
-    category = "classification" if "classification" in task else "regression"
+    if "classification" in task:
+        category = "classification"
+    elif "anomaly" in task:
+        category = "anomaly"
+    else:
+        category = "regression"
+
     profile_dict = PROFILE_CANDIDATES.get(compute_profile, PROFILE_CANDIDATES["Balanced"])
     candidates = list(profile_dict.get(category, []))
 
@@ -410,7 +617,7 @@ def create_model_instance(model_id: str, custom_params: Optional[Dict[str, Any]]
     if custom_params:
         params.update(custom_params)
 
-    # Factory Mapping
+    # 1. Regressors
     if model_id == "linear_regression":
         return LinearRegression(**params)
     elif model_id == "ridge_regression":
@@ -419,6 +626,14 @@ def create_model_instance(model_id: str, custom_params: Optional[Dict[str, Any]]
         return Lasso(**params)
     elif model_id == "elastic_net":
         return ElasticNet(**params)
+    elif model_id == "huber_regressor":
+        return HuberRegressor(**params)
+    elif model_id == "bayesian_ridge":
+        return BayesianRidge(**params)
+    elif model_id == "knn_regressor":
+        return KNeighborsRegressor(**params)
+    elif model_id == "svr":
+        return SVR(**params)
     elif model_id == "decision_tree_regressor":
         return DecisionTreeRegressor(**params)
     elif model_id == "random_forest_regressor":
@@ -438,13 +653,17 @@ def create_model_instance(model_id: str, custom_params: Optional[Dict[str, Any]]
             raise ImportError("LightGBM is not installed.")
         return lgb.LGBMRegressor(**params)
 
-    # Classifiers
+    # 2. Classifiers
     elif model_id == "logistic_regression":
         return LogisticRegression(**params)
+    elif model_id == "sgd_classifier":
+        return SGDClassifier(**params)
     elif model_id == "naive_bayes":
         return GaussianNB(**params)
     elif model_id == "knn_classifier":
         return KNeighborsClassifier(**params)
+    elif model_id == "svm_classifier":
+        return SVC(**params)
     elif model_id == "decision_tree_classifier":
         return DecisionTreeClassifier(**params)
     elif model_id == "random_forest_classifier":
@@ -464,14 +683,36 @@ def create_model_instance(model_id: str, custom_params: Optional[Dict[str, Any]]
             raise ImportError("LightGBM is not installed.")
         return lgb.LGBMClassifier(**params)
 
-    # Unsupervised
+    # 3. Unsupervised Clustering
     elif model_id == "kmeans":
         return KMeans(**params)
     elif model_id == "dbscan":
         return DBSCAN(**params)
     elif model_id == "agglomerative":
         return AgglomerativeClustering(**params)
+
+    # 4. Anomaly Detection
+    elif model_id == "isolation_forest":
+        return IsolationForest(**params)
+    elif model_id == "local_outlier_factor":
+        return LocalOutlierFactor(**params)
+    elif model_id == "one_class_svm":
+        return OneClassSVM(**params)
+    elif model_id == "elliptic_envelope":
+        return EllipticEnvelope(**params)
+
+    # 5. Dimensionality Reduction
     elif model_id == "pca":
         return PCA(**params)
+    elif model_id == "truncated_svd":
+        return TruncatedSVD(**params)
+    elif model_id == "kernel_pca":
+        return KernelPCA(**params)
+    elif model_id == "fast_ica":
+        return FastICA(**params)
+    elif model_id == "nmf":
+        return NMF(**params)
+    elif model_id == "tsne":
+        return TSNE(**params)
 
     raise ValueError(f"No instantiation implementation for model_id: {model_id}")

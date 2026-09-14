@@ -1,0 +1,26 @@
+{
+  "experiment_id": "exp_20260914_165309_logistic_regression",
+  "created_at": "2026-09-14 16:53:09",
+  "model_id": "logistic_regression",
+  "model_name": "Logistic Regression",
+  "task_type": "binary_classification",
+  "target_col": "churn",
+  "feature_cols": [
+    "age",
+    "annual_income"
+  ],
+  "metrics": {
+    "accuracy": 0.825,
+    "balanced_accuracy": 0.5625,
+    "precision": 0.8564,
+    "recall": 0.825,
+    "f1_weighted": 0.7656,
+    "f1_macro": 0.5618,
+    "roc_auc": 0.8711,
+    "train_accuracy": 0.8
+  },
+  "dataset_name": "test_churn_dataset",
+  "is_champion": true,
+  "model_file": "model.joblib",
+  "extra_meta": {}
+}

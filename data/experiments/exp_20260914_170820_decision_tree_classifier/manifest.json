@@ -1,0 +1,36 @@
+{
+  "experiment_id": "exp_20260914_170820_decision_tree_classifier",
+  "created_at": "2026-09-14 17:08:20",
+  "model_id": "decision_tree_classifier",
+  "model_name": "Decision Tree Classifier",
+  "task_type": "binary_classification",
+  "target_col": "Churn",
+  "feature_cols": [
+    "Customer ID",
+    "Purchase Date",
+    "Product Category",
+    "Product Price",
+    "Quantity",
+    "Total Purchase Amount",
+    "Payment Method",
+    "Customer Age",
+    "Returns",
+    "Customer Name",
+    "Age",
+    "Gender"
+  ],
+  "metrics": {
+    "accuracy": 0.8,
+    "balanced_accuracy": 0.5021,
+    "precision": 0.7838,
+    "recall": 0.8,
+    "f1_weighted": 0.7124,
+    "f1_macro": 0.449,
+    "roc_auc": 0.5219,
+    "train_accuracy": 0.8004
+  },
+  "dataset_name": "Ecommerce Customer Data Large",
+  "is_champion": true,
+  "model_file": "model.joblib",
+  "extra_meta": {}
+}

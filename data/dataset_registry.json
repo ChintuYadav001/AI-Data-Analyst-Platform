@@ -151,6 +151,63 @@
         }
       },
       "active_version": "dataset_v1"
+    },
+    "ds_282a0780": {
+      "dataset_id": "ds_282a0780",
+      "name": "Ad Technologies Dataset (2)",
+      "dataset_hash": "2f206e8db8389efe",
+      "created_at": 1789384512.4347267,
+      "versions": {
+        "dataset_v1": {
+          "parquet_path": "D:\\antigrevity_project\\data analyse\\data\\parquet\\2f206e8db8389efe.parquet",
+          "rows": 1000,
+          "columns": 14,
+          "registered_at": 1789384512.4347315,
+          "lineage": {
+            "source_file": "AD Technologies Dataset (2).xlsx",
+            "source_type": "xlsx"
+          }
+        }
+      },
+      "active_version": "dataset_v1"
+    },
+    "ds_57da8c2c": {
+      "dataset_id": "ds_57da8c2c",
+      "name": "Ad Technologies Dataset",
+      "dataset_hash": "362c2cfa4ece349a",
+      "created_at": 1789385164.3271308,
+      "versions": {
+        "dataset_v1": {
+          "parquet_path": "D:\\antigrevity_project\\data analyse\\data\\parquet\\362c2cfa4ece349a.parquet",
+          "rows": 1000,
+          "columns": 14,
+          "registered_at": 1789385164.3271408,
+          "lineage": {
+            "source_file": "AD Technologies Dataset.xlsx",
+            "source_type": "xlsx"
+          }
+        }
+      },
+      "active_version": "dataset_v1"
+    },
+    "ds_f0b43cec": {
+      "dataset_id": "ds_f0b43cec",
+      "name": "Gym Members Exercise Tracking Synthetic Data",
+      "dataset_hash": "0f207d6f696ad1e5",
+      "created_at": 1789385311.5351214,
+      "versions": {
+        "dataset_v1": {
+          "parquet_path": "D:\\antigrevity_project\\data analyse\\data\\parquet\\0f207d6f696ad1e5.parquet",
+          "rows": 1801,
+          "columns": 15,
+          "registered_at": 1789385311.535152,
+          "lineage": {
+            "source_file": "gym_members_exercise_tracking_synthetic_data.csv",
+            "source_type": "csv"
+          }
+        }
+      },
+      "active_version": "dataset_v1"
     }
   },
   "hashes": {
@@ -161,6 +218,9 @@
     "4a437fde05fe5264": "ds_9c3b8718",
     "97f5dfae139737aa": "ds_dafc683c",
     "a98aed91784974ec": "ds_4f788338",
-    "e90ad92359001b26": "ds_6e69a7a9"
+    "e90ad92359001b26": "ds_6e69a7a9",
+    "2f206e8db8389efe": "ds_282a0780",
+    "362c2cfa4ece349a": "ds_57da8c2c",
+    "0f207d6f696ad1e5": "ds_f0b43cec"
   }
 }

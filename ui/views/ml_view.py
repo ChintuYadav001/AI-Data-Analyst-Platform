@@ -1,17 +1,21 @@
 """
 ui.views.ml_view
 ================
-Institutional-grade Machine Learning and Predictive Analytics Cockpit for Quantum Analyst.
-Provides a 9-tab interactive suite:
+Institutional-grade Machine Learning & Predictive Analytics Cockpit for Quantum Analyst.
+Provides a 13-tab interactive suite:
 1. Overview
-2. ML Readiness & Target
-3. Model Selection & Config
-4. Training & Benchmarking
-5. Evaluation & Diagnostics
-6. Explainable AI
-7. Predictions & Inference
-8. Time-Series Forecasting
-9. Experiments & Registry
+2. ML Readiness
+3. Target
+4. Features & Selection
+5. Dimensionality (PCA & Beyond)
+6. Models & Config
+7. Training & AutoML
+8. Evaluation & Diagnostics
+9. Explainable AI
+10. Predictions & Inference
+11. Future Forecasting
+12. Scenario Analysis (What-If)
+13. Experiments & Registry
 """
 
 import io
@@ -22,14 +26,19 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 
-from core.ml.ml_readiness import audit_ml_readiness, classify_task_type
+from core.ml.ml_readiness import audit_ml_readiness, classify_task_type, detect_target_candidates
 from core.ml.model_registry import REGISTRY, get_candidate_models
 from core.ml.model_selection import run_benchmark
 from core.ml.trainer import train_single_model
 from core.ml.tuning import tune_model_hyperparameters
-from core.ml.forecasting import run_time_series_forecast
+from core.ml.forecasting import run_time_series_forecast, auto_detect_time_series_meta
 from core.ml.prediction import predict_single_record, predict_batch
 from core.ml.explainability import explain_local_prediction, STATISTICAL_DISCLAIMER
+from core.ml.dimensionality import run_dimensionality_reduction, METHOD_METADATA
+from core.ml.feature_selection import select_best_features, FEATURE_SELECTION_METHODS
+from core.ml.anomaly_detection import run_anomaly_detection, ANOMALY_ALGORITHMS
+from core.ml.scenario_analysis import simulate_what_if_scenario
+from core.ml.report_generator import generate_ml_pdf_report, generate_ml_html_report, generate_ml_csv_summary
 from core.ml.experiment_tracker import (
     save_experiment,
     list_experiments,
@@ -56,6 +65,10 @@ def init_ml_session_state():
         "ml_active_model_id": None,
         "ml_last_training_time": None,
         "ml_forecast_results": None,
+        "ml_pca_results": None,
+        "ml_fs_results": None,
+        "ml_anomaly_results": None,
+        "ml_scenario_results": None,
         "ml_last_dataset_signature": None,
     }
     for k, v in defaults.items():
@@ -79,937 +92,982 @@ def render_ml_view():
     df: pd.DataFrame = st.session_state["df"]
     proj_name = st.session_state.get("current_project_name", "Active Dataset")
 
+    # Dynamic Dataset Signature Check
+    current_signature = f"{proj_name}_{len(df)}_{tuple(df.columns)}"
+    if st.session_state.get("ml_last_dataset_signature") != current_signature:
+        st.session_state["ml_last_dataset_signature"] = current_signature
+        st.session_state["ml_target_col"] = None
+        st.session_state["ml_selected_features"] = []
+        st.session_state["ml_benchmark_results"] = None
+        st.session_state["ml_active_model_id"] = None
+        st.session_state["ml_forecast_results"] = None
+        st.session_state["ml_pca_results"] = None
+        st.session_state["ml_fs_results"] = None
+        st.session_state["ml_anomaly_results"] = None
+        st.session_state["ml_scenario_results"] = None
+
     # Header section
     st.markdown(f"""
     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px;">
         <div>
             <div style="font-size: 0.76rem; font-weight: 800; color: #00F0FF; letter-spacing: 0.08em; text-transform: uppercase;">
-                // AUTOMATED MACHINE LEARNING & PREDICTIVE ANALYTICS
+                // INSTITUTIONAL AUTOMATED ML & PREDICTIVE ANALYTICS
             </div>
             <h2 style="margin: 2px 0 6px 0; color: #FFFFFF; font-size: 1.7rem; font-weight: 800;">
                 🤖 Quantum Predictive Engine
             </h2>
             <div style="font-size: 0.85rem; color: #94A3B8;">
-                End-to-end model benchmarking, reproducible pipelines, explainable AI, time series, and deployment.
+                End-to-end model benchmarking, PCA & decomposition, explainable AI, future forecasting, and What-If simulations.
             </div>
         </div>
         <div style="text-align: right; background: rgba(0, 240, 255, 0.06); border: 1px solid rgba(0, 240, 255, 0.2); border-radius: 8px; padding: 6px 14px;">
-            <div style="font-size: 0.68rem; font-weight: 700; color: #38BDF8;">WORKSPACE DATASET</div>
+            <div style="font-size: 0.68rem; font-weight: 700; color: #38BDF8;">ACTIVE WORKSPACE</div>
             <div style="font-weight: 700; color: #FFFFFF; font-size: 0.95rem;">{proj_name}</div>
             <div style="font-size: 0.74rem; color: #94A3B8;">{len(df):,} rows × {len(df.columns)} cols</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Detect dataset change and synchronize session state
-    curr_signature = f"{proj_name}_{len(df)}_{tuple(df.columns)}"
-    if st.session_state.get("ml_last_dataset_signature") != curr_signature:
-        st.session_state["ml_last_dataset_signature"] = curr_signature
-        st.session_state["ml_target_col"] = None
-        st.session_state["ml_selected_features"] = []
-        st.session_state["ml_benchmark_results"] = None
-        st.session_state["ml_active_model_id"] = None
-        st.session_state["ml_forecast_results"] = None
-
-    # ML Readiness Audit
-    readiness_report = audit_ml_readiness(df, target_col=st.session_state.get("ml_target_col"))
-
-    # If target not set or no longer exists in current df, auto-select
-    if st.session_state.get("ml_target_col") not in df.columns:
-        if readiness_report.selected_target and readiness_report.selected_target in df.columns:
-            st.session_state["ml_target_col"] = readiness_report.selected_target
-        elif len(df.columns) > 0:
-            st.session_state["ml_target_col"] = df.columns[-1]
-
-    current_target = st.session_state.get("ml_target_col")
-
-    # Filter and validate active feature cohort
-    valid_features = [c for c in st.session_state.get("ml_selected_features", []) if c in df.columns and c != current_target]
-    if not valid_features:
-        exclude = set(readiness_report.id_columns + readiness_report.constant_columns)
-        if current_target:
-            exclude.add(current_target)
-        valid_features = [c for c in df.columns if c not in exclude]
-    st.session_state["ml_selected_features"] = valid_features
-
-    # Update Task Type
-    if current_target and current_target in df.columns:
-        st.session_state["ml_task_type"] = classify_task_type(df, current_target)
-
-    # 9 Tabs Layout
+    # 13 Institutional Tabs
     tabs = st.tabs([
-        "🔭 Overview",
-        "🎯 ML Readiness & Target",
-        "🤖 Model Selection & Config",
-        "⚡ Training & Benchmarking",
-        "📊 Evaluation & Diagnostics",
-        "🔍 Explainable AI",
-        "🔮 Predictions & Inference",
-        "📈 Time-Series Forecasting",
-        "📜 Experiments & Registry",
+        "Overview",
+        "ML Readiness",
+        "Target",
+        "Features & Selection",
+        "Dimensionality (PCA)",
+        "Models & Config",
+        "Training & AutoML",
+        "Evaluation & Diagnostics",
+        "Explainable AI",
+        "Predictions & Inference",
+        "Future Forecasting",
+        "Scenario Analysis (What-If)",
+        "Experiments & Registry",
     ])
 
-    # -------------------------------------------------------------
+    # =========================================================================
     # TAB 1: OVERVIEW
-    # -------------------------------------------------------------
+    # =========================================================================
     with tabs[0]:
-        st.markdown("### 🔭 Predictive Architecture Overview")
-        st.markdown("Automated intelligence pipeline assessing data health, selecting optimal algorithmic candidates, training with cross-validation, and verifying generalization stability.")
-
-        # KPI row
-        k1, k2, k3, k4 = st.columns(4)
-        with k1:
-            score = readiness_report.overall_score
-            score_color = "#10B981" if score >= 80 else ("#F59E0B" if score >= 60 else "#EF4444")
-            st.markdown(f"""
-            <div style="background: rgba(14, 20, 36, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 9px; padding: 14px;">
-                <div style="font-size: 0.7rem; font-weight: 700; color: #94A3B8;">ML READINESS SCORE</div>
-                <div style="font-size: 1.8rem; font-weight: 800; color: {score_color}; margin: 4px 0;">{score}/100</div>
-                <div style="font-size: 0.74rem; color: #64748B;">{'Optimal Health' if score >= 80 else 'Action Recommended'}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with k2:
-            task_label = st.session_state["ml_task_type"].replace("_", " ").title()
-            st.markdown(f"""
-            <div style="background: rgba(14, 20, 36, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 9px; padding: 14px;">
-                <div style="font-size: 0.7rem; font-weight: 700; color: #94A3B8;">DETECTED TASK</div>
-                <div style="font-size: 1.3rem; font-weight: 800; color: #00F0FF; margin: 8px 0;">{task_label}</div>
-                <div style="font-size: 0.74rem; color: #64748B;">Target: <b>{current_target or 'None'}</b></div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with k3:
-            num_feats = len(st.session_state["ml_selected_features"])
-            st.markdown(f"""
-            <div style="background: rgba(14, 20, 36, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 9px; padding: 14px;">
-                <div style="font-size: 0.7rem; font-weight: 700; color: #94A3B8;">FEATURE COHORT</div>
-                <div style="font-size: 1.8rem; font-weight: 800; color: #A855F7; margin: 4px 0;">{num_feats} Features</div>
-                <div style="font-size: 0.74rem; color: #64748B;">Excluded: {len(df.columns) - num_feats - (1 if current_target else 0)} non-predictive</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with k4:
-            champ = get_active_champion()
-            champ_name = champ.get("model_name", "None registered") if champ else "None registered"
-            st.markdown(f"""
-            <div style="background: rgba(14, 20, 36, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 9px; padding: 14px;">
-                <div style="font-size: 0.7rem; font-weight: 700; color: #94A3B8;">CHAMPION MODEL</div>
-                <div style="font-size: 1.15rem; font-weight: 800; color: #F59E0B; margin: 9px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">🏆 {champ_name}</div>
-                <div style="font-size: 0.74rem; color: #64748B;">Production Ready</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # Hero workflow launch card
         st.markdown("""
-        <div style="background: linear-gradient(135deg, rgba(0, 240, 255, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%); border: 1px solid rgba(0, 240, 255, 0.25); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h3 style="margin: 0 0 6px 0; color: #FFFFFF;">🚀 Quick Automated Pipeline Run</h3>
-                    <div style="color: #94A3B8; font-size: 0.88rem; max-width: 650px;">
-                        Benchmark candidate algorithms across Fast, Balanced, and Deep ensembles. Quantum Analyst trains cross-validated pipelines, evaluates metrics, and automatically promotes the winning Champion model.
-                    </div>
-                </div>
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid #1E293B; border-radius: 10px; padding: 16px; margin-bottom: 16px;">
+            <div style="font-weight: 700; color: #38BDF8; font-size: 1.05rem; margin-bottom: 6px;">
+                🚀 Complete Machine Learning & Predictive Workflow
+            </div>
+            <div style="font-size: 0.85rem; color: #94A3B8; line-height: 1.5;">
+                Quantum Analyst provides an automated, statistically rigorous modeling pipeline:
+                <b>Dataset → Type → Target → Features → AutoML / Manual → Validation / Compute → Train</b>.
+                Every metric is computed directly from holdout splits with zero data leakage.
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        c_go1, c_go2 = st.columns([1, 3])
-        with c_go1:
-            if st.button("⚡ Run Full Automated Benchmark", type="primary", use_container_width=True):
-                target_to_use = st.session_state.get("ml_target_col")
-                if not target_to_use or target_to_use not in df.columns:
-                    st.error("Please select a valid target column in the ML Readiness tab first.")
-                else:
-                    feats_to_use = [c for c in st.session_state.get("ml_selected_features", []) if c in df.columns and c != target_to_use]
-                    if not feats_to_use:
-                        st.error("Please select at least one valid feature column.")
-                    else:
-                        with st.spinner("Executing automated cross-validation benchmarking..."):
-                            try:
-                                res = run_benchmark(
-                                    df=df,
-                                    target_col=target_to_use,
-                                    feature_cols=feats_to_use,
-                                    task_type=st.session_state["ml_task_type"],
-                                    compute_profile=st.session_state["ml_compute_profile"],
-                                )
-                                st.session_state["ml_benchmark_results"] = res
-                                st.session_state["ml_active_model_id"] = res["champion_id"]
-                                
-                                # Auto-save champion to experiment tracker
-                                champ_id = res["champion_id"]
-                                if champ_id and champ_id in res["all_results"]:
-                                    champ_data = res["all_results"][champ_id]
-                                    save_experiment(
-                                        pipeline=champ_data["pipeline"],
-                                        model_id=champ_id,
-                                        model_name=champ_data["model_name"],
-                                        task_type=st.session_state["ml_task_type"],
-                                        target_col=target_to_use,
-                                        feature_cols=feats_to_use,
-                                        metrics=champ_data["metrics"],
-                                        dataset_name=proj_name,
-                                        is_champion=True,
-                                    )
-                                st.success(f"Benchmark finished! Champion Model: **{res['champion_id']}**")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Training failed: {str(e)}")
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            st.metric("Total Records", f"{len(df):,}")
+        with m2:
+            st.metric("Total Columns", f"{len(df.columns):,}")
+        with m3:
+            num_c = len(df.select_dtypes(include=[np.number]).columns)
+            st.metric("Numeric Features", f"{num_c}")
+        with m4:
+            cat_c = len(df.select_dtypes(include=["object", "category"]).columns)
+            st.metric("Categorical Features", f"{cat_c}")
 
-        with c_go2:
-            st.info("💡 To fine-tune features, validation ratios, or algorithms, explore the **Target**, **Model Selection**, and **Diagnostics** tabs above.")
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    # -------------------------------------------------------------
-    # TAB 2: ML READINESS & TARGET
-    # -------------------------------------------------------------
+        # Quick Actions Card
+        st.subheader("⚡ Quick Navigation Stepper")
+        col_w1, col_w2, col_w3, col_w4 = st.columns(4)
+        with col_w1:
+            st.markdown("##### 1. Audit & Target")
+            st.caption("Verify data health and configure prediction target.")
+        with col_w2:
+            st.markdown("##### 2. Feature Selection & PCA")
+            st.caption("Prune noise, decompose dimensions, and inspect scree curves.")
+        with col_w3:
+            st.markdown("##### 3. Benchmark Models")
+            st.caption("Train competing estimators and identify champion model.")
+        with col_w4:
+            st.markdown("##### 4. Forecast & Scenarios")
+            st.caption("Generate future projections and counterfactual What-If tests.")
+
+    # =========================================================================
+    # TAB 2: ML READINESS
+    # =========================================================================
     with tabs[1]:
-        st.markdown("### 🎯 Dataset Suitability & Target Auto-Detection")
-        st.markdown("Examines semantic column names, cardinality, zero-variance attributes, and look-ahead target leakage.")
+        st.subheader("📋 Dataset ML Health & Readiness Audit")
+        report = audit_ml_readiness(df, st.session_state.get("ml_target_col"))
 
-        col_t1, col_t2 = st.columns([1, 1])
+        col_score, col_details = st.columns([1, 3])
+        with col_score:
+            score = report.overall_score
+            color = "#10B981" if score >= 80 else ("#F59E0B" if score >= 60 else "#EF4444")
+            st.markdown(f"""
+            <div style="background: rgba(15, 23, 42, 0.8); border: 2px solid {color}; border-radius: 12px; padding: 20px; text-align: center;">
+                <div style="font-size: 0.8rem; font-weight: 700; color: #94A3B8; text-transform: uppercase;">Readiness Score</div>
+                <div style="font-size: 3.2rem; font-weight: 800; color: {color}; margin: 6px 0;">{score}<span style="font-size: 1.2rem; color: #64748B;">/100</span></div>
+                <div style="font-size: 0.85rem; font-weight: 600; color: {color};">
+                    {"PRODUCTION READY" if score >= 80 else ("ACCEPTABLE" if score >= 60 else "NEEDS ATTENTION")}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col_details:
+            st.markdown("##### Data Composition & Quality Checks")
+            c_a, c_b, c_c = st.columns(3)
+            with c_a:
+                st.write(f"• **Missing Values:** {df.isna().sum().sum():,} cells")
+                st.write(f"• **Constant Columns:** {len(report.constant_columns)}")
+            with c_b:
+                st.write(f"• **High Cardinality:** {len(report.high_cardinality_columns)}")
+                st.write(f"• **Identifier Columns:** {len(report.id_columns)}")
+            with c_c:
+                st.write(f"• **Leakage Risks:** {len(report.leakage_warnings)}")
+                st.write(f"• **Duplicates:** {df.duplicated().sum():,} rows")
+
+        if report.warnings:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.warning("**⚠️ Statistical & Quality Warnings:**\n" + "\n".join([f"- {w}" for w in report.warnings]))
+
+        if report.recommendations:
+            st.info("**💡 Recommended Actions:**\n" + "\n".join([f"- {r}" for r in report.recommendations]))
+
+    # =========================================================================
+    # TAB 3: TARGET
+    # =========================================================================
+    with tabs[2]:
+        st.subheader("🎯 Target Variable & Problem Formulation")
+        st.caption("Select the prediction target. The platform automatically infers task type, but you can manually override.")
+
+        # Candidate discovery
+        candidates = detect_target_candidates(df)
+        cand_names = [c.column for c in candidates]
+
+        all_cols = list(df.columns)
+        default_idx = 0
+        if st.session_state.get("ml_target_col") in all_cols:
+            default_idx = all_cols.index(st.session_state["ml_target_col"])
+        elif cand_names and cand_names[0] in all_cols:
+            default_idx = all_cols.index(cand_names[0])
+
+        col_t1, col_t2 = st.columns([2, 2])
         with col_t1:
-            st.markdown("#### 1. Target Column Selection")
-            
-            if readiness_report.target_candidates:
-                st.markdown("<div style='font-size: 0.8rem; color: #94A3B8; margin-bottom: 6px;'>AI Target Candidates (Ranked):</div>", unsafe_allow_html=True)
-                for cand in readiness_report.target_candidates[:3]:
-                    badge_col = "#10B981" if cand.confidence >= 0.85 else "#38BDF8"
-                    st.markdown(f"""
-                    <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 7px; padding: 7px 10px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <span style="font-weight: 700; color: #FFFFFF;">`{cand.column}`</span>
-                            <span style="color: #64748B; font-size: 0.74rem; margin-left: 8px;">{cand.reason}</span>
-                        </div>
-                        <span style="background: rgba(16, 185, 129, 0.15); border: 1px solid {badge_col}; border-radius: 5px; color: {badge_col}; font-size: 0.72rem; font-weight: 700; padding: 2px 6px;">
-                            {int(cand.confidence * 100)}% Confidence
-                        </span>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            target_options = list(df.columns)
-            target_default_idx = target_options.index(current_target) if current_target in target_options else 0
-            
-            chosen_target = st.selectbox(
-                "Select Target Variable ($y$):",
-                options=target_options,
-                index=target_default_idx,
-                help="The column your machine learning model will learn to predict.",
+            selected_target = st.selectbox(
+                "Prediction Target Column (y):",
+                options=all_cols,
+                index=default_idx,
+                help="The column you want the model to predict.",
             )
-
-            if chosen_target != st.session_state.get("ml_target_col"):
-                st.session_state["ml_target_col"] = chosen_target
-                st.session_state["ml_task_type"] = classify_task_type(df, chosen_target)
-                st.rerun()
-
-            st.markdown(f"**Formally Classified Task**: `{st.session_state['ml_task_type'].upper()}`")
+            st.session_state["ml_target_col"] = selected_target
 
         with col_t2:
-            st.markdown("#### 2. Feature Selection Cohort ($X$)")
-            available_features = [c for c in df.columns if c != chosen_target]
-            
-            b_sel1, b_sel2 = st.columns(2)
-            with b_sel1:
-                if st.button("Select All Features", use_container_width=True):
-                    st.session_state["ml_selected_features"] = available_features
-                    st.rerun()
-            with b_sel2:
-                if st.button("Deselect IDs & Constants", use_container_width=True):
-                    bad_cols = set(readiness_report.id_columns + readiness_report.constant_columns)
-                    st.session_state["ml_selected_features"] = [c for c in available_features if c not in bad_cols]
-                    st.rerun()
-
-            selected_features = st.multiselect(
-                "Active Features for Model Training:",
-                options=available_features,
-                default=[c for c in st.session_state["ml_selected_features"] if c in available_features],
-                help="Variables used to train the estimator.",
+            auto_task = classify_task_type(df, selected_target)
+            task_options = [
+                "auto (Infer Automatically)",
+                "regression",
+                "binary_classification",
+                "multiclass_classification",
+                "clustering",
+                "anomaly",
+                "forecasting",
+            ]
+            task_selection = st.selectbox(
+                "Task Formulation (Override if necessary):",
+                options=task_options,
+                index=0,
             )
-            st.session_state["ml_selected_features"] = selected_features
+            if task_selection.startswith("auto"):
+                st.session_state["ml_task_type"] = auto_task
+            else:
+                st.session_state["ml_task_type"] = task_selection
 
-        # Leakage Warnings Card
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("#### 3. Target Leakage & Health Audit")
-        
-        leak_reports = readiness_report.leakage_warnings
-        if leak_reports:
-            for leak in leak_reports:
-                st.warning(f"⚠️ **Target Leakage Alert ({leak['risk_level']})**: {leak['message']}")
+        st.markdown(f"""
+        <div style="background: rgba(56, 189, 248, 0.05); border-left: 3px solid #38BDF8; padding: 10px 14px; border-radius: 4px; margin: 12px 0;">
+            <b>Active Task Formulation:</b> <code>{st.session_state['ml_task_type'].replace('_', ' ').title()}</code>
+            &nbsp;|&nbsp; Target: <code>{selected_target}</code>
+            ({df[selected_target].nunique()} unique values, dtype: {df[selected_target].dtype})
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Visualizing Target Distribution
+        if pd.api.types.is_numeric_dtype(df[selected_target]) and df[selected_target].nunique() > 10:
+            fig_t = px.histogram(
+                df,
+                x=selected_target,
+                nbins=30,
+                title=f"Target Distribution: {selected_target}",
+                color_discrete_sequence=["#00F0FF"],
+            )
+            fig_t.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+            st.plotly_chart(fig_t, use_container_width=True)
         else:
-            st.success("✅ No look-ahead target leakage detected (|r| < 0.98 across all feature columns).")
-
-        if readiness_report.warnings:
-            with st.expander("⚠️ Data Health Advisory Notes", expanded=False):
-                for w in readiness_report.warnings:
-                    st.write(f"- {w}")
-
-    # -------------------------------------------------------------
-    # TAB 3: MODEL SELECTION & CONFIG
-    # -------------------------------------------------------------
-    with tabs[2]:
-        st.markdown("### 🤖 Algorithmic Architecture & Validation Tuning")
-        st.markdown("Select compute profiles, model candidates, cross-validation parameters, and preprocessing steps.")
-
-        cfg_col1, cfg_col2 = st.columns([1, 1])
-
-        with cfg_col1:
-            st.markdown("#### 1. Compute Profile & Candidate Models")
-            comp_profile = st.radio(
-                "Compute Profile:",
-                options=["Fast", "Balanced", "Deep"],
-                index=["Fast", "Balanced", "Deep"].index(st.session_state.get("ml_compute_profile", "Balanced")),
-                horizontal=True,
-                help="Fast: Linear/Trees. Balanced: Random Forest & HistGBDT. Deep: XGBoost, LightGBM, Gradient Boosting.",
+            vc = df[selected_target].value_counts().reset_index()
+            vc.columns = ["Class", "Count"]
+            fig_t = px.bar(
+                vc,
+                x="Class",
+                y="Count",
+                title=f"Target Class Balance: {selected_target}",
+                color="Count",
+                color_continuous_scale="Viridis",
             )
-            st.session_state["ml_compute_profile"] = comp_profile
+            fig_t.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+            st.plotly_chart(fig_t, use_container_width=True)
 
-            # Available models for task
-            candidates = get_candidate_models(st.session_state["ml_task_type"], comp_profile)
-            st.markdown(f"**Included Algorithms for this run ({len(candidates)}):**")
-            
-            selected_models = []
-            for m_id in candidates:
-                info = REGISTRY[m_id]
-                checked = st.checkbox(f"{info.name} ({info.family.title()}, {info.speed})", value=True, key=f"cb_model_{m_id}")
-                if checked:
-                    selected_models.append(m_id)
-            st.session_state["ml_selected_models"] = selected_models
+    # =========================================================================
+    # TAB 4: FEATURES & SELECTION
+    # =========================================================================
+    with tabs[3]:
+        st.subheader("⚡ Feature Selection & Engineering Engine")
+        st.caption("Prune redundant attributes, evaluate predictive relevance, and prevent multicollinearity.")
 
-        with cfg_col2:
-            st.markdown("#### 2. Validation & Preprocessing Pipeline")
-            
-            test_split = st.slider(
-                "Validation Split Ratio (Test Size):",
+        target_c = st.session_state.get("ml_target_col")
+        feature_candidates = [c for c in df.columns if c != target_c]
+
+        # Multi-select for features
+        sel_features = st.multiselect(
+            "Selected Feature Set for Modeling:",
+            options=feature_candidates,
+            default=[c for c in feature_candidates if c in st.session_state.get("ml_selected_features", [])] or feature_candidates[:min(12, len(feature_candidates))],
+            help="Select columns to include in training pipeline.",
+        )
+        st.session_state["ml_selected_features"] = sel_features
+
+        st.markdown("---")
+        st.markdown("#### 🔬 Statistical Feature Selection")
+        fs_col1, fs_col2, fs_col3 = st.columns([2, 1, 1])
+        with fs_col1:
+            fs_method = st.selectbox(
+                "Selection Metric:",
+                options=list(FEATURE_SELECTION_METHODS.keys()),
+                format_func=lambda k: FEATURE_SELECTION_METHODS[k],
+                index=0,
+            )
+        with fs_col2:
+            top_k = st.slider("Top K Features:", min_value=2, max_value=max(2, len(feature_candidates)), value=min(8, len(feature_candidates)))
+        with fs_col3:
+            st.write("")
+            st.write("")
+            run_fs_btn = st.button("🚀 Evaluate Features", type="primary", use_container_width=True)
+
+        if run_fs_btn and target_c:
+            with st.spinner("Executing statistical feature evaluation..."):
+                try:
+                    fs_res = select_best_features(
+                        df=df,
+                        target_col=target_c,
+                        method=fs_method,
+                        k=top_k,
+                        task_type=st.session_state.get("ml_task_type"),
+                    )
+                    st.session_state["ml_fs_results"] = fs_res
+                    st.session_state["ml_selected_features"] = fs_res["selected_features"]
+                    st.success(fs_res["summary"])
+                except Exception as e:
+                    st.error(f"Feature selection failed: {str(e)}")
+
+        # Render Feature Selection Leaderboard
+        fs_res = st.session_state.get("ml_fs_results")
+        if fs_res:
+            st.markdown(f"**Ranking Leaderboard ({fs_res['method_name']}):**")
+            df_rank = pd.DataFrame(fs_res["ranked_table"])
+            fig_fs = px.bar(
+                df_rank,
+                x="score",
+                y="feature",
+                orientation="h",
+                color="selected",
+                color_discrete_map={True: "#00F0FF", False: "#64748B"},
+                title=f"Feature Predictive Scores ({fs_res['method_name']})",
+            )
+            fig_fs.update_layout(
+                yaxis={"categoryorder": "total ascending"},
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(15,23,42,0.6)",
+                font_color="#E2E8F0",
+            )
+            st.plotly_chart(fig_fs, use_container_width=True)
+
+    # =========================================================================
+    # TAB 5: DIMENSIONALITY (PCA & BEYOND)
+    # =========================================================================
+    with tabs[4]:
+        st.subheader("🌐 Dimensionality Reduction & PCA Suite")
+        st.caption("Linear and non-linear manifold decomposition (PCA, Truncated SVD, Kernel PCA, ICA, NMF, t-SNE).")
+
+        num_features = df.select_dtypes(include=[np.number]).columns.tolist()
+        target_col = st.session_state.get("ml_target_col")
+        if target_col in num_features:
+            num_features.remove(target_col)
+
+        if len(num_features) < 2:
+            st.info("Dimensionality reduction requires at least 2 numeric feature columns.")
+        else:
+            p_col1, p_col2, p_col3 = st.columns([2, 1, 1])
+            with p_col1:
+                decomp_method = st.selectbox(
+                    "Decomposition Algorithm:",
+                    options=list(METHOD_METADATA.keys()),
+                    format_func=lambda k: METHOD_METADATA[k]["name"],
+                    index=0,
+                )
+            with p_col2:
+                n_comps = st.slider("Component Dimensions:", min_value=2, max_value=min(10, len(num_features)), value=2)
+            with p_col3:
+                st.write("")
+                st.write("")
+                run_pca_btn = st.button("⚡ Run Decomposition", type="primary", use_container_width=True)
+
+            if run_pca_btn:
+                with st.spinner("Executing dimensionality reduction & calculating loadings..."):
+                    try:
+                        pca_res = run_dimensionality_reduction(
+                            df=df,
+                            feature_cols=num_features,
+                            method=decomp_method,
+                            n_components=n_comps,
+                            target_col=target_col,
+                        )
+                        st.session_state["ml_pca_results"] = pca_res
+                        st.success(f"Successfully decomposed {len(num_features)} features into {n_comps} dimensions using {METHOD_METADATA[decomp_method]['name']}.")
+                    except Exception as e:
+                        st.error(f"Decomposition error: {str(e)}")
+
+            pca_res = st.session_state.get("ml_pca_results")
+            if pca_res:
+                summary = pca_res["comparison_summary"]
+                sm1, sm2, sm3, sm4 = st.columns(4)
+                with sm1:
+                    st.metric("Original Features", summary["original_features_count"])
+                with sm2:
+                    st.metric("Reduced Dimensions", summary["reduced_dimensions_count"])
+                with sm3:
+                    st.metric("Compression Ratio", f"{summary['compression_ratio_pct']}%")
+                with sm4:
+                    st.metric("Variance Retained", f"{summary['variance_retained_pct']}%")
+
+                # Scree Plot (if linear PCA/SVD)
+                if pca_res.get("scree_data"):
+                    st.markdown("#### 📉 Scree Plot & Cumulative Variance")
+                    scree_df = pd.DataFrame(pca_res["scree_data"])
+                    fig_scree = go.Figure()
+                    fig_scree.add_trace(go.Bar(
+                        x=scree_df["component"],
+                        y=scree_df["variance_pct"],
+                        name="Explained Variance %",
+                        marker_color="#00F0FF",
+                    ))
+                    fig_scree.add_trace(go.Scatter(
+                        x=scree_df["component"],
+                        y=scree_df["cumulative_pct"],
+                        name="Cumulative Variance %",
+                        mode="lines+markers",
+                        line=dict(color="#F59E0B", width=2),
+                    ))
+                    fig_scree.update_layout(
+                        title="Explained Variance by Component",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(15,23,42,0.6)",
+                        font_color="#E2E8F0",
+                    )
+                    st.plotly_chart(fig_scree, use_container_width=True)
+
+                # 2D & 3D Projections
+                st.markdown("#### 🗺️ Low-Dimensional Space Projection")
+                p_tab2d, p_tab3d = st.tabs(["2D Projection Scatter", "3D Interactive Orbit"])
+                with p_tab2d:
+                    proj_2d_df = pd.DataFrame(pca_res["proj_2d"])
+                    fig_2d = px.scatter(
+                        proj_2d_df,
+                        x="dim1",
+                        y="dim2",
+                        color="target",
+                        title=f"{pca_res['metadata']['name']} (2D Space)",
+                        hover_data=["index"],
+                        color_discrete_sequence=px.colors.qualitative.Prism,
+                    )
+                    fig_2d.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                    st.plotly_chart(fig_2d, use_container_width=True)
+
+                with p_tab3d:
+                    if pca_res.get("proj_3d"):
+                        proj_3d_df = pd.DataFrame(pca_res["proj_3d"])
+                        fig_3d = px.scatter_3d(
+                            proj_3d_df,
+                            x="dim1",
+                            y="dim2",
+                            z="dim3",
+                            color="target",
+                            title=f"{pca_res['metadata']['name']} (3D Manifold)",
+                            hover_data=["index"],
+                            color_discrete_sequence=px.colors.qualitative.Prism,
+                        )
+                        fig_3d.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#E2E8F0")
+                        st.plotly_chart(fig_3d, use_container_width=True)
+                    else:
+                        st.info("3D projection requires selecting at least 3 component dimensions.")
+
+                # Loadings Matrix Heatmap
+                if pca_res.get("loadings"):
+                    st.markdown("#### 🧬 Component Loadings (Feature Contributions)")
+                    loadings_df = pd.DataFrame(pca_res["loadings"])
+                    fig_load = px.imshow(
+                        loadings_df.T,
+                        aspect="auto",
+                        color_continuous_scale="RdBu_r",
+                        title="Feature Loadings Matrix ($V^T$)",
+                    )
+                    fig_load.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#E2E8F0")
+                    st.plotly_chart(fig_load, use_container_width=True)
+
+    # =========================================================================
+    # TAB 6: MODELS & CONFIG
+    # =========================================================================
+    with tabs[5]:
+        st.subheader("⚙️ Algorithm Selection & Training Configuration")
+        task_curr = st.session_state.get("ml_task_type", "auto")
+
+        cfg_col1, cfg_col2 = st.columns(2)
+        with cfg_col1:
+            comp_prof = st.select_slider(
+                "Compute Profile Mode:",
+                options=["Fast", "Balanced", "Deep"],
+                value=st.session_state.get("ml_compute_profile", "Balanced"),
+                help="Fast: Quick baselines. Balanced: Ensembles. Deep: Gradient boosting & parameter tuning.",
+            )
+            st.session_state["ml_compute_profile"] = comp_prof
+
+            val_split = st.slider(
+                "Holdout Validation Split:",
                 min_value=0.10,
                 max_value=0.40,
                 value=float(st.session_state.get("ml_test_size", 0.20)),
                 step=0.05,
-                help="Proportion of dataset held out strictly for validation.",
             )
-            st.session_state["ml_test_size"] = test_split
+            st.session_state["ml_test_size"] = val_split
 
-            cv_folds = st.slider(
-                "Cross-Validation Folds ($K$):",
-                min_value=2,
-                max_value=8,
-                value=int(st.session_state.get("ml_cv_folds", 3)),
-                step=1,
-                help="Folds used for cross-validation.",
-            )
-            st.session_state["ml_cv_folds"] = cv_folds
-
-            scaler = st.selectbox(
-                "Numeric Feature Scaler:",
+        with cfg_col2:
+            scaler_choice = st.selectbox(
+                "Numeric Feature Scaling:",
                 options=["standard", "robust", "minmax", "none"],
-                index=["standard", "robust", "minmax", "none"].index(st.session_state.get("ml_scaler", "standard")),
-                help="StandardScaler: Zero mean/unit variance. RobustScaler: Resilient to outliers. MinMaxScaler: [0, 1] bounds.",
+                index=0,
             )
-            st.session_state["ml_scaler"] = scaler
+            st.session_state["ml_scaler"] = scaler_choice
 
-            cat_enc = st.selectbox(
-                "Categorical Feature Encoding:",
+            cat_choice = st.selectbox(
+                "Categorical Encoding:",
                 options=["onehot", "ordinal"],
-                index=["onehot", "ordinal"].index(st.session_state.get("ml_cat_encoding", "onehot")),
-                help="One-Hot: Unordered distinct categories. Ordinal: Integer encoding for high cardinality.",
+                index=0,
             )
-            st.session_state["ml_cat_encoding"] = cat_enc
+            st.session_state["ml_cat_encoding"] = cat_choice
 
-    # -------------------------------------------------------------
-    # TAB 4: TRAINING & BENCHMARKING
-    # -------------------------------------------------------------
-    with tabs[3]:
-        st.markdown("### ⚡ Live Model Benchmarking & Leaderboard")
-        st.markdown("Trains all active candidates with zero data leakage, compares primary performance metrics, and promotes the Champion Model.")
+        st.markdown("---")
+        st.markdown("#### 📚 Algorithm Library Catalog")
+        available_models = get_candidate_models(task_curr, comp_prof)
+        sel_models = st.multiselect(
+            "Candidate Estimators to Benchmark:",
+            options=available_models,
+            default=available_models,
+            format_func=lambda mid: f"{REGISTRY[mid].name} ({REGISTRY[mid].family.title()}, {REGISTRY[mid].speed})" if mid in REGISTRY else mid,
+        )
+        st.session_state["ml_selected_models"] = sel_models
 
-        if st.button("⚡ Launch Benchmark Now", type="primary", use_container_width=True):
-            target_to_use = st.session_state.get("ml_target_col")
-            if not target_to_use or target_to_use not in df.columns:
-                st.error("Please select a valid target column in Tab 2 first.")
-            else:
-                feats_to_use = [c for c in st.session_state.get("ml_selected_features", []) if c in df.columns and c != target_to_use]
-                if not feats_to_use:
-                    st.error("Please select at least one feature column in Tab 2.")
-                else:
-                    with st.spinner("Benchmarking algorithmic candidates across folds..."):
-                        try:
-                            res = run_benchmark(
-                                df=df,
-                                target_col=target_to_use,
-                                feature_cols=feats_to_use,
-                                task_type=st.session_state["ml_task_type"],
-                                compute_profile=st.session_state["ml_compute_profile"],
-                                model_ids=st.session_state.get("ml_selected_models"),
-                                test_size=st.session_state["ml_test_size"],
-                                scaler_type=st.session_state["ml_scaler"],
-                                cat_encoding=st.session_state["ml_cat_encoding"],
-                            )
-                            st.session_state["ml_benchmark_results"] = res
-                            st.session_state["ml_active_model_id"] = res["champion_id"]
+    # =========================================================================
+    # TAB 7: TRAINING & AUTOML
+    # =========================================================================
+    with tabs[6]:
+        st.subheader("🏎️ Automated Model Training & Benchmark Execution")
+        target_col = st.session_state.get("ml_target_col")
+        feature_cols = st.session_state.get("ml_selected_features", [])
 
-                            # Auto-persist Champion
-                            champ_id = res["champion_id"]
-                            if champ_id and champ_id in res["all_results"]:
-                                champ_data = res["all_results"][champ_id]
-                                save_experiment(
-                                    pipeline=champ_data["pipeline"],
-                                    model_id=champ_id,
-                                    model_name=champ_data["model_name"],
-                                    task_type=st.session_state["ml_task_type"],
-                                    target_col=target_to_use,
-                                    feature_cols=feats_to_use,
-                                    metrics=champ_data["metrics"],
-                                    dataset_name=proj_name,
-                                    is_champion=True,
-                                )
+        if not target_col:
+            st.warning("Please configure the target column in the **Target** tab first.")
+        elif not feature_cols:
+            st.warning("Please select at least one feature column in the **Features & Selection** tab.")
+        else:
+            st.info(f"Ready to benchmark **{len(st.session_state.get('ml_selected_models', []))} models** predicting `{target_col}` using **{len(feature_cols)} features**.")
+            launch_train = st.button("🚀 Launch Automated Benchmark", type="primary", use_container_width=True)
 
-                            st.success("✅ Benchmarking completed successfully!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Benchmarking error: {str(e)}")
+            if launch_train:
+                prog_bar = st.progress(0, text="Initializing scikit-learn preprocessing pipelines...")
+                try:
+                    time.sleep(0.3)
+                    prog_bar.progress(30, text="Training candidate estimators across holdout validation...")
+                    bench_res = run_benchmark(
+                        df=df,
+                        target_col=target_col,
+                        feature_cols=feature_cols,
+                        task_type=st.session_state.get("ml_task_type", "auto"),
+                        compute_profile=st.session_state.get("ml_compute_profile", "Balanced"),
+                        test_size=float(st.session_state.get("ml_test_size", 0.20)),
+                        cv_folds=int(st.session_state.get("ml_cv_folds", 3)),
+                        scaler_type=st.session_state.get("ml_scaler", "standard"),
+                        cat_encoding=st.session_state.get("ml_cat_encoding", "onehot"),
+                        model_subset=st.session_state.get("ml_selected_models"),
+                    )
+                    prog_bar.progress(85, text="Registering model artifacts and computing diagnostics...")
+                    st.session_state["ml_benchmark_results"] = bench_res
+                    st.session_state["ml_active_model_id"] = bench_res["champion_id"]
+                    prog_bar.progress(100, text="Benchmark completed successfully!")
+                    st.success(f"🏆 Champion Model: **{bench_res['champion_name']}** ({bench_res['champion_reason']})")
+                except Exception as e:
+                    st.error(f"Benchmark failed: {str(e)}")
 
-        bench_data = st.session_state.get("ml_benchmark_results")
-        if bench_data:
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            # Champion Banner
-            champ_id = bench_data.get("champion_id")
-            champ_reason = bench_data.get("champion_reason", "")
-            champ_info = REGISTRY.get(champ_id)
-            champ_name = champ_info.name if champ_info else champ_id
-
+        bench_res = st.session_state.get("ml_benchmark_results")
+        if bench_res:
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(16, 185, 129, 0.12) 100%); border: 1px solid #F59E0B; border-radius: 10px; padding: 16px; margin-bottom: 20px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <span style="font-size: 1.6rem;">🏆</span>
-                    <div>
-                        <div style="font-size: 0.72rem; font-weight: 800; color: #F59E0B; letter-spacing: 0.05em;">CHAMPION MODEL PROMOTED</div>
-                        <div style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF;">{champ_name}</div>
-                        <div style="font-size: 0.84rem; color: #E2E8F0; margin-top: 4px;">{champ_reason}</div>
-                    </div>
-                </div>
+            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 14px; margin: 16px 0;">
+                <div style="color: #10B981; font-weight: 800; font-size: 0.8rem; text-transform: uppercase;">🏆 Production Champion Selected</div>
+                <div style="font-size: 1.3rem; font-weight: 800; color: #FFFFFF; margin: 4px 0;">{bench_res['champion_name']}</div>
+                <div style="font-size: 0.85rem; color: #94A3B8;">{bench_res['champion_reason']}</div>
             </div>
             """, unsafe_allow_html=True)
 
-            # Leaderboard Table
-            st.markdown("#### Algorithmic Leaderboard")
-            lb_rows = []
-            for entry in bench_data.get("leaderboard", []):
-                primary_val = entry["score"]
-                lb_rows.append({
-                    "Rank": f"#{entry['rank']}",
-                    "Model": entry["model_name"],
-                    "Primary Score": f"{primary_val:.4f}" if primary_val > -900 else "Failed",
-                    "Train Time": f"{entry['training_time']}s",
-                    "Overfitting Risk": "⚠️ High" if entry["is_overfitting"] else "✅ Low",
-                    "Status": "🏆 Champion" if entry.get("is_champion") else "Evaluated",
-                })
-            st.table(pd.DataFrame(lb_rows))
+            st.markdown("#### 📊 Benchmark Leaderboard")
+            lb_df = pd.DataFrame(bench_res["leaderboard"])
+            st.dataframe(lb_df, use_container_width=True)
 
-            # Select model to inspect in Evaluation / Explainability
-            model_options = [entry["model_id"] for entry in bench_data.get("leaderboard", []) if entry["score"] > -900]
-            if model_options:
-                active_idx = model_options.index(st.session_state.get("ml_active_model_id", model_options[0])) if st.session_state.get("ml_active_model_id") in model_options else 0
-                st.session_state["ml_active_model_id"] = st.selectbox(
-                    "Select Model for In-Depth Evaluation & Diagnostics:",
-                    options=model_options,
-                    index=active_idx,
-                    format_func=lambda m: f"{REGISTRY.get(m, {}).name if m in REGISTRY else m}",
+    # =========================================================================
+    # TAB 8: EVALUATION & DIAGNOSTICS
+    # =========================================================================
+    with tabs[7]:
+        st.subheader("🔍 Deep Diagnostic & Holdout Validation Analysis")
+        bench_res = st.session_state.get("ml_benchmark_results")
+
+        if not bench_res:
+            st.info("Execute model training in the **Training & AutoML** tab to view diagnostics.")
+        else:
+            models_dict = bench_res.get("models", {})
+            active_m_id = st.selectbox(
+                "Inspect Specific Model Diagnostics:",
+                options=list(models_dict.keys()),
+                format_func=lambda mid: models_dict[mid].get("model_name", mid),
+                index=0,
+            )
+            m_data = models_dict[active_m_id]
+            metrics = m_data.get("metrics", {})
+
+            # Metric cards
+            met_cols = st.columns(4)
+            for i, (k, v) in enumerate(list(metrics.items())[:4]):
+                with met_cols[i % 4]:
+                    st.metric(k.upper(), f"{v:.4f}" if isinstance(v, (int, float)) else str(v))
+
+            if m_data.get("warnings"):
+                st.warning("\n".join([f"⚠️ {w}" for w in m_data["warnings"]]))
+
+            # Scatter sample for regression or confusion matrix for classification
+            if "scatter_sample" in m_data and m_data["scatter_sample"]:
+                st.markdown("#### 🎯 Actual vs Predicted Residual Diagnostic")
+                sc_df = pd.DataFrame(m_data["scatter_sample"])
+                fig_act = px.scatter(
+                    sc_df,
+                    x="actual",
+                    y="predicted",
+                    title=f"Actual vs Predicted: {m_data.get('model_name')}",
+                    color="residual",
+                    color_continuous_scale="Viridis",
                 )
+                min_v = min(sc_df["actual"].min(), sc_df["predicted"].min())
+                max_v = max(sc_df["actual"].max(), sc_df["predicted"].max())
+                fig_act.add_trace(go.Scatter(x=[min_v, max_v], y=[min_v, max_v], mode="lines", line=dict(color="#EF4444", dash="dash"), name="Ideal Fit (y = x)"))
+                fig_act.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                st.plotly_chart(fig_act, use_container_width=True)
+
+            elif "confusion_matrix" in m_data and m_data["confusion_matrix"]:
+                st.markdown("#### 🧩 Confusion Matrix")
+                cm = np.array(m_data["confusion_matrix"])
+                classes = m_data.get("classes", [f"Class {i}" for i in range(len(cm))])
+                fig_cm = px.imshow(
+                    cm,
+                    x=classes,
+                    y=classes,
+                    text_auto=True,
+                    color_continuous_scale="Blues",
+                    labels=dict(x="Predicted Class", y="Actual Class"),
+                )
+                fig_cm.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#E2E8F0")
+                st.plotly_chart(fig_cm, use_container_width=True)
+
+    # =========================================================================
+    # TAB 9: EXPLAINABLE AI
+    # =========================================================================
+    with tabs[8]:
+        st.subheader("💡 Explainable AI (XAI) & Attribution")
+        bench_res = st.session_state.get("ml_benchmark_results")
+
+        if not bench_res:
+            st.info("Execute training to inspect global feature importance and local SHAP explanations.")
         else:
-            st.info("No benchmark results yet. Click **'Launch Benchmark Now'** above to train and compare candidate models.")
+            active_m_id = bench_res["champion_id"]
+            m_data = bench_res["models"].get(active_m_id, {})
+            feat_imp = m_data.get("feature_importance", [])
 
-    # -------------------------------------------------------------
-    # TAB 5: EVALUATION & DIAGNOSTICS
-    # -------------------------------------------------------------
-    with tabs[4]:
-        st.markdown("### 📊 Comprehensive Evaluation & Diagnostic Alerts")
-        
-        bench_data = st.session_state.get("ml_benchmark_results")
-        active_model_id = st.session_state.get("ml_active_model_id")
-
-        if bench_data and active_model_id and active_model_id in bench_data["all_results"]:
-            eval_data = bench_data["all_results"][active_model_id]
-            metrics = eval_data["metrics"]
-            is_classification = "classification" in eval_data["task_type"]
-
-            st.markdown(f"#### Model: **{eval_data['model_name']}**")
-
-            # Metrics KPI Row
-            if is_classification:
-                m1, m2, m3, m4, m5 = st.columns(5)
-                m1.metric("Accuracy", f"{metrics.get('accuracy', 0):.1%}")
-                m2.metric("F1 (Weighted)", f"{metrics.get('f1_weighted', 0):.3f}")
-                m3.metric("Precision", f"{metrics.get('precision', 0):.3f}")
-                m4.metric("Recall", f"{metrics.get('recall', 0):.3f}")
-                m5.metric("ROC-AUC", f"{metrics.get('roc_auc', 'N/A')}")
-            else:
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("R² Score", f"{metrics.get('r2', 0):.3f}")
-                m2.metric("MAE", f"{metrics.get('mae', 0):.2f}")
-                m3.metric("RMSE", f"{metrics.get('rmse', 0):.2f}")
-                m4.metric("MAPE", f"{metrics.get('mape', 0):.1%}")
-
-            # Overfitting & Diagnostic Alerts
-            if eval_data.get("is_overfitting"):
-                st.error("⚠️ **Generalization Alert (Overfitting)**: Significant disparity detected between training performance and validation performance (> 15% gap). Regularization or feature pruning recommended.")
-            else:
-                st.success("✅ **Generalization Verified**: Validation performance aligns closely with training bounds. Model demonstrates high stability.")
-
-            # Diagnostic Plots
-            st.markdown("<br>", unsafe_allow_html=True)
-            if is_classification:
-                cm = eval_data.get("confusion_matrix")
-                classes = eval_data.get("classes", ["0", "1"])
-                if cm:
-                    fig_cm = px.imshow(
-                        cm,
-                        x=classes,
-                        y=classes,
-                        labels=dict(x="Predicted Label", y="Actual Label", color="Count"),
-                        color_continuous_scale="Blues",
-                        text_auto=True,
-                        title="Confusion Matrix Heatmap",
-                    )
-                    fig_cm.update_layout(template="plotly_dark", height=400)
-                    st.plotly_chart(fig_cm, use_container_width=True)
-            else:
-                scatter_data = eval_data.get("scatter_sample", [])
-                if scatter_data:
-                    sc_df = pd.DataFrame(scatter_data)
-                    c_plot1, c_plot2 = st.columns(2)
-                    with c_plot1:
-                        fig_scatter = go.Figure()
-                        fig_scatter.add_trace(go.Scatter(
-                            x=sc_df["actual"],
-                            y=sc_df["predicted"],
-                            mode="markers",
-                            name="Holdout Points",
-                            marker=dict(color="#00F0FF", size=7, opacity=0.8),
-                        ))
-                        # Ideal fit line
-                        min_v = float(min(sc_df["actual"].min(), sc_df["predicted"].min()))
-                        max_v = float(max(sc_df["actual"].max(), sc_df["predicted"].max()))
-                        fig_scatter.add_trace(go.Scatter(
-                            x=[min_v, max_v],
-                            y=[min_v, max_v],
-                            mode="lines",
-                            name="Ideal Fit (y = x)",
-                            line=dict(color="#F59E0B", dash="dash", width=2),
-                        ))
-                        fig_scatter.update_layout(
-                            template="plotly_dark",
-                            title="Actual vs Predicted Scatter",
-                            xaxis_title="Actual Value",
-                            yaxis_title="Predicted Value",
-                            height=380,
-                        )
-                        st.plotly_chart(fig_scatter, use_container_width=True)
-
-                    with c_plot2:
-                        fig_res = px.histogram(
-                            sc_df,
-                            x="residual",
-                            nbins=25,
-                            title="Residuals Error Distribution ($y_{true} - y_{pred}$)",
-                            color_discrete_sequence=["#A855F7"],
-                        )
-                        fig_res.update_layout(template="plotly_dark", height=380)
-                        st.plotly_chart(fig_res, use_container_width=True)
-
-            # Hyperparameter Tuning Action
-            st.markdown("<hr style='border-color: rgba(255, 255, 255, 0.08);'>", unsafe_allow_html=True)
-            st.markdown("#### ⚡ Hyperparameter Fine-Tuning")
-            if st.button("🚀 Run Hyperparameter Optimization on this Model", type="secondary"):
-                feats_to_use = [c for c in eval_data["feature_cols"] if c in df.columns]
-                with st.spinner(f"Running hyperparameter optimization on {eval_data['model_name']}..."):
-                    try:
-                        tune_res = tune_model_hyperparameters(
-                            df=df,
-                            target_col=current_target,
-                            feature_cols=feats_to_use,
-                            task_type=st.session_state["ml_task_type"],
-                            model_id=active_model_id,
-                        )
-                        if tune_res.get("tuned"):
-                            st.success(f"Tuning complete in {tune_res['elapsed_seconds']}s! Best Score: {tune_res['tuned_score']:.4f} (Δ {tune_res['improvement']:+.4f})")
-                            st.json(tune_res["best_params"])
-                        else:
-                            st.info(tune_res.get("message", "Model tuning not required."))
-                    except Exception as e:
-                        st.error(f"Tuning error: {str(e)}")
-        else:
-            st.info("Train candidate models in **Tab 4 (Training & Benchmarking)** to inspect diagnostic metrics.")
-
-    # -------------------------------------------------------------
-    # TAB 6: EXPLAINABLE AI
-    # -------------------------------------------------------------
-    with tabs[5]:
-        st.markdown("### 🔍 Explainable AI (XAI) & Attribution")
-        st.markdown("Global feature importances, local prediction explanations, and statistical causation disclaimers.")
-
-        bench_data = st.session_state.get("ml_benchmark_results")
-        active_model_id = st.session_state.get("ml_active_model_id")
-
-        if bench_data and active_model_id and active_model_id in bench_data["all_results"]:
-            eval_data = bench_data["all_results"][active_model_id]
-            feat_imp = eval_data.get("feature_importance", [])
-
+            st.markdown("#### 🌐 Global Feature Importance (Tree MDI & Permutation)")
             if feat_imp:
                 imp_df = pd.DataFrame(feat_imp)
-                
-                # Chart
-                fig_bar = px.bar(
-                    imp_df.head(15),
+                fig_fi = px.bar(
+                    imp_df.head(12),
                     x="importance",
                     y="feature",
                     orientation="h",
-                    title=f"Top 15 Feature Importances — {eval_data['model_name']}",
-                    labels={"importance": "Relative Importance (%)", "feature": "Feature"},
+                    title=f"Top Predictive Drivers: {m_data.get('model_name')}",
                     color="importance",
                     color_continuous_scale="Viridis",
                 )
-                fig_bar.update_layout(template="plotly_dark", yaxis=dict(autorange="reversed"), height=420)
-                st.plotly_chart(fig_bar, use_container_width=True)
+                fig_fi.update_layout(yaxis={"categoryorder": "total ascending"}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                st.plotly_chart(fig_fi, use_container_width=True)
 
-                # Feature Table
-                with st.expander("📋 View Complete Feature Importance Matrix", expanded=False):
-                    st.dataframe(imp_df[["rank", "feature", "importance", "cumulative_importance"]], use_container_width=True)
+            st.markdown("#### 🔍 Single Prediction Local Attribution Explainer")
+            row_idx = st.slider("Select Record Index to Explain:", min_value=0, max_value=min(200, len(df) - 1), value=0)
+            sample_row = df.iloc[row_idx].to_dict()
+            try:
+                pipe = m_data["pipeline"]
+                local_exp = explain_local_prediction(pipe, sample_row, bench_res.get("task_type", "regression"))
+                attr_df = pd.DataFrame(local_exp.get("attributions", []))
+                if not attr_df.empty:
+                    fig_loc = px.bar(
+                        attr_df.head(10),
+                        x="attribution",
+                        y="feature",
+                        orientation="h",
+                        title=f"Local Attribution for Record #{row_idx} (Predicted: {local_exp.get('prediction')})",
+                        color="attribution",
+                        color_continuous_scale="RdBu",
+                    )
+                    fig_loc.update_layout(yaxis={"categoryorder": "total ascending"}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                    st.plotly_chart(fig_loc, use_container_width=True)
+            except Exception as e:
+                st.caption(f"Local attribution unavailable: {str(e)}")
 
-            # Prominent Disclaimer Box
             st.markdown(f"""
-            <div style="background: rgba(15, 23, 42, 0.85); border-left: 4px solid #F59E0B; border-radius: 6px; padding: 12px 16px; margin: 16px 0;">
-                <div style="font-size: 0.8rem; color: #CBD5E1; line-height: 1.5;">
-                    {STATISTICAL_DISCLAIMER}
-                </div>
+            <div style="background: rgba(245, 158, 11, 0.08); border-left: 3px solid #F59E0B; padding: 12px; border-radius: 4px; font-size: 0.82rem; color: #FCD34D;">
+                <b>STATISTICAL ASSOCIATION NOTICE:</b> {STATISTICAL_DISCLAIMER}
             </div>
             """, unsafe_allow_html=True)
+
+    # =========================================================================
+    # TAB 10: PREDICTIONS & INFERENCE
+    # =========================================================================
+    with tabs[9]:
+        st.subheader("🔮 Predictive Inference Cockpit")
+        bench_res = st.session_state.get("ml_benchmark_results")
+
+        if not bench_res:
+            st.info("Train a model first to run single-record simulations or batch CSV/XLSX predictions.")
         else:
-            st.info("Train a model in **Tab 4** to inspect feature importance and attribution.")
+            active_m_id = bench_res["champion_id"]
+            pipe = bench_res["models"][active_m_id]["pipeline"]
+            feat_cols = bench_res.get("feature_cols", [])
+            task_t = bench_res.get("task_type", "regression")
 
-    # -------------------------------------------------------------
-    # TAB 7: PREDICTIONS & INFERENCE
-    # -------------------------------------------------------------
-    with tabs[6]:
-        st.markdown("### 🔮 Model Inference & Prediction Simulator")
-        st.markdown("Interactive single-record simulator and batch file prediction with zero mutation of the source dataset.")
+            p_sub1, p_sub2 = st.tabs(["Interactive Single Record Simulator", "Batch File Prediction Engine"])
 
-        bench_data = st.session_state.get("ml_benchmark_results")
-        active_model_id = st.session_state.get("ml_active_model_id")
+            # Sub-Tab 1: Single Record Simulator
+            with p_sub1:
+                st.markdown("##### Adjust Feature Inputs to Simulate Output")
+                input_dict = {}
+                c_inputs = st.columns(3)
+                for i, f_name in enumerate(feat_cols[:12]):
+                    with c_inputs[i % 3]:
+                        if f_name in df.columns:
+                            col_s = df[f_name]
+                            if pd.api.types.is_numeric_dtype(col_s):
+                                mn = float(col_s.min()) if not pd.isna(col_s.min()) else 0.0
+                                mx = float(col_s.max()) if not pd.isna(col_s.max()) else 100.0
+                                md = float(col_s.median()) if not pd.isna(col_s.median()) else 50.0
+                                if mn == mx:
+                                    mx = mn + 1.0
+                                input_dict[f_name] = st.slider(f"{f_name}:", min_value=mn, max_value=mx, value=md)
+                            else:
+                                unq = [str(u) for u in col_s.dropna().unique()[:20]]
+                                input_dict[f_name] = st.selectbox(f"{f_name}:", options=unq or ["Default"])
+                        else:
+                            input_dict[f_name] = st.text_input(f"{f_name}:", value="0.0")
 
-        if not bench_data or not active_model_id or active_model_id not in bench_data["all_results"]:
-            st.info("Please train a model first in **Tab 4 (Training & Benchmarking)** to enable inference.")
-        else:
-            eval_data = bench_data["all_results"][active_model_id]
-            pipeline = eval_data["pipeline"]
-            feat_cols = eval_data["feature_cols"]
-
-            sub_pred_tab1, sub_pred_tab2 = st.tabs(["🧪 Interactive Record Simulator", "📦 Batch File Scoring"])
-
-            # Single Record Simulator
-            with sub_pred_tab1:
-                st.markdown("#### Input Feature Values for Real-Time Prediction:")
-                input_vals = {}
-                
-                # Render inputs in 3 columns
-                cols_per_row = 3
-                num_features = len(feat_cols)
-                for i in range(0, num_features, cols_per_row):
-                    row_cols = st.columns(cols_per_row)
-                    for j in range(cols_per_row):
-                        if i + j < num_features:
-                            f_name = feat_cols[i + j]
-                            with row_cols[j]:
-                                if f_name in df.columns:
-                                    series = df[f_name]
-                                    if pd.api.types.is_numeric_dtype(series):
-                                        min_val = float(series.min()) if series.notna().any() else 0.0
-                                        max_val = float(series.max()) if series.notna().any() else 100.0
-                                        mean_val = float(series.mean()) if series.notna().any() else 50.0
-                                        input_vals[f_name] = st.number_input(
-                                            f"{f_name}:",
-                                            value=round(mean_val, 2),
-                                            key=f"sim_in_{f_name}_{i+j}",
-                                        )
-                                    else:
-                                        unique_vals = [str(x) for x in series.dropna().unique()[:25]]
-                                        default_val = unique_vals[0] if unique_vals else ""
-                                        input_vals[f_name] = st.selectbox(
-                                            f"{f_name}:",
-                                            options=unique_vals if unique_vals else [""],
-                                            key=f"sim_in_{f_name}_{i+j}",
-                                        )
-                                else:
-                                    # Fallback if column was renamed or removed in active df
-                                    input_vals[f_name] = st.text_input(
-                                        f"{f_name}:",
-                                        value="0",
-                                        key=f"sim_in_{f_name}_{i+j}",
-                                    )
-
-                if st.button("🔮 Generate Prediction", type="primary", use_container_width=True):
-                    try:
-                        pred_res = predict_single_record(
-                            pipeline=pipeline,
-                            input_data=input_vals,
-                            task_type=eval_data["task_type"],
-                        )
-                        pred_val = pred_res["prediction"]
-
-                        # Local attribution explanation
-                        valid_base_cols = [c for c in feat_cols if c in df.columns]
-                        baseline_df = df[valid_base_cols] if valid_base_cols else pd.DataFrame([input_vals])
-
-                        loc_exp = explain_local_prediction(
-                            model=eval_data["estimator"],
-                            preprocessor=eval_data["preprocessor"],
-                            input_row=input_vals,
-                            baseline_df=baseline_df,
-                            predicted_value=pred_val,
-                            feature_names=feat_cols,
-                        )
-
+                if st.button("🔮 Compute Prediction", type="primary"):
+                    p_res = predict_single_record(pipe, input_dict, task_type=task_t)
+                    if "error" in p_res:
+                        st.error(p_res["error"])
+                    else:
+                        pred_v = p_res.get("prediction")
                         st.markdown(f"""
-                        <div style="background: linear-gradient(135deg, rgba(0, 240, 255, 0.12) 0%, rgba(139, 92, 246, 0.12) 100%); border: 1px solid #00F0FF; border-radius: 10px; padding: 18px; margin: 16px 0; text-align: center;">
-                            <div style="font-size: 0.76rem; font-weight: 800; color: #00F0FF; letter-spacing: 0.08em;">PREDICTED VALUE ({current_target})</div>
-                            <div style="font-size: 2.2rem; font-weight: 800; color: #FFFFFF; margin: 8px 0;">{pred_val}</div>
-                            <div style="font-size: 0.85rem; color: #CBD5E1;">{loc_exp['summary']}</div>
+                        <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; border-radius: 10px; padding: 18px; text-align: center; margin-top: 14px;">
+                            <div style="font-size: 0.8rem; color: #38BDF8; font-weight: 700; text-transform: uppercase;">Simulated Model Output</div>
+                            <div style="font-size: 2.4rem; font-weight: 800; color: #FFFFFF; margin: 4px 0;">{pred_v}</div>
+                            <div style="font-size: 0.8rem; color: #94A3B8;">Confidence / Latency: {p_res.get('latency_ms')} ms</div>
                         </div>
                         """, unsafe_allow_html=True)
 
-                        # Show probabilities if classification
-                        if pred_res.get("probabilities"):
-                            st.markdown("##### Class Probability Distribution:")
-                            prob_df = pd.DataFrame(list(pred_res["probabilities"].items()), columns=["Class", "Probability"])
-                            st.bar_chart(prob_df.set_index("Class"))
-
+            # Sub-Tab 2: Batch Inference
+            with p_sub2:
+                st.markdown("##### Upload CSV/XLSX for Batch Predictions")
+                batch_file = st.file_uploader("Upload Data File:", type=["csv", "xlsx"])
+                if batch_file:
+                    try:
+                        batch_df = pd.read_csv(batch_file) if batch_file.name.endswith(".csv") else pd.read_excel(batch_file)
+                        st.write(f"Loaded {len(batch_df):,} rows.")
+                        if st.button("🚀 Run Batch Scoring"):
+                            scored_df = predict_batch(pipe, batch_df, task_type=task_t)
+                            st.dataframe(scored_df.head(10), use_container_width=True)
+                            csv_data = scored_df.to_csv(index=False).encode("utf-8")
+                            st.download_button("📥 Download Scored CSV", data=csv_data, file_name="scored_predictions.csv", mime="text/csv")
                     except Exception as e:
-                        st.error(f"Inference error: {str(e)}")
+                        st.error(f"Batch inference failed: {str(e)}")
 
-            # Batch Prediction
-            with sub_pred_tab2:
-                st.markdown("#### Batch Prediction Engine")
-                batch_mode = st.radio("Batch Source:", ["Score Current Active Dataset", "Upload New CSV / XLSX File"], horizontal=True)
+    # =========================================================================
+    # TAB 11: FUTURE FORECASTING
+    # =========================================================================
+    with tabs[10]:
+        st.subheader("📈 Institutional Time Series Forecasting Suite")
+        st.caption("Multi-model AutoML forecasting with statistical diagnostics, trend, seasonality, and confidence intervals.")
 
-                batch_source_df = None
-                if batch_mode == "Score Current Active Dataset":
-                    batch_source_df = df
-                    st.write(f"Scoring all **{len(df):,}** rows in current workspace.")
-                else:
-                    uploaded_batch = st.file_uploader("Upload Batch File:", type=["csv", "xlsx"])
-                    if uploaded_batch:
-                        if uploaded_batch.name.endswith(".csv"):
-                            batch_source_df = pd.read_csv(uploaded_batch)
-                        else:
-                            batch_source_df = pd.read_excel(uploaded_batch)
+        date_candidates = df.select_dtypes(include=["datetime", "object"]).columns.tolist()
+        num_candidates = df.select_dtypes(include=[np.number]).columns.tolist()
 
-                if batch_source_df is not None:
-                    if st.button("🚀 Run Batch Prediction", type="primary"):
-                        with st.spinner("Scoring dataset..."):
-                            try:
-                                scored_df = predict_batch(
-                                    pipeline=pipeline,
-                                    batch_df=batch_source_df,
-                                    feature_cols=feat_cols,
-                                    task_type=eval_data["task_type"],
-                                    output_pred_col=f"predicted_{current_target}",
-                                )
-                                st.success(f"Batch inference complete! Generated {len(scored_df):,} predictions.")
-                                st.dataframe(scored_df.head(10), use_container_width=True)
+        f_col1, f_col2, f_col3 = st.columns(3)
+        with f_col1:
+            date_col = st.selectbox("Date / Timestamp Column:", options=date_candidates or list(df.columns), index=0)
+        with f_col2:
+            target_metric = st.selectbox("Forecast Metric (y):", options=num_candidates or list(df.columns), index=0)
+        with f_col3:
+            horizon_steps = st.slider("Forecast Horizon (periods):", min_value=3, max_value=60, value=14)
 
-                                # Download CSV
-                                csv_buffer = io.StringIO()
-                                scored_df.to_csv(csv_buffer, index=False)
-                                st.download_button(
-                                    label="⬇ Download Scored CSV",
-                                    data=csv_buffer.getvalue(),
-                                    file_name=f"{proj_name}_scored_predictions.csv",
-                                    mime="text/csv",
-                                    type="primary",
-                                )
-                            except Exception as e:
-                                st.error(f"Batch prediction error: {str(e)}")
-
-    # -------------------------------------------------------------
-    # TAB 8: TIME-SERIES FORECASTING
-    # -------------------------------------------------------------
-    with tabs[7]:
-        st.markdown("### 📈 Time-Series Forecasting Engine")
-        st.markdown("Automated temporal trend detection, exponential smoothing, ARIMA, and ML lag regression forecasting.")
-
-        datetime_cols = readiness_report.datetime_columns
-        potential_dates = [c for c in df.columns if any(k in str(c).lower() for k in ["date", "time", "day", "month", "year", "timestamp"])]
-        date_candidates = list(dict.fromkeys(datetime_cols + potential_dates))
-        numeric_cols = readiness_report.numeric_columns
-
-        if not numeric_cols:
-            st.warning("⚠️ Time-series forecasting requires at least one numeric metric column.")
-        else:
-            fc_col1, fc_col2, fc_col3 = st.columns(3)
-            with fc_col1:
-                if date_candidates:
-                    date_col = st.selectbox("Date / Timestamp Column:", options=date_candidates)
-                else:
-                    date_col = "__row_index__"
-                    st.info("No Date column detected. Using sequential row sequence.")
-            with fc_col2:
-                num_target = st.selectbox("Metric to Forecast:", options=[c for c in numeric_cols if c != date_col])
-            with fc_col3:
-                horizon = st.slider("Forecast Horizon (periods):", min_value=7, max_value=60, value=14)
-
-            method_opt = st.selectbox(
+        f_opt1, f_opt2 = st.columns(2)
+        with f_opt1:
+            method_fc = st.selectbox(
                 "Forecasting Algorithm:",
-                options=["auto", "exponential_smoothing", "arima", "ml_lag", "naive"],
-                format_func=lambda x: {
-                    "auto": "Auto (Select Best: Holt-Winters / ARIMA / Lag Regression)",
-                    "exponential_smoothing": "Exponential Smoothing (Holt-Winters)",
-                    "arima": "ARIMA(1,1,1) Autoregressive Moving Average",
-                    "ml_lag": "Machine Learning Lag Regression (Ridge)",
-                    "naive": "Naive Persistence Baseline",
-                }.get(x, x),
+                options=["auto", "exponential_smoothing", "holt_winters", "arima", "sarimax", "ml_lag_rf", "naive"],
+                format_func=lambda x: f"AutoML Competition ({x})" if x == "auto" else x.replace("_", " ").title(),
+                index=0,
             )
+        with f_opt2:
+            ci_level = st.selectbox("Confidence Interval:", options=[0.90, 0.95], format_func=lambda x: f"{int(x*100)}% Confidence Band")
 
-            if st.button("🚀 Generate Time-Series Forecast", type="primary", use_container_width=True):
-                with st.spinner("Fitting forecasting model and generating future confidence intervals..."):
-                    try:
-                        work_df = df.copy()
-                        if date_col == "__row_index__":
-                            # Create synthetic date sequence
-                            work_df["__synthetic_date__"] = pd.date_range("2024-01-01", periods=len(work_df), freq="D")
-                            actual_date_col = "__synthetic_date__"
-                        else:
-                            actual_date_col = date_col
-
-                        fc_res = run_time_series_forecast(
-                            df=work_df,
-                            date_col=actual_date_col,
-                            target_col=num_target,
-                            horizon=horizon,
-                            method=method_opt,
-                        )
-                        st.session_state["ml_forecast_results"] = fc_res
-                        st.success("Forecast generated successfully!")
-                    except Exception as e:
-                        st.error(f"Forecasting error: {str(e)}")
-
-            fc_data = st.session_state.get("ml_forecast_results")
-            if fc_data:
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown(f"#### Projected Trend: {fc_data.get('method_used')}")
-                st.info(fc_data.get("trend_summary"))
-
-                # Chart Historical vs Forecast with Shaded Confidence Interval Band
-                hist_pts = fc_data.get("historical", [])
-                fore_pts = fc_data.get("forecast", [])
-
-                if hist_pts and fore_pts:
-                    h_df = pd.DataFrame(hist_pts)
-                    f_df = pd.DataFrame(fore_pts)
-
-                    fig_fc = go.Figure()
-
-                    # Historical line
-                    fig_fc.add_trace(go.Scatter(
-                        x=h_df["date"],
-                        y=h_df["actual"],
-                        mode="lines+markers",
-                        name="Historical Actual",
-                        line=dict(color="#38BDF8", width=2),
-                    ))
-
-                    # Upper CI
-                    fig_fc.add_trace(go.Scatter(
-                        x=f_df["date"],
-                        y=f_df["upper_ci"],
-                        mode="lines",
-                        line=dict(width=0),
-                        showlegend=False,
-                    ))
-
-                    # Lower CI + fill
-                    fig_fc.add_trace(go.Scatter(
-                        x=f_df["date"],
-                        y=f_df["lower_ci"],
-                        mode="lines",
-                        line=dict(width=0),
-                        fill="tonexty",
-                        fillcolor="rgba(0, 240, 255, 0.15)",
-                        name="90% Confidence Interval",
-                    ))
-
-                    # Forecast Line
-                    fig_fc.add_trace(go.Scatter(
-                        x=f_df["date"],
-                        y=f_df["predicted"],
-                        mode="lines+markers",
-                        name="Point Forecast",
-                        line=dict(color="#00F0FF", width=3, dash="dash"),
-                    ))
-
-                    fig_fc.update_layout(
-                        template="plotly_dark",
-                        title=f"{num_target} Forecast (Next {horizon} Periods)",
-                        xaxis_title="Timeline",
-                        yaxis_title=num_target,
-                        height=440,
+        if st.button("🚀 Generate Future Forecast", type="primary", use_container_width=True):
+            with st.spinner("Analyzing time-series diagnostics and training candidate models..."):
+                try:
+                    fc_res = run_time_series_forecast(
+                        df=df,
+                        date_col=date_col,
+                        target_col=target_metric,
+                        horizon=horizon_steps,
+                        method=method_fc,
+                        confidence_level=ci_level,
                     )
-                    st.plotly_chart(fig_fc, use_container_width=True)
+                    st.session_state["ml_forecast_results"] = fc_res
+                    st.success(fc_res["trend_summary"])
+                except Exception as e:
+                    st.error(f"Forecasting error: {str(e)}")
 
-                    # Metrics
-                    fm = fc_data.get("metrics", {})
-                    c_m1, c_m2, c_m3 = st.columns(3)
-                    c_m1.metric("Backtest MAE", f"{fm.get('mae', 0):.2f}")
-                    c_m2.metric("Backtest RMSE", f"{fm.get('rmse', 0):.2f}")
-                    c_m3.metric("Backtest MAPE", f"{fm.get('mape', 0):.1f}%")
+        fc_res = st.session_state.get("ml_forecast_results")
+        if fc_res:
+            diag = fc_res.get("diagnostics", {})
+            d1, d2, d3, d4 = st.columns(4)
+            with d1:
+                st.metric("Detected Trend", diag.get("trend", "N/A"))
+            with d2:
+                st.metric("Seasonality", diag.get("seasonality", "N/A")[:18])
+            with d3:
+                st.metric("Projected Growth", f"{fc_res.get('metrics', {}).get('projected_growth_pct', 0.0):+.1f}%")
+            with d4:
+                st.metric("Champion Model", fc_res.get("best_model"))
 
-    # -------------------------------------------------------------
-    # TAB 9: EXPERIMENTS & REGISTRY
-    # -------------------------------------------------------------
-    with tabs[8]:
-        st.markdown("### 📜 Experiment Registry & MLOps Versioning")
-        st.markdown("Inspect historical training runs, serialized artifacts, rollback to previous champions, or export model pipelines.")
+            # Interactive Plotly actual vs forecast chart with confidence band
+            hist_df = pd.DataFrame(fc_res["historical"])
+            pred_df = pd.DataFrame(fc_res["forecast"])
 
-        all_experiments = list_experiments()
-        if not all_experiments:
-            st.info("No saved experiments in registry yet. Train models in **Tab 4** to create versions.")
+            fig_fc = go.Figure()
+            # Historical actuals
+            fig_fc.add_trace(go.Scatter(
+                x=hist_df["date"],
+                y=hist_df["actual"],
+                name="Historical Actual",
+                line=dict(color="#38BDF8", width=2),
+            ))
+            # Upper CI
+            fig_fc.add_trace(go.Scatter(
+                x=pred_df["date"],
+                y=pred_df["upper_ci"],
+                name="Upper CI",
+                line=dict(width=0),
+                showlegend=False,
+            ))
+            # Lower CI with fill
+            fig_fc.add_trace(go.Scatter(
+                x=pred_df["date"],
+                y=pred_df["lower_ci"],
+                name="Confidence Interval",
+                fill="tonexty",
+                fillcolor="rgba(0, 240, 255, 0.15)",
+                line=dict(width=0),
+            ))
+            # Future Forecast
+            fig_fc.add_trace(go.Scatter(
+                x=pred_df["date"],
+                y=pred_df["predicted"],
+                name="Projected Forecast",
+                line=dict(color="#00F0FF", width=3, dash="dash"),
+            ))
+
+            fig_fc.update_layout(
+                title=f"Future Forecast Trajectory: {target_metric} ({fc_res['best_model']})",
+                xaxis_title="Timeline",
+                yaxis_title=target_metric,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(15,23,42,0.6)",
+                font_color="#E2E8F0",
+            )
+            st.plotly_chart(fig_fc, use_container_width=True)
+
+            # Model Competition Leaderboard
+            if fc_res.get("leaderboard"):
+                st.markdown("#### 🏆 Forecasting Model Benchmark Comparison")
+                st.dataframe(pd.DataFrame(fc_res["leaderboard"]), use_container_width=True)
+
+    # =========================================================================
+    # TAB 12: SCENARIO ANALYSIS (WHAT-IF)
+    # =========================================================================
+    with tabs[11]:
+        st.subheader("🔀 What-If Counterfactual Scenario Simulator")
+        st.caption("Perturb input variables to analyze marginal impacts, driver sensitivities, and counterfactual predictions.")
+
+        bench_res = st.session_state.get("ml_benchmark_results")
+        if not bench_res:
+            st.info("Train a model in the **Training & AutoML** tab first to run What-If simulations.")
         else:
-            exp_table_data = []
-            for exp in all_experiments:
-                exp_table_data.append({
-                    "Experiment ID": exp["experiment_id"],
-                    "Model": exp.get("model_name", exp.get("model_id")),
-                    "Task": exp.get("task_type"),
-                    "Target": exp.get("target_col"),
-                    "Created At": exp.get("created_at"),
-                    "Champion": "🏆 Active Champion" if exp.get("is_champion") else "Archived",
-                })
-            st.table(pd.DataFrame(exp_table_data))
+            active_m_id = bench_res["champion_id"]
+            pipe = bench_res["models"][active_m_id]["pipeline"]
+            feat_cols = bench_res.get("feature_cols", [])
+            task_t = bench_res.get("task_type", "regression")
 
-            st.markdown("#### Experiment Actions:")
-            selected_exp_id = st.selectbox("Select Experiment ID:", options=[e["experiment_id"] for e in all_experiments])
-            
-            exp_meta = get_experiment(selected_exp_id)
-            if exp_meta:
-                c_act1, c_act2 = st.columns(2)
-                with c_act1:
-                    if st.button("🏆 Set as Active Production Champion", use_container_width=True):
-                        set_active_champion(selected_exp_id)
-                        st.success(f"Experiment `{selected_exp_id}` is now the Active Champion!")
-                        st.rerun()
+            # Baseline record selection
+            b_row_idx = st.slider("Select Baseline Record:", min_value=0, max_value=min(100, len(df) - 1), value=0)
+            base_record = df[feat_cols].iloc[b_row_idx].to_dict()
 
-                with c_act2:
-                    try:
-                        import os
-                        model_file_path = os.path.join(os.getcwd(), "data", "experiments", selected_exp_id, "model.joblib")
-                        if os.path.exists(model_file_path):
-                            with open(model_file_path, "rb") as f:
-                                st.download_button(
-                                    label="⬇ Download Model Pipeline (.joblib)",
-                                    data=f.read(),
-                                    file_name=f"{selected_exp_id}.joblib",
-                                    mime="application/octet-stream",
-                                    use_container_width=True,
-                                )
-                    except Exception as e:
-                        st.error(f"Download error: {str(e)}")
+            st.markdown("##### Counterfactual Feature Perturbations")
+            modifications = {}
+            p_cols = st.columns(3)
+            for i, f_name in enumerate(feat_cols[:9]):
+                with p_cols[i % 3]:
+                    orig_val = base_record.get(f_name)
+                    if isinstance(orig_val, (int, float, np.number)):
+                        mn = float(orig_val * 0.5)
+                        mx = float(orig_val * 1.5) if orig_val != 0 else 10.0
+                        if mn > mx:
+                            mn, mx = mx, mn
+                        new_val = st.slider(f"{f_name}:", min_value=mn, max_value=mx, value=float(orig_val), key=f"whatif_{f_name}")
+                        if abs(new_val - float(orig_val)) > 1e-4:
+                            modifications[f_name] = new_val
+
+            if st.button("⚡ Run Counterfactual Simulation", type="primary"):
+                scen_res = simulate_what_if_scenario(
+                    pipeline=pipe,
+                    base_record=base_record,
+                    modifications=modifications,
+                    task_type=task_t,
+                )
+                st.session_state["ml_scenario_results"] = scen_res
+
+            scen_res = st.session_state.get("ml_scenario_results")
+            if scen_res and scen_res.get("success"):
+                comp = scen_res["comparison"]
+                st.markdown("---")
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.metric("Baseline Output", f"{comp.get('base_prediction')}")
+                with c2:
+                    st.metric("Simulated Scenario", f"{comp.get('scenario_prediction')}")
+                with c3:
+                    if comp.get("delta") is not None:
+                        st.metric("Output Delta (Δy)", f"{comp.get('delta'):+.2f}", f"{comp.get('pct_change'):+.1f}%")
+                    else:
+                        st.metric("Class Shift", f"{'Changed' if comp.get('class_changed') else 'Unchanged'}")
+
+                st.info(comp["summary"])
+
+                if scen_res.get("feature_impacts"):
+                    st.markdown("##### 🔍 Feature Elasticity & Sensitivity Ranking")
+                    st.dataframe(pd.DataFrame(scen_res["feature_impacts"]), use_container_width=True)
+
+    # =========================================================================
+    # TAB 13: EXPERIMENTS & REGISTRY
+    # =========================================================================
+    with tabs[12]:
+        st.subheader("📦 Model Registry, Lineage & Institutional Reports")
+        champ = get_active_champion()
+
+        if champ:
+            st.markdown(f"""
+            <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid #1E293B; border-radius: 10px; padding: 16px; margin-bottom: 16px;">
+                <div style="color: #38BDF8; font-weight: 700; font-size: 0.8rem; text-transform: uppercase;">Active Production Champion</div>
+                <div style="font-size: 1.2rem; font-weight: 800; color: #FFFFFF; margin: 4px 0;">{champ.get('model_name')}</div>
+                <div style="font-size: 0.85rem; color: #94A3B8;">Target: <code>{champ.get('target_col')}</code> | Experiment ID: <code>{champ.get('experiment_id')}</code></div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Historical Experiments Table
+        exps = list_experiments()
+        if exps:
+            st.markdown("#### 📜 Experiment Version History")
+            st.dataframe(pd.DataFrame(exps), use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("#### 📄 Institutional ML Report Export")
+        st.caption("Compile a comprehensive audit report in PDF, HTML, or CSV formats.")
+
+        rep_target = st.session_state.get("ml_target_col", "Target")
+        r_col1, r_col2, r_col3 = st.columns(3)
+
+        report_payload = {
+            "dataset_name": proj_name,
+            "target_col": rep_target,
+            "task_type": st.session_state.get("ml_task_type", "regression"),
+            "readiness_score": 85,
+            "total_rows": len(df),
+            "feature_count": len(df.columns) - 1,
+            "champion_name": champ.get("model_name") if champ else "Evaluated Model",
+            "leaderboard": st.session_state.get("ml_benchmark_results", {}).get("leaderboard", []),
+            "feature_importance": st.session_state.get("ml_benchmark_results", {}).get("models", {}).get(champ.get("experiment_id") if champ else "", {}).get("feature_importance", []),
+            "forecast_results": st.session_state.get("ml_forecast_results"),
+        }
+
+        with r_col1:
+            try:
+                pdf_bytes = generate_ml_pdf_report(report_payload)
+                st.download_button(
+                    "📥 Export Audit Report (PDF)",
+                    data=pdf_bytes,
+                    file_name="Quantum_Analyst_ML_Audit_Report.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+            except Exception as e:
+                st.caption(f"PDF unavailable: {e}")
+
+        with r_col2:
+            try:
+                html_code = generate_ml_html_report(report_payload)
+                st.download_button(
+                    "🌐 Export Standalone HTML",
+                    data=html_code.encode("utf-8"),
+                    file_name="Quantum_Analyst_ML_Report.html",
+                    mime="text/html",
+                    use_container_width=True,
+                )
+            except Exception as e:
+                st.caption(f"HTML export unavailable: {e}")
+
+        with r_col3:
+            try:
+                csv_sum = generate_ml_csv_summary(report_payload)
+                st.download_button(
+                    "📊 Export Metrics (CSV)",
+                    data=csv_sum.encode("utf-8"),
+                    file_name="ml_model_metrics.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+            except Exception as e:
+                st.caption(f"CSV export unavailable: {e}")

@@ -139,7 +139,7 @@ def train_single_model(
     raw_estimator = create_model_instance(model_id, custom_params=custom_params)
 
     # Adjust KNN n_neighbors if training set is small
-    if model_id == "knn_classifier" and hasattr(raw_estimator, "n_neighbors"):
+    if ("knn" in model_id) and hasattr(raw_estimator, "n_neighbors"):
         raw_estimator.n_neighbors = min(raw_estimator.n_neighbors, max(1, len(X_train) - 1))
 
     # Wrap classifier with LabelEncodedClassifier for robust string/boolean target handling
