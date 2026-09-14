@@ -46,6 +46,15 @@ INTELLIGENCE_ITEMS = [
     ("🤖 AI Model Copilot", "AI Model Copilot")
 ]
 
+BI_ITEMS = [
+    ("🌐 Business Intelligence", "Business Intelligence"),
+    ("🏛️ Command Center", "Executive Command Center"),
+    ("💡 Recommendations", "Business Recommendations"),
+    ("🔀 What-If Simulator", "What-If Analysis"),
+    ("🚨 Business Alerts", "AI Alerts"),
+    ("👥 Department Analysts", "Department Analysts"),
+]
+
 OUTPUT_ITEMS = [
     ("📈 Dashboard Builder", "Dashboard Builder"),
     ("📄 Reports", "Reports"),
@@ -58,7 +67,7 @@ MANAGE_ITEMS = [
 ]
 
 ALL_NAV_MAP = {}
-for group in [WORKSPACE_ITEMS, ANALYSIS_ITEMS, INTELLIGENCE_ITEMS, OUTPUT_ITEMS, MANAGE_ITEMS]:
+for group in [WORKSPACE_ITEMS, ANALYSIS_ITEMS, INTELLIGENCE_ITEMS, BI_ITEMS, OUTPUT_ITEMS, MANAGE_ITEMS]:
     for label, route in group:
         ALL_NAV_MAP[label] = route
 
@@ -211,6 +220,15 @@ with st.sidebar:
                 st.session_state["active_nav"] = route
                 st.rerun()
 
+        # BUSINESS INTELLIGENCE
+        st.markdown("<div style='font-size: 0.7rem; font-weight: 700; color: #00F0FF; letter-spacing: 0.08em; margin: 10px 0 4px 4px;'>BUSINESS INTELLIGENCE</div>", unsafe_allow_html=True)
+        for label, route in BI_ITEMS:
+            is_active = (active_route == route)
+            btn_type = "primary" if is_active else "secondary"
+            if st.button(f"{label}", key=f"nav_{route}", use_container_width=True, type=btn_type):
+                st.session_state["active_nav"] = route
+                st.rerun()
+
         # OUTPUT
         st.markdown("<div style='font-size: 0.7rem; font-weight: 700; color: #64748B; letter-spacing: 0.08em; margin: 10px 0 4px 4px;'>OUTPUT</div>", unsafe_allow_html=True)
         for label, route in OUTPUT_ITEMS:
@@ -351,6 +369,9 @@ def dispatch_active_view(route: str):
     elif route == "AI Model Copilot":
         from ui.views.copilot_view import render_copilot_full_view
         render_copilot_full_view()
+    elif route in ("Business Intelligence", "Executive Command Center", "Business Recommendations", "What-If Analysis", "AI Alerts", "Department Analysts"):
+        from ui.views.bi_hub_view import render_bi_hub_view
+        render_bi_hub_view()
     elif route == "Reports":
         from ui.views.reports_view import render_reports_view
         render_reports_view()

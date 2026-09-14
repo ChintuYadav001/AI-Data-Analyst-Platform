@@ -128,10 +128,122 @@ WORKFLOW_STAGES = [
         "name": "Dashboard & Reporting",
         "route": "Dashboard Builder / Reports",
         "description": "Dynamic KPI tracking, executive PDF reports, CSV export packages, and interactive drag-and-drop dashboard builders."
+    },
+    {
+        "stage": 15,
+        "name": "AI Decision & Recommendations",
+        "route": "Business Recommendations",
+        "description": "Synthesizes evidence-based, prioritized strategic recommendations with non-causal language and full traceability audit trail."
+    },
+    {
+        "stage": 16,
+        "name": "What-If & Scenario Simulation",
+        "route": "What-If Analysis",
+        "description": "Simulates business decisions across price, marketing, churn, volume, and costs with multi-scenario comparison and elasticity calibration."
+    },
+    {
+        "stage": 17,
+        "name": "AI Alerts & Anomaly Monitoring",
+        "route": "AI Alerts",
+        "description": "Monitors 8 business alert categories with statistical significance thresholds to eliminate notification spam."
+    },
+    {
+        "stage": 18,
+        "name": "Department AI Analysts",
+        "route": "Department Analysts",
+        "description": "7 specialized virtual analytical roles (Sales, Marketing, Finance, Customer, Operations, Product, Executive) with tailored KPIs."
+    },
+    {
+        "stage": 19,
+        "name": "Executive Command Center",
+        "route": "Executive Command Center",
+        "description": "Boardroom-level operational cockpit with 0-100 Business Health Score, positive signals, risk register, and exportable dossier."
     }
 ]
 
 PROJECT_QA_REGISTRY: List[Dict[str, Any]] = [
+    {
+        "keywords": ["decision intelligence", "business intelligence", "what is decision intelligence", "recommendation engine"],
+        "category": CATEGORY_PROJECT_INFO,
+        "question": "What is Decision Intelligence in Quantum Analyst?",
+        "simple_answer": (
+            "Decision Intelligence bridges the gap between raw data analysis and concrete business action. "
+            "While standard analytics tells you what happened, Decision Intelligence recommends what you should do next, "
+            "quantifies expected impacts, evaluates risks, and allows you to simulate scenarios before making high-stakes decisions."
+        ),
+        "analogy": "Like a flight simulator for business leaders: test turning the plane before actually executing the maneuver.",
+        "why_used": [
+            "Connects ML predictions directly to P&L and operational actions",
+            "Non-causal phrasing avoids overconfident or misleading assumptions",
+            "Gives executives an auditable 'Why am I seeing this?' trail for every recommendation"
+        ],
+        "technologies": ["Core BI Engine", "Pandas", "DuckDB", "Scikit-learn", "ReportLab"]
+    },
+    {
+        "keywords": ["levels of analytics", "four levels", "4 levels", "analytics maturity", "descriptive diagnostic predictive prescriptive"],
+        "category": CATEGORY_GENERAL_KNOWLEDGE,
+        "question": "What are the 4 Levels of Analytics in Quantum Analyst?",
+        "simple_answer": (
+            "Modern analytics operates across four progressive maturity levels: "
+            "1. Descriptive ('What happened?') via Profiling & Dashboarding, "
+            "2. Diagnostic ('Why did it happen?') via EDA & Correlation Analysis, "
+            "3. Predictive ('What will happen?') via Machine Learning & Time-Series Forecasting, and "
+            "4. Prescriptive / Decision Intelligence ('What should we consider doing?') via Recommendations and What-If Simulation."
+        ),
+        "analogy": "Level 1 shows the speedometer. Level 2 explains why the engine revved. Level 3 predicts your arrival time. Level 4 recommends taking the bypass to avoid traffic.",
+        "why_used": [
+            "Ensures organizations move beyond rear-view mirror reporting into proactive decision-making",
+            "Gives structured decision pathways for every department from analyst to C-suite"
+        ]
+    },
+    {
+        "keywords": ["what is what if simulator", "explain scenario simulator", "how does what if work", "explain what if analysis"],
+        "category": CATEGORY_PROJECT_INFO,
+        "question": "How does the AI What-If / Scenario Simulator work?",
+        "simple_answer": (
+            "The What-If Simulator lets you adjust key business levers—such as price (+/-%), marketing spend, "
+            "churn reduction, and cost shifts—and calculates the simulated ripple effect on Revenue and Profit "
+            "using calibrated price elasticity (default -1.15) and marketing elasticity (+0.32). "
+            "You can also compare Baseline vs Scenario A, B, and C side-by-side."
+        ),
+        "analogy": "Like testing your chess moves on a practice board before making your official tournament move.",
+        "why_used": [
+            "Prevents costly pricing and marketing blunders before committing real capital",
+            "Compares multi-scenario trade-offs with explicit mathematical assumptions and limitations"
+        ],
+        "technologies": ["Scenario Simulator Engine", "NumPy", "Plotly"]
+    },
+    {
+        "keywords": ["business health score", "health score", "how is business health calculated"],
+        "category": CATEGORY_PROJECT_INFO,
+        "question": "What is the Business Health Score and how is it calculated?",
+        "simple_answer": (
+            "The Business Health Score is a 0-100 composite index evaluating 7 verified dimensions: "
+            "Revenue Health, Operational Stability, Customer Concentration, Data Quality, Margin Preservation, "
+            "Volatility Risk, and Growth Velocity. Scores 80+ indicate Exceptional/Strong health, while scores "
+            "under 50 highlight urgent operational risks."
+        ),
+        "analogy": "Like a comprehensive biometric health checkup for your company's operational vitals.",
+        "why_used": [
+            "Provides an immediate, boardroom-ready executive health rating",
+            "Allows rapid drill-down into underperforming dimensions"
+        ]
+    },
+    {
+        "keywords": ["department analysts", "virtual analysts", "role based analysis", "sales analyst"],
+        "category": CATEGORY_PROJECT_INFO,
+        "question": "What are Department-Specific AI Analysts?",
+        "simple_answer": (
+            "Department AI Analysts are 7 specialized virtual analysts tailored for Sales, Marketing, Finance, "
+            "Customer, Operations, Product, and Executive leadership. Each analyst evaluates domain-specific KPIs, "
+            "generates a strategic briefing memo, and provides preset inquiries tailored to that department's operational mandate."
+        ),
+        "analogy": "Like having dedicated Chief Revenue, Marketing, Operations, and Financial officers on your analytical staff.",
+        "why_used": [
+            "Delivers role-specific insights so sales leaders see win rates while finance leaders see margins",
+            "Reduces time-to-insight for cross-functional teams"
+        ]
+    },
     {
         "keywords": ["what does this project do", "explain quantum analyst", "what is quantum analyst", "overview", "project summary", "about project"],
         "category": CATEGORY_PROJECT_INFO,

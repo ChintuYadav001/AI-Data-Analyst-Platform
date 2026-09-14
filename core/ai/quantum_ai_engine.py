@@ -67,19 +67,26 @@ class QuantumAIEngine:
         # =====================================================================
         # INTENT 1: Project Knowledge & Architecture ("What does this project do?")
         # =====================================================================
-        proj_item = project_knowledge.search_project_knowledge(q_lower)
-        if proj_item:
-            md_text, voice_text = project_knowledge.format_project_response(proj_item)
-            return {
-                "intent": "project_knowledge",
-                "tool_used": "get_project_information()",
-                "category": proj_item.get("category", project_knowledge.CATEGORY_PROJECT_INFO),
-                "markdown": md_text,
-                "voice_text": voice_text,
-                "data": None,
-                "chart_spec": None,
-                "actions": ["Explain Workflow", "Show Tech Stack", "Explore My Data"],
-            }
+        is_active_scenario = (df is not None and not df.empty) and (
+            ("what if" in q_lower or "simulate" in q_lower) and any(w in q_lower for w in [
+                "price", "marketing", "churn", "cost", "volume", "discount", "margin",
+                "%", "percent", "increase", "decrease", "drop", "raise", "cut", "change"
+            ])
+        )
+        if not is_active_scenario:
+            proj_item = project_knowledge.search_project_knowledge(q_lower)
+            if proj_item:
+                md_text, voice_text = project_knowledge.format_project_response(proj_item)
+                return {
+                    "intent": "project_knowledge",
+                    "tool_used": "get_project_information()",
+                    "category": proj_item.get("category", project_knowledge.CATEGORY_PROJECT_INFO),
+                    "markdown": md_text,
+                    "voice_text": voice_text,
+                    "data": None,
+                    "chart_spec": None,
+                    "actions": ["Explain Workflow", "Show Tech Stack", "Explore My Data"],
+                }
 
         # Check for general project queries
         if any(w in q_lower for w in ["what does this project do", "about quantum analyst", "who are you", "what are you"]):
@@ -140,6 +147,129 @@ class QuantumAIEngine:
                 "data": None,
                 "actions": ["What is EDA?", "What is PCA?", "Explain Quantum Analyst"],
             }
+
+        
+        # =====================================================================
+        # INTENT BI-1: Business Health & Executive Posture ("How is business performing?")
+        # =====================================================================
+        if any(w in q_lower for w in [
+            "how is business performing", "how is our business doing", "business health",
+            "health score", "how are we doing", "company performance", "executive posture",
+            "overall health", "business performance"
+        ]):
+            res = tools.analyze_business_health(df)
+            return self._build_tool_response(
+                intent="business_health",
+                tool_name="analyze_business_health",
+                res=res,
+                actions=["🏛️ Open Command Center", "💡 View Recommendations", "🚨 Active Alerts", "🔀 What-If Simulator"],
+            )
+
+        # =====================================================================
+        # INTENT BI-2: Business Risks & Active Alerts ("What's our biggest risk?")
+        # =====================================================================
+        if any(w in q_lower for w in [
+            "biggest risk", "business risk", "active alerts", "critical alerts",
+            "vulnerabilities", "what could go wrong", "risk factors", "threats", "anomaly monitoring"
+        ]):
+            res = tools.detect_business_risks(df)
+            return self._build_tool_response(
+                intent="business_risks",
+                tool_name="detect_business_risks",
+                res=res,
+                actions=["🚨 Open AI Alerts", "💡 Mitigation Steps", "🏛️ Command Center"],
+            )
+
+        # =====================================================================
+        # INTENT BI-3: Strategic Business Recommendations ("What should the business focus on?")
+        # =====================================================================
+        if any(w in q_lower for w in [
+            "what should the business focus on", "what should we focus on", "business recommendations",
+            "strategic recommendations", "recommendations for business", "what should we do",
+            "strategic priorities", "action items", "what to focus on", "business advice"
+        ]):
+            res = tools.generate_recommendations(df, dataset_name=dataset_name or "Active Dataset")
+            return self._build_tool_response(
+                intent="business_recommendations",
+                tool_name="generate_recommendations",
+                res=res,
+                actions=["💡 Open Recommendations", "🔀 Simulate Scenario", "🏛️ Command Center"],
+            )
+
+        # =====================================================================
+        # INTENT BI-4: Business Opportunity Detection ("Where are the opportunities?")
+        # =====================================================================
+        if any(w in q_lower for w in [
+            "opportunity", "opportunities", "growth opportunity", "revenue opportunity",
+            "margin opportunity", "untapped potential", "where can we grow", "growth levers"
+        ]):
+            res = tools.detect_business_opportunities(df)
+            return self._build_tool_response(
+                intent="business_opportunities",
+                tool_name="detect_business_opportunities",
+                res=res,
+                actions=["💡 View Recommendations", "🔀 Simulate Growth", "🏛️ Command Center"],
+            )
+
+        # =====================================================================
+        # INTENT BI-5: What-If / Scenario Simulation ("What if price increases by 10%?")
+        # =====================================================================
+        if any(w in q_lower for w in [
+            "what if", "scenario", "simulate price", "simulate marketing", "simulate churn",
+            "simulate scenario", "price increase", "price decrease", "if we increase price",
+            "what happens if price", "counterfactual simulation"
+        ]):
+            mods = self._infer_scenario_modifications(q_clean)
+            res = tools.run_business_scenario(df, mods)
+            return self._build_tool_response(
+                intent="scenario_simulation",
+                tool_name="run_business_scenario",
+                res=res,
+                actions=["🔀 Open What-If Simulator", "Compare Multi-Scenario", "🏛️ Command Center"],
+            )
+
+        # =====================================================================
+        # INTENT BI-6: Executive Briefing & Management Summary ("Summarize for management")
+        # =====================================================================
+        if any(w in q_lower for w in [
+            "summarize for management", "executive briefing", "board briefing",
+            "executive summary", "c-level summary", "brief the ceo", "leadership briefing",
+            "management report", "executive report"
+        ]):
+            res = tools.generate_executive_summary(df, dataset_name=dataset_name or "Active Dataset")
+            return self._build_tool_response(
+                intent="executive_summary",
+                tool_name="generate_executive_summary",
+                res=res,
+                actions=["🏛️ Open Command Center", "📄 Download Business Report", "💡 Action Plan"],
+            )
+
+        # =====================================================================
+        # INTENT BI-7: Department-Specific AI Analysis ("Sales perspective", "Marketing analysis")
+        # =====================================================================
+        dept_keywords = {
+            "Sales Analyst": ["sales perspective", "sales department", "sales analysis", "sales performance"],
+            "Marketing Analyst": ["marketing perspective", "marketing department", "marketing analysis", "marketing spend"],
+            "Finance Analyst": ["finance perspective", "finance department", "financial analysis", "cash flow", "profit margins"],
+            "Customer Analyst": ["customer perspective", "customer retention", "churn analysis", "customer success"],
+            "Operations Analyst": ["operations perspective", "operations department", "operational efficiency", "supply chain"],
+            "Product Analyst": ["product perspective", "product department", "product analytics", "feature adoption"],
+            "Executive Analyst": ["executive perspective", "leadership perspective", "c-suite perspective", "board view"],
+        }
+        matched_dept = None
+        for dept_name, kws in dept_keywords.items():
+            if any(k in q_lower for k in kws):
+                matched_dept = dept_name
+                break
+
+        if matched_dept:
+            res = tools.get_department_analysis(df, department=matched_dept)
+            return self._build_tool_response(
+                intent="department_analysis",
+                tool_name="get_department_analysis",
+                res=res,
+                actions=["👥 Open Department Analysts", "Switch Department", "🏛️ Command Center"],
+            )
 
         # =====================================================================
         # INTENT 4: Data Quality & Cleaning ("Find the biggest problem in my data", "What to clean?")
@@ -409,6 +539,41 @@ class QuantumAIEngine:
     # =====================================================================
     # Helper: Page-Context Specific Dispatches
     # =====================================================================
+
+    def _infer_scenario_modifications(self, query_text: str) -> Dict[str, float]:
+        """Extracts scenario adjustments (price, marketing, churn, cost) from natural language."""
+        mods: Dict[str, float] = {}
+        q = query_text.lower()
+
+        # Price percentage extraction
+        m_price = re.search(r"price\s*(?:increases|goes up|rises|increase)?\s*(?:by)?\s*([+-]?\d+(?:\.\d+)?)\s*%", q) or re.search(r"([+-]?\d+(?:\.\d+)?)\s*%\s*(?:price increase|increase in price|higher price)", q)
+        if m_price:
+            mods["price"] = float(m_price.group(1))
+        elif "price" in q:
+            if any(w in q for w in ["decrease", "lower", "cut", "drop", "reduce"]):
+                mods["price"] = -10.0
+            else:
+                mods["price"] = 10.0
+
+        # Marketing spend extraction
+        m_mkt = re.search(r"marketing\s*(?:spend)?\s*(?:increases|increase)?\s*(?:by)?\s*([+-]?\d+(?:\.\d+)?)\s*%", q)
+        if m_mkt:
+            mods["marketing"] = float(m_mkt.group(1))
+
+        # Churn reduction extraction
+        m_churn = re.search(r"churn\s*(?:decreases|drops|falls|reduces|reduction)?\s*(?:by)?\s*([+-]?\d+(?:\.\d+)?)\s*%", q)
+        if m_churn:
+            mods["churn"] = -abs(float(m_churn.group(1)))
+
+        # Cost change extraction
+        m_cost = re.search(r"cost\s*(?:increases|goes up)?\s*(?:by)?\s*([+-]?\d+(?:\.\d+)?)\s*%", q)
+        if m_cost:
+            mods["cost"] = float(m_cost.group(1))
+
+        if not mods:
+            mods = {"price": 10.0}
+        return mods
+
     def _handle_page_context(
         self,
         query: str,
@@ -436,6 +601,21 @@ class QuantumAIEngine:
                 if num_cols and date_cols:
                     res = tools.forecast(df, date_col=date_cols[0], target_col=num_cols[0])
                     return self._build_tool_response("page_forecast", "forecast", res)
+            elif current_page in ("Executive Command Center", "Business Intelligence"):
+                res = tools.analyze_business_health(df)
+                return self._build_tool_response("page_bi_health", "analyze_business_health", res)
+            elif current_page == "Business Recommendations":
+                res = tools.generate_recommendations(df)
+                return self._build_tool_response("page_bi_recommendations", "generate_recommendations", res)
+            elif current_page in ("What-If Analysis", "What-If Simulator"):
+                res = tools.run_business_scenario(df, {"price": 10.0})
+                return self._build_tool_response("page_bi_scenario", "run_business_scenario", res)
+            elif current_page in ("AI Alerts & Monitoring", "AI Alerts"):
+                res = tools.detect_business_risks(df)
+                return self._build_tool_response("page_bi_alerts", "detect_business_risks", res)
+            elif current_page in ("Department AI Analysts", "Department Analysts"):
+                res = tools.get_department_analysis(df, "Executive Analyst")
+                return self._build_tool_response("page_bi_department", "get_department_analysis", res)
         return None
 
     # =====================================================================

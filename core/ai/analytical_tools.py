@@ -23,6 +23,7 @@ from core.models.feature_model import FeatureEngineeringModel
 import core.ml.ai_ml_tools as ai_ml_tools
 from core.ml.experiment_tracker import get_active_champion, list_experiments, get_experiment
 import core.ai.project_knowledge as project_knowledge
+import core.bi as bi
 
 
 # =====================================================================
@@ -704,5 +705,214 @@ def get_project_information(topic_query: str) -> Dict[str, Any]:
         "explanation": item.get("analogy", "Verified factual knowledge from Quantum Analyst architecture."),
         "recommendation": "Try asking about other concepts or applying this to your uploaded dataset!",
         "formatted_markdown": md,
+        "voice_summary": voice,
+    }
+
+
+# =====================================================================
+# 19. Business Health Analysis Tool
+# =====================================================================
+def analyze_business_health(df: pd.DataFrame) -> Dict[str, Any]:
+    """19. Computes transparent 0-100 composite Business Health Score and dimension breakdown."""
+    if df is None or df.empty:
+        return {"success": False, "error": "No active dataset loaded."}
+    res = bi.calculate_business_health_score(df)
+    answer = f"Overall Business Health Score is **{res['overall_score']:.0f}/100** (Grade: **{res['grade']}**)."
+    evidence = {d: f"{v:.1f}/100" for d, v in res["dimensions"].items()}
+    explanation = f"Composite score evaluated across {len(res['dimensions'])} verified operational, revenue, and data quality dimensions."
+    recommendation = "Review dimensional subscores in 🏛️ Executive Command Center."
+    voice = f"Your overall business health score is {res['overall_score']:.0f} out of 100, rated as {res['grade']}."
+    return {
+        "success": True,
+        "tool": "analyze_business_health",
+        "answer": answer,
+        "evidence": evidence,
+        "explanation": explanation,
+        "recommendation": recommendation,
+        "health": res,
+        "voice_summary": voice,
+    }
+
+
+# =====================================================================
+# 20. Business Recommendations Tool
+# =====================================================================
+def generate_recommendations(df: pd.DataFrame, dataset_name: str = "Active Dataset") -> Dict[str, Any]:
+    """20. Synthesizes prioritized, actionable business recommendations with non-causal evidence."""
+    if df is None or df.empty:
+        return {"success": False, "error": "No active dataset loaded."}
+    recs = bi.generate_business_recommendations(df, dataset_name=dataset_name)
+    top_rec = recs[0] if recs else {}
+    answer = f"Identified **{len(recs)} prioritized business recommendations**. Top priority: **{top_rec.get('title', 'Operational Optimization')}** ({top_rec.get('priority', 'HIGH')})."
+    evidence = {r.get("title", f"Rec {i}"): f"Priority {r.get('priority')} (Score {r.get('priority_score', 0):.0f})" for i, r in enumerate(recs[:4])}
+    explanation = top_rec.get("reason", "Derived from verified data distributions and variance analysis.")
+    recommendation = top_rec.get("recommended_action", "Explore recommendations in 💡 Business Recommendations.")
+    voice = f"Generated {len(recs)} business recommendations. Top focus is {top_rec.get('title', 'to optimize operations')}."
+    return {
+        "success": True,
+        "tool": "generate_recommendations",
+        "answer": answer,
+        "evidence": evidence,
+        "explanation": explanation,
+        "recommendation": recommendation,
+        "recommendations": recs,
+        "voice_summary": voice,
+    }
+
+
+# =====================================================================
+# 21. Business Opportunity Detection Tool
+# =====================================================================
+def detect_business_opportunities(df: pd.DataFrame) -> Dict[str, Any]:
+    """21. Discovers revenue, margin, and retention opportunities."""
+    if df is None or df.empty:
+        return {"success": False, "error": "No active dataset loaded."}
+    opps = bi.detect_business_opportunities(df)
+    if not opps:
+        return {
+            "success": True,
+            "tool": "detect_business_opportunities",
+            "answer": "Current distributions show balanced operations without extreme concentration opportunities.",
+            "evidence": {"Opportunities Evaluated": "Pareto 80/20, Margin Drag, Process Stability"},
+            "explanation": "No segment accounts for over 50% concentration or excessive negative unit margins.",
+            "recommendation": "Simulate strategic expansion in 🔀 What-If Simulator.",
+            "voice_summary": "No extreme concentration opportunities detected. Your business volume is evenly distributed.",
+        }
+    top_opp = opps[0]
+    answer = f"Discovered **{len(opps)} high-value business opportunities**. Leading opportunity: **{top_opp['title']}**."
+    evidence = {op["type"]: op["potential_impact"] for op in opps}
+    explanation = top_opp["evidence"]
+    recommendation = top_opp["recommended_action"]
+    voice = f"Found {len(opps)} business opportunities. Largest impact is {top_opp['title']}."
+    return {
+        "success": True,
+        "tool": "detect_business_opportunities",
+        "answer": answer,
+        "evidence": evidence,
+        "explanation": explanation,
+        "recommendation": recommendation,
+        "opportunities": opps,
+        "voice_summary": voice,
+    }
+
+
+# =====================================================================
+# 22. Business Risk Detection Tool
+# =====================================================================
+def detect_business_risks(df: pd.DataFrame) -> Dict[str, Any]:
+    """22. Identifies active business vulnerabilities and critical alerts."""
+    if df is None or df.empty:
+        return {"success": False, "error": "No active dataset loaded."}
+    alerts = bi.generate_business_alerts(df)
+    crit_high = [a for a in alerts if a.get("severity") in ("CRITICAL", "HIGH")]
+    active_risks = crit_high or alerts[:3]
+    top_risk = active_risks[0] if active_risks else {}
+    answer = f"Identified **{len(active_risks)} active risk factor(s)** requiring management attention."
+    evidence = {a.get("title", "Risk"): f"{a.get('severity')} ({a.get('deviation', 'Anomaly')})" for a in active_risks}
+    explanation = top_risk.get("possible_explanation", "Risk indicators derived from statistical threshold breaches.")
+    recommendation = top_risk.get("recommended_action", "Audit risk signals in 🚨 AI Alerts & Monitoring.")
+    voice = f"Identified {len(active_risks)} business risks. Most critical is {top_risk.get('title', 'an operational variance')}."
+    return {
+        "success": True,
+        "tool": "detect_business_risks",
+        "answer": answer,
+        "evidence": evidence,
+        "explanation": explanation,
+        "recommendation": recommendation,
+        "risks": active_risks,
+        "voice_summary": voice,
+    }
+
+
+# =====================================================================
+# 23. What-If Scenario Simulation Tool
+# =====================================================================
+def run_business_scenario(df: pd.DataFrame, modifications: Dict[str, float]) -> Dict[str, Any]:
+    """23. Simulates business decisions across price, marketing, churn, and costs."""
+    if df is None or df.empty:
+        return {"success": False, "error": "No active dataset loaded."}
+    res = bi.simulate_business_scenario(df, modifications)
+    deltas = res["deltas"]
+    answer = (
+        f"Scenario outcome: Revenue projected to shift by **{deltas['revenue_pct']:+.1f}%** (₹{deltas['revenue']:+,.2f}) "
+        f"and Profit by **{deltas['profit_pct']:+.1f}%** (₹{deltas['profit']:+,.2f})."
+    )
+    evidence = {
+        "Baseline Revenue": f"₹{res['baseline']['revenue']:,.2f}",
+        "Simulated Revenue": f"₹{res['simulated']['revenue']:,.2f}",
+        "Baseline Profit": f"₹{res['baseline']['profit']:,.2f}",
+        "Simulated Profit": f"₹{res['simulated']['profit']:,.2f}",
+        "Margin Shift": f"{deltas['margin_pct']:+.2f}% pts",
+    }
+    explanation = res["ai_interpretation"]
+    recommendation = "Review multi-scenario comparisons in 🔀 What-If Simulator."
+    voice = f"The scenario is estimated to change revenue by {deltas['revenue_pct']:+.1f} percent and profit by {deltas['profit_pct']:+.1f} percent."
+    return {
+        "success": True,
+        "tool": "run_business_scenario",
+        "answer": answer,
+        "evidence": evidence,
+        "explanation": explanation,
+        "recommendation": recommendation,
+        "deltas": deltas,
+        "simulation": res,
+        "voice_summary": voice,
+    }
+
+
+# =====================================================================
+# 24. Executive Summary Generation Tool
+# =====================================================================
+def generate_executive_summary(df: pd.DataFrame, dataset_name: str = "Active Dataset") -> Dict[str, Any]:
+    """24. Synthesizes board-level executive briefing with health score and strategic actions."""
+    if df is None or df.empty:
+        return {"success": False, "error": "No active dataset loaded."}
+    cc = bi.generate_executive_command_center(df, dataset_name=dataset_name)
+    summary = cc.get("summary", {})
+    health = cc.get("health", {})
+    answer = f"**Executive Posture:** {summary.get('status', 'Operations stable.')}"
+    evidence = {
+        "Business Health Score": f"{health.get('overall_score', 82):.0f}/100 ({health.get('grade', 'Stable')})",
+        "Top Positive Signal": summary.get("positive_signals", ["Stable volume"])[0],
+        "Top Risk Factor": summary.get("top_risks", ["Concentration"])[0],
+        "Leading Opportunity": summary.get("top_opportunities", ["Price elasticity"])[0],
+    }
+    explanation = "Executive synthesis evaluates aggregate volume, margin preservation, customer dispersion, and data quality health."
+    recommendation = summary.get("recommended_actions", ["Review command center."])[0]
+    voice = f"Executive briefing: {summary.get('status', 'Operations maintain stable momentum.')}"
+    return {
+        "success": True,
+        "tool": "generate_executive_summary",
+        "answer": answer,
+        "evidence": evidence,
+        "explanation": explanation,
+        "recommendation": recommendation,
+        "executive_summary": summary,
+        "voice_summary": voice,
+    }
+
+
+# =====================================================================
+# 25. Department Analysis Tool
+# =====================================================================
+def get_department_analysis(df: pd.DataFrame, department: str = "Executive Analyst") -> Dict[str, Any]:
+    """25. Generates role-specific analytical KPIs and briefing memo."""
+    if df is None or df.empty:
+        return {"success": False, "error": "No active dataset loaded."}
+    res = bi.get_department_analysis(df, department=department)
+    kpis = {k["label"]: k["value"] for k in res.get("kpis", [])}
+    answer = f"**{department} Briefing:** {res.get('briefing_memo', '')}"
+    evidence = kpis
+    explanation = f"Analysis calibrated to the strategic operational scope of {department}."
+    recommendation = f"Explore preset role inquiries in 👥 Department AI Analysts."
+    voice = f"Department briefing for {department}: {res.get('briefing_memo', '')[:120]}."
+    return {
+        "success": True,
+        "tool": "get_department_analysis",
+        "answer": answer,
+        "evidence": evidence,
+        "explanation": explanation,
+        "recommendation": recommendation,
+        "department_data": res,
         "voice_summary": voice,
     }
