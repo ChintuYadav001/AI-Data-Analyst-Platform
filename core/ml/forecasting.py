@@ -33,8 +33,8 @@ def run_time_series_forecast(
     ts_df[target_col] = pd.to_numeric(ts_df[target_col], errors="coerce")
     ts_df = ts_df.dropna()
 
-    if len(ts_df) < 10:
-        raise ValueError("Insufficient time series observations (< 10 valid date-target rows).")
+    if len(ts_df) < 4:
+        raise ValueError("Insufficient time series observations (< 4 valid date-target rows).")
 
     # Aggregate if multiple entries per timestamp (e.g. sum or mean per day)
     ts_df = ts_df.groupby(date_col)[target_col].mean().reset_index()
@@ -48,7 +48,9 @@ def run_time_series_forecast(
         median_diff = pd.Timedelta(days=1)
 
     # Train / Backtest Split (last min(10, 20%) as test)
-    test_len = max(3, min(horizon, int(len(y) * 0.2)))
+    test_len = max(1, min(horizon, max(1, int(len(y) * 0.2))))
+    if len(y) - test_len < 2:
+        test_len = 1
     train_y = y[:-test_len]
     test_y = y[-test_len:]
 

@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
+from sklearn.preprocessing import LabelEncoder
 from core.ml.model_registry import REGISTRY, create_model_instance
 from core.ml.trainer import train_single_model
 
@@ -59,51 +60,66 @@ def tune_model_hyperparameters(
 
     # Preprocess training data
     clean_df = df.dropna(subset=[target_col]).copy()
-    X = clean_df[feature_cols]
+    valid_features = [c for c in feature_cols if c in clean_df.columns and c != target_col]
+    X = clean_df[valid_features]
     y = clean_df[target_col]
-    if "classification" not in task_type:
-        y = y.astype(float)
+
+    is_classification = "classification" in task_type
+    if is_classification:
+        le = LabelEncoder()
+        y_fit = le.fit_transform(y.astype(str))
+        min_class_count = pd.Series(y_fit).value_counts().min()
+        actual_cv = max(2, min(cv_folds, int(min_class_count)))
+    else:
+        y_num = pd.to_numeric(y, errors="coerce")
+        valid_mask = y_num.notna()
+        X = X[valid_mask]
+        y_fit = y_num[valid_mask].astype(float).values
+        actual_cv = max(2, min(cv_folds, len(y_fit) // 2))
 
     # Use the fitted preprocessor from baseline
     preprocessor = baseline_res["preprocessor"]
     X_trans = preprocessor.transform(X)
 
     raw_estimator = create_model_instance(model_id)
-    scoring = "f1_weighted" if "classification" in task_type else "r2"
+    scoring = "f1_weighted" if is_classification else "r2"
 
-    if search_type == "grid":
-        search = GridSearchCV(
-            estimator=raw_estimator,
-            param_grid=model_info.param_grid,
-            cv=cv_folds,
-            scoring=scoring,
-            n_jobs=-1,
-        )
-    else:
-        # Cap iterations to total grid size
-        total_combos = 1
-        for v in model_info.param_grid.values():
-            total_combos *= len(v)
-        actual_iter = min(n_iter, total_combos)
+    try:
+        if search_type == "grid":
+            search = GridSearchCV(
+                estimator=raw_estimator,
+                param_grid=model_info.param_grid,
+                cv=actual_cv,
+                scoring=scoring,
+                n_jobs=-1,
+            )
+        else:
+            total_combos = 1
+            for v in model_info.param_grid.values():
+                total_combos *= len(v)
+            actual_iter = min(n_iter, total_combos)
 
-        search = RandomizedSearchCV(
-            estimator=raw_estimator,
-            param_distributions=model_info.param_grid,
-            n_iter=actual_iter,
-            cv=cv_folds,
-            scoring=scoring,
-            random_state=42,
-            n_jobs=-1,
-        )
+            search = RandomizedSearchCV(
+                estimator=raw_estimator,
+                param_distributions=model_info.param_grid,
+                n_iter=actual_iter,
+                cv=actual_cv,
+                scoring=scoring,
+                random_state=42,
+                n_jobs=-1,
+            )
 
-    search.fit(X_trans, y)
-    best_params = search.best_params_
+        search.fit(X_trans, y_fit)
+        best_params = search.best_params_
+    except Exception:
+        # Fallback to default parameters if cross-validation grid search encounters singular issues
+        best_params = dict(model_info.default_params)
 
-    # Train final single model with best params
+    # Train final model with best params
     tuned_res = train_single_model(
         df=df,
         target_col=target_col,
-        feature_cols=feature_cols,
+        feature_cols=valid_features,
         task_type=task_type,
         model_id=model_id,
         custom_params=best_params,

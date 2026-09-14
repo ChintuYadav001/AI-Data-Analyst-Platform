@@ -297,3 +297,46 @@ def test_xgboost_and_lightgbm_training(regression_data, classification_data):
     )
     assert "accuracy" in res_lgb["metrics"]
     assert res_lgb["metrics"]["accuracy"] >= 0.50
+
+
+def test_string_target_and_dataset_switching():
+    # Test dataset with string targets like 'Female', 'Male'
+    df_finance = pd.DataFrame({
+        "age": [25, 34, 45, 52, 28, 38, 48, 60],
+        "Investment_Avenues": ["Yes", "Yes", "No", "Yes", "No", "Yes", "No", "Yes"],
+        "income": [40000, 60000, 75000, 90000, 45000, 80000, 70000, 110000],
+        "gender": ["Female", "Male", "Female", "Male", "Female", "Male", "Female", "Male"],
+    })
+
+    # Train XGBoost with string targets
+    res = train_single_model(
+        df=df_finance,
+        target_col="gender",
+        feature_cols=["age", "Investment_Avenues", "income"],
+        task_type="binary_classification",
+        model_id="xgboost_classifier",
+    )
+    assert "accuracy" in res["metrics"]
+    assert res["pipeline"] is not None
+
+    # Verify single prediction returns string label
+    pred_res = predict_single_record(
+        pipeline=res["pipeline"],
+        input_data={"age": 30, "Investment_Avenues": "Yes", "income": 55000},
+        task_type="binary_classification",
+    )
+    assert pred_res["prediction"] in ["Female", "Male"]
+
+    # Test dataset switching resilience: batch prediction on a new dataset missing 'Investment_Avenues'
+    df_new = pd.DataFrame({
+        "age": [22, 33],
+        "income": [35000, 65000],
+    })
+    batch_out = predict_batch(
+        pipeline=res["pipeline"],
+        batch_df=df_new,
+        feature_cols=["age", "Investment_Avenues", "income"],
+        task_type="binary_classification",
+    )
+    assert "model_prediction" in batch_out.columns
+    assert len(batch_out) == 2

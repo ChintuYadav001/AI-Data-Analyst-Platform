@@ -138,7 +138,14 @@ def explain_local_prediction(
             try:
                 num_val = float(val)
                 z_score = (num_val - baseline_mean) / baseline_std
-                weight = weight_map.get(col, 5.0)
+                weight = weight_map.get(col)
+                if weight is None:
+                    for f_k, f_v in weight_map.items():
+                        if col.lower() in f_k.lower():
+                            weight = f_v
+                            break
+                if weight is None:
+                    weight = 5.0
                 attribution = round(z_score * (weight / 10.0), 3)
 
                 entry = {

@@ -56,6 +56,7 @@ def init_ml_session_state():
         "ml_active_model_id": None,
         "ml_last_training_time": None,
         "ml_forecast_results": None,
+        "ml_last_dataset_signature": None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -100,22 +101,38 @@ def render_ml_view():
     </div>
     """, unsafe_allow_html=True)
 
-    # Initial ML Readiness Audit
+    # Detect dataset change and synchronize session state
+    curr_signature = f"{proj_name}_{len(df)}_{tuple(df.columns)}"
+    if st.session_state.get("ml_last_dataset_signature") != curr_signature:
+        st.session_state["ml_last_dataset_signature"] = curr_signature
+        st.session_state["ml_target_col"] = None
+        st.session_state["ml_selected_features"] = []
+        st.session_state["ml_benchmark_results"] = None
+        st.session_state["ml_active_model_id"] = None
+        st.session_state["ml_forecast_results"] = None
+
+    # ML Readiness Audit
     readiness_report = audit_ml_readiness(df, target_col=st.session_state.get("ml_target_col"))
 
-    # If target not yet chosen, default to auto-detected target
-    if st.session_state["ml_target_col"] is None and readiness_report.selected_target:
-        st.session_state["ml_target_col"] = readiness_report.selected_target
+    # If target not set or no longer exists in current df, auto-select
+    if st.session_state.get("ml_target_col") not in df.columns:
+        if readiness_report.selected_target and readiness_report.selected_target in df.columns:
+            st.session_state["ml_target_col"] = readiness_report.selected_target
+        elif len(df.columns) > 0:
+            st.session_state["ml_target_col"] = df.columns[-1]
 
-    if not st.session_state["ml_selected_features"]:
-        # Default features: exclude ID columns, constant columns, and target
-        exclude = set(readiness_report.id_columns + readiness_report.constant_columns)
-        if st.session_state["ml_target_col"]:
-            exclude.add(st.session_state["ml_target_col"])
-        st.session_state["ml_selected_features"] = [c for c in df.columns if c not in exclude]
-
-    # Current Task Type
     current_target = st.session_state.get("ml_target_col")
+
+    # Filter and validate active feature cohort
+    valid_features = [c for c in st.session_state.get("ml_selected_features", []) if c in df.columns and c != current_target]
+    if not valid_features:
+        exclude = set(readiness_report.id_columns + readiness_report.constant_columns)
+        if current_target:
+            exclude.add(current_target)
+        valid_features = [c for c in df.columns if c not in exclude]
+    st.session_state["ml_selected_features"] = valid_features
+
+    # Update Task Type
     if current_target and current_target in df.columns:
         st.session_state["ml_task_type"] = classify_task_type(df, current_target)
 
@@ -202,37 +219,45 @@ def render_ml_view():
         c_go1, c_go2 = st.columns([1, 3])
         with c_go1:
             if st.button("⚡ Run Full Automated Benchmark", type="primary", use_container_width=True):
-                with st.spinner("Executing automated cross-validation benchmarking..."):
-                    try:
-                        res = run_benchmark(
-                            df=df,
-                            target_col=current_target,
-                            feature_cols=st.session_state["ml_selected_features"],
-                            task_type=st.session_state["ml_task_type"],
-                            compute_profile=st.session_state["ml_compute_profile"],
-                        )
-                        st.session_state["ml_benchmark_results"] = res
-                        st.session_state["ml_active_model_id"] = res["champion_id"]
-                        
-                        # Auto-save champion to experiment tracker
-                        champ_id = res["champion_id"]
-                        if champ_id and champ_id in res["all_results"]:
-                            champ_data = res["all_results"][champ_id]
-                            save_experiment(
-                                pipeline=champ_data["pipeline"],
-                                model_id=champ_id,
-                                model_name=champ_data["model_name"],
-                                task_type=st.session_state["ml_task_type"],
-                                target_col=current_target,
-                                feature_cols=st.session_state["ml_selected_features"],
-                                metrics=champ_data["metrics"],
-                                dataset_name=proj_name,
-                                is_champion=True,
-                            )
-                        st.success(f"Benchmark finished! Champion Model: **{res['champion_id']}**")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Training failed: {str(e)}")
+                target_to_use = st.session_state.get("ml_target_col")
+                if not target_to_use or target_to_use not in df.columns:
+                    st.error("Please select a valid target column in the ML Readiness tab first.")
+                else:
+                    feats_to_use = [c for c in st.session_state.get("ml_selected_features", []) if c in df.columns and c != target_to_use]
+                    if not feats_to_use:
+                        st.error("Please select at least one valid feature column.")
+                    else:
+                        with st.spinner("Executing automated cross-validation benchmarking..."):
+                            try:
+                                res = run_benchmark(
+                                    df=df,
+                                    target_col=target_to_use,
+                                    feature_cols=feats_to_use,
+                                    task_type=st.session_state["ml_task_type"],
+                                    compute_profile=st.session_state["ml_compute_profile"],
+                                )
+                                st.session_state["ml_benchmark_results"] = res
+                                st.session_state["ml_active_model_id"] = res["champion_id"]
+                                
+                                # Auto-save champion to experiment tracker
+                                champ_id = res["champion_id"]
+                                if champ_id and champ_id in res["all_results"]:
+                                    champ_data = res["all_results"][champ_id]
+                                    save_experiment(
+                                        pipeline=champ_data["pipeline"],
+                                        model_id=champ_id,
+                                        model_name=champ_data["model_name"],
+                                        task_type=st.session_state["ml_task_type"],
+                                        target_col=target_to_use,
+                                        feature_cols=feats_to_use,
+                                        metrics=champ_data["metrics"],
+                                        dataset_name=proj_name,
+                                        is_champion=True,
+                                    )
+                                st.success(f"Benchmark finished! Champion Model: **{res['champion_id']}**")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Training failed: {str(e)}")
 
         with c_go2:
             st.info("💡 To fine-tune features, validation ratios, or algorithms, explore the **Target**, **Model Selection**, and **Diagnostics** tabs above.")
@@ -248,7 +273,6 @@ def render_ml_view():
         with col_t1:
             st.markdown("#### 1. Target Column Selection")
             
-            # Display auto-detected target candidates with confidence badges
             if readiness_report.target_candidates:
                 st.markdown("<div style='font-size: 0.8rem; color: #94A3B8; margin-bottom: 6px;'>AI Target Candidates (Ranked):</div>", unsafe_allow_html=True)
                 for cand in readiness_report.target_candidates[:3]:
@@ -275,7 +299,7 @@ def render_ml_view():
                 help="The column your machine learning model will learn to predict.",
             )
 
-            if chosen_target != st.session_state["ml_target_col"]:
+            if chosen_target != st.session_state.get("ml_target_col"):
                 st.session_state["ml_target_col"] = chosen_target
                 st.session_state["ml_task_type"] = classify_task_type(df, chosen_target)
                 st.rerun()
@@ -400,42 +424,50 @@ def render_ml_view():
         st.markdown("Trains all active candidates with zero data leakage, compares primary performance metrics, and promotes the Champion Model.")
 
         if st.button("⚡ Launch Benchmark Now", type="primary", use_container_width=True):
-            with st.spinner("Benchmarking algorithmic candidates across folds..."):
-                try:
-                    res = run_benchmark(
-                        df=df,
-                        target_col=current_target,
-                        feature_cols=st.session_state["ml_selected_features"],
-                        task_type=st.session_state["ml_task_type"],
-                        compute_profile=st.session_state["ml_compute_profile"],
-                        model_ids=st.session_state.get("ml_selected_models"),
-                        test_size=st.session_state["ml_test_size"],
-                        scaler_type=st.session_state["ml_scaler"],
-                        cat_encoding=st.session_state["ml_cat_encoding"],
-                    )
-                    st.session_state["ml_benchmark_results"] = res
-                    st.session_state["ml_active_model_id"] = res["champion_id"]
+            target_to_use = st.session_state.get("ml_target_col")
+            if not target_to_use or target_to_use not in df.columns:
+                st.error("Please select a valid target column in Tab 2 first.")
+            else:
+                feats_to_use = [c for c in st.session_state.get("ml_selected_features", []) if c in df.columns and c != target_to_use]
+                if not feats_to_use:
+                    st.error("Please select at least one feature column in Tab 2.")
+                else:
+                    with st.spinner("Benchmarking algorithmic candidates across folds..."):
+                        try:
+                            res = run_benchmark(
+                                df=df,
+                                target_col=target_to_use,
+                                feature_cols=feats_to_use,
+                                task_type=st.session_state["ml_task_type"],
+                                compute_profile=st.session_state["ml_compute_profile"],
+                                model_ids=st.session_state.get("ml_selected_models"),
+                                test_size=st.session_state["ml_test_size"],
+                                scaler_type=st.session_state["ml_scaler"],
+                                cat_encoding=st.session_state["ml_cat_encoding"],
+                            )
+                            st.session_state["ml_benchmark_results"] = res
+                            st.session_state["ml_active_model_id"] = res["champion_id"]
 
-                    # Auto-persist Champion
-                    champ_id = res["champion_id"]
-                    if champ_id and champ_id in res["all_results"]:
-                        champ_data = res["all_results"][champ_id]
-                        save_experiment(
-                            pipeline=champ_data["pipeline"],
-                            model_id=champ_id,
-                            model_name=champ_data["model_name"],
-                            task_type=st.session_state["ml_task_type"],
-                            target_col=current_target,
-                            feature_cols=st.session_state["ml_selected_features"],
-                            metrics=champ_data["metrics"],
-                            dataset_name=proj_name,
-                            is_champion=True,
-                        )
+                            # Auto-persist Champion
+                            champ_id = res["champion_id"]
+                            if champ_id and champ_id in res["all_results"]:
+                                champ_data = res["all_results"][champ_id]
+                                save_experiment(
+                                    pipeline=champ_data["pipeline"],
+                                    model_id=champ_id,
+                                    model_name=champ_data["model_name"],
+                                    task_type=st.session_state["ml_task_type"],
+                                    target_col=target_to_use,
+                                    feature_cols=feats_to_use,
+                                    metrics=champ_data["metrics"],
+                                    dataset_name=proj_name,
+                                    is_champion=True,
+                                )
 
-                    st.success("✅ Benchmarking completed successfully!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Benchmarking error: {str(e)}")
+                            st.success("✅ Benchmarking completed successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Benchmarking error: {str(e)}")
 
         bench_data = st.session_state.get("ml_benchmark_results")
         if bench_data:
@@ -528,7 +560,6 @@ def render_ml_view():
             # Diagnostic Plots
             st.markdown("<br>", unsafe_allow_html=True)
             if is_classification:
-                # Confusion Matrix Heatmap
                 cm = eval_data.get("confusion_matrix")
                 classes = eval_data.get("classes", ["0", "1"])
                 if cm:
@@ -544,23 +575,38 @@ def render_ml_view():
                     fig_cm.update_layout(template="plotly_dark", height=400)
                     st.plotly_chart(fig_cm, use_container_width=True)
             else:
-                # Regression Actual vs Predicted Scatter + Residuals
                 scatter_data = eval_data.get("scatter_sample", [])
                 if scatter_data:
                     sc_df = pd.DataFrame(scatter_data)
                     c_plot1, c_plot2 = st.columns(2)
                     with c_plot1:
-                        fig_scatter = px.scatter(
-                            sc_df,
-                            x="actual",
-                            y="predicted",
-                            trendline="ols",
-                            title="Actual vs Predicted Scatter (Validation Set)",
-                            labels={"actual": "Actual Value", "predicted": "Predicted Value"},
-                            color_discrete_sequence=["#00F0FF"],
+                        fig_scatter = go.Figure()
+                        fig_scatter.add_trace(go.Scatter(
+                            x=sc_df["actual"],
+                            y=sc_df["predicted"],
+                            mode="markers",
+                            name="Holdout Points",
+                            marker=dict(color="#00F0FF", size=7, opacity=0.8),
+                        ))
+                        # Ideal fit line
+                        min_v = float(min(sc_df["actual"].min(), sc_df["predicted"].min()))
+                        max_v = float(max(sc_df["actual"].max(), sc_df["predicted"].max()))
+                        fig_scatter.add_trace(go.Scatter(
+                            x=[min_v, max_v],
+                            y=[min_v, max_v],
+                            mode="lines",
+                            name="Ideal Fit (y = x)",
+                            line=dict(color="#F59E0B", dash="dash", width=2),
+                        ))
+                        fig_scatter.update_layout(
+                            template="plotly_dark",
+                            title="Actual vs Predicted Scatter",
+                            xaxis_title="Actual Value",
+                            yaxis_title="Predicted Value",
+                            height=380,
                         )
-                        fig_scatter.update_layout(template="plotly_dark", height=380)
                         st.plotly_chart(fig_scatter, use_container_width=True)
+
                     with c_plot2:
                         fig_res = px.histogram(
                             sc_df,
@@ -576,12 +622,13 @@ def render_ml_view():
             st.markdown("<hr style='border-color: rgba(255, 255, 255, 0.08);'>", unsafe_allow_html=True)
             st.markdown("#### ⚡ Hyperparameter Fine-Tuning")
             if st.button("🚀 Run Hyperparameter Optimization on this Model", type="secondary"):
-                with st.spinner(f"Running RandomizedSearchCV hyperparameter optimization on {eval_data['model_name']}..."):
+                feats_to_use = [c for c in eval_data["feature_cols"] if c in df.columns]
+                with st.spinner(f"Running hyperparameter optimization on {eval_data['model_name']}..."):
                     try:
                         tune_res = tune_model_hyperparameters(
                             df=df,
                             target_col=current_target,
-                            feature_cols=st.session_state["ml_selected_features"],
+                            feature_cols=feats_to_use,
                             task_type=st.session_state["ml_task_type"],
                             model_id=active_model_id,
                         )
@@ -673,24 +720,32 @@ def render_ml_view():
                     for j in range(cols_per_row):
                         if i + j < num_features:
                             f_name = feat_cols[i + j]
-                            series = df[f_name]
                             with row_cols[j]:
-                                if pd.api.types.is_numeric_dtype(series):
-                                    min_val = float(series.min()) if series.notna().any() else 0.0
-                                    max_val = float(series.max()) if series.notna().any() else 100.0
-                                    mean_val = float(series.mean()) if series.notna().any() else 50.0
-                                    input_vals[f_name] = st.number_input(
-                                        f"{f_name}:",
-                                        value=round(mean_val, 2),
-                                        key=f"sim_in_{f_name}",
-                                    )
+                                if f_name in df.columns:
+                                    series = df[f_name]
+                                    if pd.api.types.is_numeric_dtype(series):
+                                        min_val = float(series.min()) if series.notna().any() else 0.0
+                                        max_val = float(series.max()) if series.notna().any() else 100.0
+                                        mean_val = float(series.mean()) if series.notna().any() else 50.0
+                                        input_vals[f_name] = st.number_input(
+                                            f"{f_name}:",
+                                            value=round(mean_val, 2),
+                                            key=f"sim_in_{f_name}_{i+j}",
+                                        )
+                                    else:
+                                        unique_vals = [str(x) for x in series.dropna().unique()[:25]]
+                                        default_val = unique_vals[0] if unique_vals else ""
+                                        input_vals[f_name] = st.selectbox(
+                                            f"{f_name}:",
+                                            options=unique_vals if unique_vals else [""],
+                                            key=f"sim_in_{f_name}_{i+j}",
+                                        )
                                 else:
-                                    unique_vals = [str(x) for x in series.dropna().unique()[:25]]
-                                    default_val = unique_vals[0] if unique_vals else ""
-                                    input_vals[f_name] = st.selectbox(
+                                    # Fallback if column was renamed or removed in active df
+                                    input_vals[f_name] = st.text_input(
                                         f"{f_name}:",
-                                        options=unique_vals if unique_vals else [""],
-                                        key=f"sim_in_{f_name}",
+                                        value="0",
+                                        key=f"sim_in_{f_name}_{i+j}",
                                     )
 
                 if st.button("🔮 Generate Prediction", type="primary", use_container_width=True):
@@ -703,11 +758,14 @@ def render_ml_view():
                         pred_val = pred_res["prediction"]
 
                         # Local attribution explanation
+                        valid_base_cols = [c for c in feat_cols if c in df.columns]
+                        baseline_df = df[valid_base_cols] if valid_base_cols else pd.DataFrame([input_vals])
+
                         loc_exp = explain_local_prediction(
                             model=eval_data["estimator"],
                             preprocessor=eval_data["preprocessor"],
                             input_row=input_vals,
-                            baseline_df=df[feat_cols],
+                            baseline_df=baseline_df,
                             predicted_value=pred_val,
                             feature_names=feat_cols,
                         )
@@ -781,18 +839,20 @@ def render_ml_view():
         st.markdown("Automated temporal trend detection, exponential smoothing, ARIMA, and ML lag regression forecasting.")
 
         datetime_cols = readiness_report.datetime_columns
-        # Also include any column containing date/time
         potential_dates = [c for c in df.columns if any(k in str(c).lower() for k in ["date", "time", "day", "month", "year", "timestamp"])]
-        date_candidates = list(set(datetime_cols + potential_dates))
-
+        date_candidates = list(dict.fromkeys(datetime_cols + potential_dates))
         numeric_cols = readiness_report.numeric_columns
 
-        if not date_candidates or not numeric_cols:
-            st.warning("⚠️ Time-series forecasting requires at least one Date/Time column and one numeric metric column.")
+        if not numeric_cols:
+            st.warning("⚠️ Time-series forecasting requires at least one numeric metric column.")
         else:
             fc_col1, fc_col2, fc_col3 = st.columns(3)
             with fc_col1:
-                date_col = st.selectbox("Date / Timestamp Column:", options=date_candidates)
+                if date_candidates:
+                    date_col = st.selectbox("Date / Timestamp Column:", options=date_candidates)
+                else:
+                    date_col = "__row_index__"
+                    st.info("No Date column detected. Using sequential row sequence.")
             with fc_col2:
                 num_target = st.selectbox("Metric to Forecast:", options=[c for c in numeric_cols if c != date_col])
             with fc_col3:
@@ -813,9 +873,17 @@ def render_ml_view():
             if st.button("🚀 Generate Time-Series Forecast", type="primary", use_container_width=True):
                 with st.spinner("Fitting forecasting model and generating future confidence intervals..."):
                     try:
+                        work_df = df.copy()
+                        if date_col == "__row_index__":
+                            # Create synthetic date sequence
+                            work_df["__synthetic_date__"] = pd.date_range("2024-01-01", periods=len(work_df), freq="D")
+                            actual_date_col = "__synthetic_date__"
+                        else:
+                            actual_date_col = date_col
+
                         fc_res = run_time_series_forecast(
-                            df=df,
-                            date_col=date_col,
+                            df=work_df,
+                            date_col=actual_date_col,
                             target_col=num_target,
                             horizon=horizon,
                             method=method_opt,
