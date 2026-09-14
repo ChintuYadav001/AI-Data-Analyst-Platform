@@ -182,13 +182,28 @@ class QuantumAIEngine:
             )
 
         # =====================================================================
-        # INTENT 7: Machine Learning & Best Model ("Which model is best?", "Why did this model win?")
+        # INTENT 7: Machine Learning & Best Model ("Which model is best?", "Why did this model win?", "Train models")
         # =====================================================================
-        if any(w in q_lower for w in ["model", "champion", "best model", "train", "accuracy", "f1", "predictive", "algorithm", "target", "predict", "task"]):
+        if any(w in q_lower for w in ["model", "champion", "best model", "train", "accuracy", "f1", "predictive", "algorithm", "target", "predict", "task", "benchmark"]):
+            # Target discovery check
+            if any(w in q_lower for w in ["which column should be the target", "target column", "recommend target", "which target"]):
+                res = tools.detect_target(df)
+                return self._build_tool_response("detect_target", "detect_target", res, ["Train Candidate Models", "Audit ML Readiness"])
+
+            # Explicit training request
+            if any(w in q_lower for w in ["train", "fit model", "run benchmark", "build model", "automl"]):
+                target = target_col
+                if not target:
+                    t_res = tools.detect_target(df)
+                    target = t_res.get("raw", {}).get("top_recommendation") or (df.columns[-1] if not df.empty else None)
+                if target:
+                    res = tools.train_model(df, target_col=target, compute_profile="Fast")
+                    return self._build_tool_response("train_model", "train_model", res, ["Inspect Diagnostics", "Explain Features", "Simulate Prediction"])
+
             champ = champ_info or get_active_champion()
             if champ and any(w in q_lower for w in ["champion", "why", "win", "best", "winner", "current"]):
-                eval_res = tools.evaluate_model(champ.get("experiment_id"))
-                expl_res = tools.explain_model(champ.get("experiment_id"))
+                eval_res = tools.evaluate_model(champ.get("experiment_id"), df=df, target_col=target_col)
+                expl_res = tools.explain_model(champ.get("experiment_id"), df=df, target_col=target_col)
 
                 metrics = champ.get("metrics", {})
                 metric_highlight = ", ".join([f"**{k}**: {v:.3f}" if isinstance(v, float) else f"**{k}**: {v}" for k, v in list(metrics.items())[:3]])
@@ -200,9 +215,15 @@ class QuantumAIEngine:
                     "Task Type": champ.get("task_type", "Regression").replace("_", " ").title(),
                     "Validation Score": metric_highlight,
                 }
+                expl_data = expl_res.get("data")
+                top_features_list = []
+                if isinstance(expl_data, pd.DataFrame) and not expl_data.empty and "feature" in expl_data.columns:
+                    top_features_list = [str(f) for f in expl_data["feature"].head(3).tolist()]
+                top_feats_str = ", ".join(top_features_list) if top_features_list else "balanced attributes"
+
                 explanation = (
                     f"It outperformed other candidates because its architecture captured feature interactions without overfitting. "
-                    f"Top predictive drivers include: {', '.join([f.get('feature') for f in expl_res.get('data', pd.DataFrame()).to_dict('records')[:3]]) if 'data' in expl_res and expl_res['data'] is not None else 'balanced attributes'}."
+                    f"Top predictive drivers include: {top_feats_str}."
                 )
                 recommendation = "Simulate counterfactual predictions in 🤖 ML Cockpit → Scenario Analysis."
 
@@ -212,11 +233,34 @@ class QuantumAIEngine:
                     "category": project_knowledge.CATEGORY_ANALYTICAL_RESULT,
                     "markdown": self._format_structured_output(answer, evidence, explanation, recommendation),
                     "voice_text": f"Your champion model is {champ.get('model_name')}. It won with the strongest validation score and lowest error rate on this dataset.",
-                    "data": expl_res.get("data"),
+                    "data": expl_data if isinstance(expl_data, pd.DataFrame) else None,
                     "actions": ["Explain Features", "Simulate Prediction", "View Leaderboard"],
                 }
 
-            # ML problem detection & target check
+            # If no champion model is trained yet and user asks about best model
+            if not champ and any(w in q_lower for w in ["best", "which model", "winner", "champion", "recommend"]):
+                ml_prob = tools.detect_ml_problem(df, target_col=target_col)
+                task_name = ml_prob.get("raw", {}).get("task_name", "Classification")
+                rec_algo = "Random Forest or XGBoost" if "class" in task_name.lower() else "Random Forest Regressor or Ridge"
+                target_cand = target_col or (df.columns[-1] if not df.empty else "Target")
+                return {
+                    "intent": "recommend_model",
+                    "tool_used": "detect_ml_problem()",
+                    "category": project_knowledge.CATEGORY_ANALYTICAL_RESULT,
+                    "markdown": (
+                        f"### 🤖 Model Recommendation\n\n"
+                        f"Based on your active dataset ({len(df):,} rows × {len(df.columns)} columns) predicting `{target_cand}`, "
+                        f"the recommended task formulation is **{task_name}**.\n\n"
+                        f"**Top Recommended Algorithms:**\n"
+                        f"- **{rec_algo}**: Best for non-linear interactions with minimal hyperparameter sensitivity.\n"
+                        f"- **LightGBM / Gradient Boosting**: Fast, handles non-linearities and missing values natively.\n\n"
+                        f"No models have been trained in this session yet. Click **Train Candidate Models** below to benchmark 10+ models and select your champion!"
+                    ),
+                    "voice_text": f"For your {task_name} dataset, I recommend benchmarking Random Forest and Gradient Boosting. Click train candidate models to find your champion.",
+                    "actions": ["Train Candidate Models", "Detect Best Target", "What is Random Forest?"],
+                }
+
+            # ML problem detection & target check fallback
             if any(w in q_lower for w in ["target", "problem", "which task"]):
                 res = tools.detect_target(df)
                 return self._build_tool_response("detect_target", "detect_target", res, ["Train Candidate Models", "Audit ML Readiness"])

@@ -412,6 +412,55 @@ PROJECT_QA_REGISTRY: List[Dict[str, Any]] = [
             "11. Future Forecasting (ARIMA, Holt-Winters) -> 12. What-If Scenario Simulators -> "
             "13. AI Strategic Insights (Descriptive to Prescriptive) -> 14. Executive PDF Reports & Dashboard Builder."
         )
+    },
+    {
+        "keywords": ["how does forecasting work", "forecasting engine", "holt winters", "arima", "time series"],
+        "category": CATEGORY_PROJECT_INFO,
+        "question": "How does Future Forecasting work in Quantum Analyst?",
+        "simple_answer": (
+            "Quantum Analyst tests multiple time-series algorithms in parallel (Auto-ARIMA, Holt-Winters Exponential Smoothing, "
+            "and Rolling Moving Averages). It runs Augmented Dickey-Fuller stationarity tests, detects seasonality cycles, "
+            "and automatically selects the model with the lowest AIC and RMSE, projecting future values with 95% confidence intervals."
+        ),
+        "analogy": "Like a navigator looking at ocean waves and past currents to forecast exactly where the ship will be in 14 days.",
+        "why_used": [
+            "Provides reliable 14-day to 90-day future horizon projections",
+            "Calculates statistical confidence intervals so you know worst-case and best-case bounds",
+            "Guarantees that past seasonal patterns are factored in automatically"
+        ]
+    },
+    {
+        "keywords": ["what if", "scenario analysis", "counterfactual", "simulate"],
+        "category": CATEGORY_PROJECT_INFO,
+        "question": "What is What-If Scenario Analysis?",
+        "simple_answer": (
+            "What-If Scenario Analysis lets you test counterfactual business questions. You take a real customer or product record, "
+            "adjust sliders for key variables (like raising price by 10% or changing marketing spend), and see how your champion "
+            "machine learning model's prediction changes in real time."
+        ),
+        "analogy": "Like a flight simulator for business decisions—test extreme turbulence safely before flying the real plane.",
+        "why_used": [
+            "Simulates the impact of strategic pricing or operational changes before committing capital",
+            "Identifies high-elasticity leverage points that produce the biggest ROI changes",
+            "Helps non-technical executives interact directly with machine learning predictions"
+        ]
+    },
+    {
+        "keywords": ["data quality score", "quality score", "how is quality calculated", "health score"],
+        "category": CATEGORY_PROJECT_INFO,
+        "question": "How is the Data Quality Score calculated?",
+        "simple_answer": (
+            "The Data Quality Score is a rigorous 0-to-100 metric calculated across 6 objective dimensions: "
+            "1. Completeness (missing value penalties), 2. Uniqueness (duplicate row penalties), "
+            "3. Validity (out-of-range types and format errors), 4. Consistency (cross-column logical contradictions), "
+            "5. Accuracy (outlier severity), and 6. Integrity (schema conformance). A score above 85 is considered ML-Ready."
+        ),
+        "analogy": "Like a credit score for your spreadsheet—penalizing errors and rewarding clean, consistent data.",
+        "why_used": [
+            "Gives instant visibility into whether data is safe for decision making",
+            "Pinpoints the exact column and reason behind every lost point",
+            "Guides the 12-category automated cleaning engine"
+        ]
     }
 ]
 

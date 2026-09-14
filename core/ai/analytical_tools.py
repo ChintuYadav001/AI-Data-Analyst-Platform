@@ -380,17 +380,38 @@ def compare_models(df: pd.DataFrame, target_col: str) -> Dict[str, Any]:
 # =====================================================================
 # 11. Model Evaluation Tool
 # =====================================================================
-def evaluate_model(experiment_id: Optional[str] = None) -> Dict[str, Any]:
+def evaluate_model(experiment_id: Optional[str] = None, df: Optional[pd.DataFrame] = None, target_col: Optional[str] = None) -> Dict[str, Any]:
     """11. Retrieves validation metrics, overfitting flags, and warnings for a trained model."""
     if not experiment_id:
         champ = get_active_champion()
+        if not champ and df is not None and not df.empty:
+            target = target_col or (df.columns[-1] if len(df.columns) > 1 else None)
+            if target:
+                train_model(df, target_col=target, compute_profile="Fast")
+                champ = get_active_champion()
         if not champ:
-            return {"success": False, "error": "No champion model registered yet. Train models in the ML cockpit first."}
+            return {
+                "success": False,
+                "error": "No champion model registered yet.",
+                "answer": "No champion model has been trained yet in this session.",
+                "evidence": {"Status": "No Active Model"},
+                "explanation": "To evaluate validation metrics and diagnostic curves, an algorithm must first be trained.",
+                "recommendation": "Ask me to 'Train models' or click 'Benchmark 10+ Models' in the ML Cockpit.",
+                "voice_summary": "No trained model was found. Ask me to train candidate models to see validation diagnostics."
+            }
         experiment_id = champ.get("experiment_id")
 
     res = ai_ml_tools.evaluate_model(experiment_id)
     if "error" in res:
-        return {"success": False, "error": res["error"]}
+        return {
+            "success": False,
+            "error": res["error"],
+            "answer": f"Evaluation error: {res['error']}",
+            "evidence": {"Error": res["error"]},
+            "explanation": "Unable to evaluate experiment.",
+            "recommendation": "Train a new model in the ML Cockpit.",
+            "voice_summary": f"Could not evaluate model: {res['error']}"
+        }
 
     metrics = res.get("metrics", {})
     metrics_str = ", ".join([f"{k}: {v:.4f}" if isinstance(v, float) else f"{k}: {v}" for k, v in list(metrics.items())[:4]])
@@ -400,7 +421,7 @@ def evaluate_model(experiment_id: Optional[str] = None) -> Dict[str, Any]:
         "Model Name": res.get("model_name"),
         "Key Metrics": metrics_str,
         "Overfitting Risk": "Yes (Action Required)" if res.get("is_overfitting") else "Low (Generalizing Well)",
-        "Active Warnings": len(res.get("warnings", [])),
+        "Active Warnings": len(res.get("warnings") or []),
     }
     explanation = f"Evaluated against independent validation holdout. Generalization score confirms model is production ready."
     recommendation = "Simulate single-record predictions in the Inference tab."
@@ -420,13 +441,40 @@ def evaluate_model(experiment_id: Optional[str] = None) -> Dict[str, Any]:
 # =====================================================================
 # 12. Model Explainability Tool
 # =====================================================================
-def explain_model(experiment_id: Optional[str] = None, row_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def explain_model(experiment_id: Optional[str] = None, row_data: Optional[Dict[str, Any]] = None, df: Optional[pd.DataFrame] = None, target_col: Optional[str] = None) -> Dict[str, Any]:
     """12. Computes global feature importance or local prediction attribution."""
+    if not experiment_id:
+        champ = get_active_champion()
+        if not champ and df is not None and not df.empty:
+            target = target_col or (df.columns[-1] if len(df.columns) > 1 else None)
+            if target:
+                train_model(df, target_col=target, compute_profile="Fast")
+                champ = get_active_champion()
+        if not champ:
+            return {
+                "success": False,
+                "error": "No champion model registered yet.",
+                "answer": "Feature explainability requires a trained model. No champion model is currently active.",
+                "evidence": {"Model Status": "None Active"},
+                "explanation": "Feature importance ranks how much each variable contributes to predictions.",
+                "recommendation": "Ask me to 'Train models' to benchmark algorithms and calculate feature weights.",
+                "voice_summary": "Please train a model first to view feature attributions and driver importance."
+            }
+        experiment_id = champ.get("experiment_id")
+
     res = ai_ml_tools.explain_model(experiment_id, row_data)
     if "error" in res:
-        return {"success": False, "error": res["error"]}
+        return {
+            "success": False,
+            "error": res["error"],
+            "answer": f"Unable to explain model: {res['error']}",
+            "evidence": {"Error": res["error"]},
+            "explanation": "Model explanation requires a valid trained experiment artifact.",
+            "recommendation": "Re-run training in the ML Cockpit.",
+            "voice_summary": "Could not compute feature attributions for this model artifact."
+        }
 
-    top_feats = res.get("global_importance", [])[:5]
+    top_feats = (res.get("global_importance") or [])[:5]
     top_str = ", ".join([f"{f.get('feature')}: {f.get('importance'):.1f}%" for f in top_feats]) if top_feats else "Equal distribution"
 
     answer = f"Global feature attribution for **{res.get('model_name')}** identified dominant predictors."

@@ -184,28 +184,40 @@ def render_floating_ai_copilot():
         bottom: 24px !important;
         right: 28px !important;
         z-index: 9999999 !important;
-        width: auto !important;
+        width: 62px !important;
+        height: 62px !important;
     }
 
     div[data-testid="stElementContainer"]:has(.quantum-ai-anchor) + div[data-testid="stElementContainer"] button {
         background: linear-gradient(135deg, #00F0FF 0%, #0284C7 100%) !important;
         color: #0B0F19 !important;
-        font-weight: 800 !important;
-        font-size: 0.95rem !important;
-        border-radius: 50px !important;
-        padding: 12px 24px !important;
-        box-shadow: 0 6px 30px rgba(0, 240, 255, 0.8) !important;
-        border: 2px solid rgba(255, 255, 255, 0.85) !important;
+        font-weight: 900 !important;
+        font-size: 1.55rem !important;
+        border-radius: 50% !important;
+        width: 62px !important;
+        height: 62px !important;
+        min-width: 62px !important;
+        min-height: 62px !important;
+        padding: 0 !important;
+        box-shadow: 0 8px 30px rgba(0, 240, 255, 0.75), 0 0 16px rgba(0, 240, 255, 0.45) !important;
+        border: 2.5px solid rgba(255, 255, 255, 0.95) !important;
         cursor: pointer !important;
         display: flex !important;
         align-items: center !important;
-        gap: 8px !important;
+        justify-content: center !important;
         transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        animation: quantum-pulse 2.8s infinite !important;
+    }
+
+    @keyframes quantum-pulse {
+        0% { box-shadow: 0 0 0 0 rgba(0, 240, 255, 0.7), 0 8px 30px rgba(0, 240, 255, 0.75); }
+        70% { box-shadow: 0 0 0 14px rgba(0, 240, 255, 0), 0 8px 30px rgba(0, 240, 255, 0.75); }
+        100% { box-shadow: 0 0 0 0 rgba(0, 240, 255, 0), 0 8px 30px rgba(0, 240, 255, 0.75); }
     }
 
     div[data-testid="stElementContainer"]:has(.quantum-ai-anchor) + div[data-testid="stElementContainer"] button:hover {
-        transform: scale(1.06) translateY(-2px) !important;
-        box-shadow: 0 8px 40px rgba(0, 240, 255, 1) !important;
+        transform: scale(1.14) translateY(-3px) !important;
+        box-shadow: 0 12px 45px rgba(0, 240, 255, 1), 0 0 25px rgba(0, 240, 255, 0.8) !important;
     }
 
     /* Pinned Slide-Up Quantum AI Window */
@@ -215,7 +227,7 @@ def render_floating_ai_copilot():
 
     div[data-testid="stVerticalBlock"]:has(> div[data-testid="stElementContainer"] .quantum-ai-window-pin) {
         position: fixed !important;
-        bottom: 82px !important;
+        bottom: 96px !important;
         right: 28px !important;
         z-index: 9999998 !important;
         width: 530px !important;
@@ -230,17 +242,41 @@ def render_floating_ai_copilot():
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.95), 0 0 35px rgba(0, 240, 255, 0.45) !important;
         padding: 16px !important;
     }
+
+    /* Audio Wave Visualizer Animation */
+    .audio-wave-anim {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        height: 16px;
+    }
+    .audio-wave-anim .aw-bar {
+        width: 3px;
+        background: #00F0FF;
+        border-radius: 2px;
+        animation: awPulse 1.2s infinite ease-in-out;
+    }
+    .audio-wave-anim .aw-bar1 { height: 6px; animation-delay: 0.1s; }
+    .audio-wave-anim .aw-bar2 { height: 13px; animation-delay: 0.3s; }
+    .audio-wave-anim .aw-bar3 { height: 16px; animation-delay: 0.5s; }
+    .audio-wave-anim .aw-bar4 { height: 11px; animation-delay: 0.2s; }
+    .audio-wave-anim .aw-bar5 { height: 7px; animation-delay: 0.4s; }
+
+    @keyframes awPulse {
+        0%, 100% { transform: scaleY(0.4); }
+        50% { transform: scaleY(1.2); }
+    }
     </style>
     """, unsafe_allow_html=True)
 
-    # 2. Render Floating Trigger Button [ ✨ AI ]
+    # 2. Render Floating Trigger Button (Round Action Button)
     st.markdown('<div class="quantum-ai-anchor"></div>', unsafe_allow_html=True)
-    launcher_label = "✖ Close AI" if is_open else "✨ AI"
+    launcher_label = "✖" if is_open else "✨"
     if st.button(
         launcher_label,
         key="quantum_ai_floating_launcher_btn",
         type="primary" if not is_open else "secondary",
-        help="Quantum AI - Intelligent Data Analyst Assistant",
+        help="Quantum AI - Intelligent Data Analyst Assistant (Click to open)",
     ):
         st.session_state["copilot_open"] = not is_open
         st.session_state["copilot_minimized"] = False
@@ -251,21 +287,38 @@ def render_floating_ai_copilot():
         with st.container():
             st.markdown('<div class="quantum-ai-window-pin"></div>', unsafe_allow_html=True)
 
-            # Window Header with Controls: Minimize, New Chat, Clear, Close
-            h_col_info, h_col_actions = st.columns([6.5, 3.5])
+            is_voice_active = st.session_state.get("copilot_voice_active", False)
+
+            # Window Header with Controls: Unmute/Voice, Minimize, New Chat, Clear, Close
+            h_col_info, h_col_actions = st.columns([4.7, 5.3])
             with h_col_info:
                 st.markdown("""
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 1.4rem;">✨</span>
+                    <span style="font-size: 1.35rem;">✨</span>
                     <div>
-                        <div style="font-weight: 800; color: #FFFFFF; font-size: 1.05rem; letter-spacing: -0.01em;">Quantum Analyst AI</div>
-                        <div style="font-size: 0.72rem; color: #00F0FF; font-weight: 700; letter-spacing: 0.05em;">YOUR INTELLIGENT DATA ASSISTANT</div>
+                        <div style="font-weight: 800; color: #FFFFFF; font-size: 1.02rem; letter-spacing: -0.01em;">Quantum Analyst AI</div>
+                        <div style="font-size: 0.70rem; color: #00F0FF; font-weight: 700; letter-spacing: 0.05em;">YOUR DATA ANALYST COPILOT</div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
 
             with h_col_actions:
-                c_min, c_new, c_clear = st.columns([1, 1, 1.3], gap="small")
+                c_unmute, c_min, c_new, c_clear, c_close = st.columns([1.9, 0.75, 0.75, 0.75, 0.75], gap="small")
+                with c_unmute:
+                    if not is_voice_active:
+                        if st.button("🔇 Unmute", key="copilot_voice_toggle_btn", help="Click to activate voice assistance (speaks responses out loud)"):
+                            st.session_state["copilot_voice_active"] = True
+                            for msg in reversed(st.session_state.get("copilot_messages", [])):
+                                if msg.get("role") == "assistant" and msg.get("voice_text"):
+                                    st.session_state["copilot_voice_to_play"] = msg["voice_text"]
+                                    break
+                            st.rerun()
+                    else:
+                        if st.button("🔊 Voice On", key="copilot_voice_toggle_btn", help="Mute voice assistance (return to silent chat)"):
+                            st.session_state["copilot_voice_active"] = False
+                            st.session_state["copilot_stop_speech"] = True
+                            st.rerun()
+
                 with c_min:
                     min_icon = "＋" if is_minimized else "−"
                     if st.button(min_icon, key="copilot_min_btn", help="Minimize / Expand Assistant"):
@@ -276,8 +329,8 @@ def render_floating_ai_copilot():
                         st.session_state["copilot_messages"] = [
                             {
                                 "role": "assistant",
-                                "content": "✨ **New Chat Started.** Ask anything about your data, current page, or machine learning algorithms!",
-                                "voice_text": "New chat started. What would you like to analyze or explore?",
+                                "content": "✨ **New Chat Started.** Ask anything about your dataset insights, data quality, or machine learning algorithms!",
+                                "voice_text": "New chat started. What would you like to explore or analyze?",
                                 "actions": ["Summarize dataset", "Check data quality", "Which model is best?"],
                             }
                         ]
@@ -286,22 +339,57 @@ def render_floating_ai_copilot():
                     if st.button("🧹", key="copilot_clear_chat_btn", help="Clear Conversation"):
                         st.session_state["copilot_messages"] = []
                         st.rerun()
+                with c_close:
+                    if st.button("✖", key="copilot_close_header_btn", help="Close Assistant"):
+                        st.session_state["copilot_open"] = False
+                        st.session_state["copilot_stop_speech"] = True
+                        st.rerun()
 
             # If Minimized, don't show body
             if is_minimized:
-                st.caption("Assistant minimized. Click '＋' or '✨ AI' to expand.")
+                st.caption("Assistant minimized. Click '＋' or round '✨' button to expand.")
                 return
 
             # Active Telemetry & Page Context Ribbon
             champ_name = champ_info.get("model_name", "None") if champ_info else "None"
             target_str = str(target_col) if target_col else "Auto"
             st.markdown(f"""
-            <div style="background: rgba(0, 240, 255, 0.06); border: 1px solid rgba(0, 240, 255, 0.25); border-radius: 9px; padding: 6px 12px; margin: 8px 0; font-size: 0.76rem; color: #CBD5E1; display: flex; justify-content: space-between; align-items: center;">
+            <div style="background: rgba(0, 240, 255, 0.06); border: 1px solid rgba(0, 240, 255, 0.25); border-radius: 9px; padding: 6px 12px; margin: 6px 0; font-size: 0.76rem; color: #CBD5E1; display: flex; justify-content: space-between; align-items: center;">
                 <div>📍 <b>Page:</b> <span style="color: #00F0FF;">{current_page}</span></div>
                 <div>📁 <b>Data:</b> {dataset_name[:12]}</div>
                 <div>🏆 <b>Model:</b> {champ_name[:12]}</div>
             </div>
             """, unsafe_allow_html=True)
+
+            # Enhanced Voice Visualizer & Status Bar
+            if is_voice_active:
+                st.markdown("""
+                <div style="background: linear-gradient(90deg, rgba(0, 240, 255, 0.12) 0%, rgba(16, 185, 129, 0.12) 100%); border: 1px solid #00F0FF; border-radius: 9px; padding: 6px 12px; margin: 4px 0 8px 0; display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10B981; box-shadow: 0 0 8px #10B981;"></span>
+                        <span style="font-size: 0.76rem; font-weight: 800; color: #00F0FF; letter-spacing: 0.04em;">VOICE ASSISTANT ACTIVE</span>
+                        <span style="font-size: 0.70rem; color: #94A3B8;">(Auto-Speaking Answers Aloud)</span>
+                    </div>
+                    <div class="audio-wave-anim">
+                        <span class="aw-bar aw-bar1"></span>
+                        <span class="aw-bar aw-bar2"></span>
+                        <span class="aw-bar aw-bar3"></span>
+                        <span class="aw-bar aw-bar4"></span>
+                        <span class="aw-bar aw-bar5"></span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; border-radius: 9px; padding: 6px 12px; margin: 4px 0 8px 0; display: flex; align-items: center; justify-content: space-between;">
+                    <div style="font-size: 0.75rem; color: #94A3B8;">
+                        💬 <b>Chat Assistance Active</b> (Silent mode)
+                    </div>
+                    <div style="font-size: 0.70rem; color: #38BDF8; font-weight: 700;">
+                        Click 🔇 Unmute for Voice Mode
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
             # Suggested Questions (Context-Aware based on active page)
             suggestions = get_context_suggested_questions(current_page, has_data=(df is not None and not df.empty))
@@ -441,8 +529,8 @@ def _process_question(
         "actions": ans_dict.get("actions", []),
     })
 
-    # Auto-queue spoken response
-    if ans_dict.get("voice_text"):
+    # Auto-queue spoken response only when voice assistance is active (unmuted)
+    if st.session_state.get("copilot_voice_active") and ans_dict.get("voice_text"):
         st.session_state["copilot_voice_to_play"] = ans_dict["voice_text"]
 
 

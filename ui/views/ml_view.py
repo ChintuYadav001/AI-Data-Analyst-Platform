@@ -106,6 +106,20 @@ def render_ml_view():
         st.session_state["ml_anomaly_results"] = None
         st.session_state["ml_scenario_results"] = None
 
+    # Auto-initialize target, features, and task type if not yet set so all tabs work immediately
+    if not st.session_state.get("ml_target_col") and len(df.columns) > 1:
+        candidates = detect_target_candidates(df)
+        st.session_state["ml_target_col"] = candidates[0].column if candidates else df.columns[-1]
+
+    if not st.session_state.get("ml_selected_features"):
+        target_c = st.session_state.get("ml_target_col")
+        feature_candidates = [c for c in df.columns if c != target_c]
+        st.session_state["ml_selected_features"] = feature_candidates[:min(15, len(feature_candidates))]
+
+    if not st.session_state.get("ml_task_type") or st.session_state["ml_task_type"] == "auto":
+        if st.session_state.get("ml_target_col"):
+            st.session_state["ml_task_type"] = classify_task_type(df, st.session_state["ml_target_col"])
+
     # Header section
     st.markdown(f"""
     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px;">

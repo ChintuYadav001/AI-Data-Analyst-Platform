@@ -174,3 +174,38 @@ def test_voice_summary_conciseness(sample_sales_df):
     # Should not contain markdown headers or pipe table markers
     assert "###" not in voice_txt
     assert "|---|" not in voice_txt
+
+
+def test_model_resilience_and_recommendations(sample_sales_df):
+    """Verifies that model queries work gracefully even without an active champion model."""
+    engine = QuantumAIEngine()
+
+    # Model recommendation when no champion exists
+    res = engine.process_query("Which model is best?", df=sample_sales_df, champ_info=None)
+    assert "recommend" in res["intent"] or "champion" in res["intent"] or "ml_problem" in res["intent"]
+    assert "Random Forest" in res["markdown"] or "Regression" in res["markdown"] or "model" in res["markdown"].lower()
+
+    # Analytical tool evaluate without champion
+    eval_res = tools.evaluate_model(None, df=None)
+    assert eval_res.get("answer") is not None
+    assert "no champion" in eval_res.get("answer", "").lower() or eval_res.get("success") is True
+
+
+def test_additional_function_knowledge():
+    """Verifies knowledge entries for Forecasting, What-If Scenarios, and Quality Scoring."""
+    engine = QuantumAIEngine()
+
+    # 1. Forecasting knowledge
+    res_fc = engine.process_query("How does forecasting work?")
+    assert res_fc["intent"] == "project_knowledge"
+    assert "ARIMA" in res_fc["markdown"] or "Holt-Winters" in res_fc["markdown"]
+
+    # 2. What-If Scenario knowledge
+    res_sc = engine.process_query("What is What-If scenario analysis?")
+    assert res_sc["intent"] == "project_knowledge"
+    assert "scenario" in res_sc["markdown"].lower() or "counterfactual" in res_sc["markdown"].lower()
+
+    # 3. Quality score knowledge
+    res_qs = engine.process_query("How is the data quality score calculated?")
+    assert res_qs["intent"] == "project_knowledge"
+    assert "completeness" in res_qs["markdown"].lower() or "dimension" in res_qs["markdown"].lower()
