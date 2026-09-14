@@ -13,6 +13,7 @@ import pytest
 from core.ml.dimensionality import run_dimensionality_reduction
 from core.ml.feature_selection import select_best_features
 from core.ml.anomaly_detection import run_anomaly_detection
+from core.ml.clustering import run_clustering, CLUSTERING_ALGORITHMS
 from core.ml.feature_engineering import (
     apply_power_transform,
     apply_quantile_transform,
@@ -278,3 +279,33 @@ def test_ai_ml_tools(sample_numeric_df):
     # 7. generate_ml_report
     rep = ai_tools.generate_ml_report(sample_numeric_df, "target_reg")
     assert rep["pdf_bytes_length"] > 100
+
+    # 8. cluster_data
+    cl_res = ai_tools.cluster_data(sample_numeric_df, algorithm="kmeans", n_clusters=3)
+    assert cl_res["n_clusters"] == 3
+    assert "silhouette_score" in cl_res
+
+    # 9. detect_anomalies
+    anom_res = ai_tools.detect_anomalies(sample_numeric_df, algorithm="isolation_forest", contamination=0.05)
+    assert anom_res["anomaly_count"] > 0
+
+
+def test_clustering(sample_numeric_df):
+    num_cols = ["feat_1", "feat_2", "feat_3", "feat_4"]
+    # 1. K-Means
+    km_res = run_clustering(sample_numeric_df, feature_cols=num_cols, algorithm="kmeans", n_clusters=3)
+    assert km_res["n_clusters"] == 3
+    assert len(km_res["labels"]) == len(sample_numeric_df)
+    assert "silhouette_score" in km_res
+    assert len(km_res["cluster_summary"]) == 3
+
+    # 2. DBSCAN
+    db_res = run_clustering(sample_numeric_df, feature_cols=num_cols, algorithm="dbscan", eps=1.5, min_samples=3)
+    assert "n_clusters" in db_res
+    assert "noise_count" in db_res
+
+    # 3. Agglomerative
+    agg_res = run_clustering(sample_numeric_df, feature_cols=num_cols, algorithm="agglomerative", n_clusters=2)
+    assert agg_res["n_clusters"] == 2
+    assert -1.0 <= agg_res["silhouette_score"] <= 1.0
+

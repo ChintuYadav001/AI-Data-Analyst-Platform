@@ -37,6 +37,7 @@ from core.ml.explainability import explain_local_prediction, STATISTICAL_DISCLAI
 from core.ml.dimensionality import run_dimensionality_reduction, METHOD_METADATA
 from core.ml.feature_selection import select_best_features, FEATURE_SELECTION_METHODS
 from core.ml.anomaly_detection import run_anomaly_detection, ANOMALY_ALGORITHMS
+from core.ml.clustering import run_clustering, CLUSTERING_ALGORITHMS
 from core.ml.scenario_analysis import simulate_what_if_scenario
 from core.ml.report_generator import generate_ml_pdf_report, generate_ml_html_report, generate_ml_csv_summary
 from core.ml.experiment_tracker import (
@@ -66,6 +67,7 @@ def init_ml_session_state():
         "ml_last_training_time": None,
         "ml_forecast_results": None,
         "ml_pca_results": None,
+        "ml_clustering_results": None,
         "ml_fs_results": None,
         "ml_anomaly_results": None,
         "ml_scenario_results": None,
@@ -102,6 +104,7 @@ def render_ml_view():
         st.session_state["ml_active_model_id"] = None
         st.session_state["ml_forecast_results"] = None
         st.session_state["ml_pca_results"] = None
+        st.session_state["ml_clustering_results"] = None
         st.session_state["ml_fs_results"] = None
         st.session_state["ml_anomaly_results"] = None
         st.session_state["ml_scenario_results"] = None
@@ -168,7 +171,7 @@ def render_ml_view():
         "ML Readiness",
         "Target",
         "Features & Selection",
-        "Dimensionality (PCA)",
+        "Dimensionality & Clustering",
         "Models & Config",
         "Training & AutoML",
         "Evaluation & Diagnostics",
@@ -436,11 +439,12 @@ def render_ml_view():
     # TAB 5: DIMENSIONALITY (PCA) & ANOMALY DETECTION
     # =========================================================================
     with tabs[4]:
-        st.subheader("🌐 Dimensionality (PCA) & Unsupervised Outlier Detection")
-        st.caption("Linear and non-linear manifold decomposition (PCA, Truncated SVD, Kernel PCA, ICA, NMF, t-SNE) & anomaly detection (Isolation Forest, One-Class SVM, LOF, Elliptic Envelope).")
+        st.subheader("🌐 Dimensionality (PCA) & Unsupervised Learning Suite")
+        st.caption("Linear and non-linear manifold decomposition (PCA, Truncated SVD, Kernel PCA, ICA, NMF, t-SNE), clustering (K-Means, DBSCAN, Agglomerative), & anomaly detection (Isolation Forest, One-Class SVM, LOF, Elliptic Envelope).")
 
-        t5_pca, t5_anomaly = st.tabs([
+        t5_pca, t5_cluster, t5_anomaly = st.tabs([
             "🌐 PCA & Manifold Decomposition",
+            "🔮 Unsupervised Clustering (K-Means, DBSCAN, Agglomerative)",
             "🚨 Unsupervised Anomaly & Outlier Detection",
         ])
 
@@ -569,6 +573,100 @@ def render_ml_view():
                         )
                         fig_load.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#E2E8F0")
                         st.plotly_chart(fig_load, use_container_width=True)
+
+        with t5_cluster:
+            if len(num_features) < 2:
+                st.info("Clustering analysis requires at least 2 numeric feature columns.")
+            else:
+                cl_col1, cl_col2, cl_col3, cl_col4 = st.columns([2, 1, 1, 1])
+                with cl_col1:
+                    cl_algo = st.selectbox(
+                        "Clustering Algorithm:",
+                        options=list(CLUSTERING_ALGORITHMS.keys()),
+                        format_func=lambda k: f"{CLUSTERING_ALGORITHMS[k]['name']} ({CLUSTERING_ALGORITHMS[k]['family']})",
+                        index=0,
+                        key="ml_clustering_algo_select",
+                    )
+                with cl_col2:
+                    if cl_algo in ("kmeans", "agglomerative"):
+                        auto_k = st.checkbox("Auto-Discover k", value=True, key="ml_cluster_auto_k_check", help="Evaluate Silhouette across k=2..8 to find optimal partition.")
+                        cl_k = st.slider("Target Clusters (k):", min_value=2, max_value=min(10, max(2, len(df) - 1)), value=3, key="ml_cluster_k_slider", disabled=auto_k)
+                        cl_eps = 0.5
+                        cl_min_s = 5
+                    else:
+                        auto_k = False
+                        cl_k = 3
+                        cl_eps = st.slider("DBSCAN Epsilon (eps):", min_value=0.1, max_value=3.0, value=0.5, step=0.1, key="ml_cluster_eps_slider")
+                        cl_min_s = st.slider("Min Samples:", min_value=2, max_value=20, value=5, key="ml_cluster_mins_slider")
+
+                with cl_col3:
+                    st.caption(CLUSTERING_ALGORITHMS[cl_algo]["description"])
+
+                with cl_col4:
+                    st.write("")
+                    st.write("")
+                    run_cl_btn = st.button("🔮 Run Clustering", type="primary", use_container_width=True, key="ml_run_clustering_btn")
+
+                if run_cl_btn:
+                    with st.spinner("Partitioning feature space and calculating cluster metrics..."):
+                        try:
+                            cl_res = run_clustering(
+                                df=df,
+                                feature_cols=num_features,
+                                algorithm=cl_algo,
+                                n_clusters=cl_k,
+                                eps=cl_eps,
+                                min_samples=cl_min_s,
+                                auto_k=auto_k,
+                            )
+                            st.session_state["ml_clustering_results"] = cl_res
+                            st.success(cl_res["summary"])
+                        except Exception as e:
+                            st.error(f"Clustering execution failed: {str(e)}")
+
+                cl_res = st.session_state.get("ml_clustering_results")
+                if cl_res:
+                    cm1, cm2, cm3, cm4 = st.columns(4)
+                    with cm1:
+                        st.metric("Discovered Clusters", cl_res["n_clusters"])
+                    with cm2:
+                        st.metric("Silhouette Score", f"{cl_res['silhouette_score']:.4f}", help="Range -1 to 1. Higher indicates well-separated compact clusters.")
+                    with cm3:
+                        st.metric("Davies-Bouldin Index", f"{cl_res['davies_bouldin_score']:.4f}", help="Lower indicates better clustering separation.")
+                    with cm4:
+                        st.metric("Calinski-Harabasz", f"{cl_res['calinski_harabasz_score']:,.1f}", help="Higher indicates denser, better-separated clusters.")
+
+                    if cl_res.get("k_evaluations"):
+                        with st.expander("📊 Automated k Evaluation Scores (Elbow / Silhouette Search)", expanded=False):
+                            st.dataframe(pd.DataFrame(cl_res["k_evaluations"]), use_container_width=True)
+
+                    # 2D PCA Space Projection
+                    if cl_res.get("pca_projection"):
+                        st.markdown("#### 🗺️ Cluster Partition in 2D Latent Space")
+                        cl_proj_df = pd.DataFrame(cl_res["pca_projection"])
+                        fig_cl = px.scatter(
+                            cl_proj_df,
+                            x="pca_x",
+                            y="pca_y",
+                            color="cluster",
+                            title=f"2D PCA Projection ({cl_res['algorithm_name']}) - {cl_res.get('variance_explained_pct', 0)}% Var Explained",
+                            hover_data=["index"],
+                            color_discrete_sequence=px.colors.qualitative.Bold,
+                        )
+                        fig_cl.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                        st.plotly_chart(fig_cl, use_container_width=True)
+
+                    # Cluster Profiles Summary
+                    if cl_res.get("cluster_summary"):
+                        st.markdown("#### 📋 Cluster Profiles (Feature Centroids & Record Counts)")
+                        prof_df = pd.DataFrame(cl_res["cluster_summary"])
+                        st.dataframe(prof_df, use_container_width=True)
+
+                        # CSV Export with cluster labels appended
+                        df_with_clusters = df.copy()
+                        df_with_clusters["Cluster_Label"] = cl_res["labels"]
+                        csv_cl = df_with_clusters.to_csv(index=False).encode("utf-8")
+                        st.download_button("📥 Export Clustered Dataset (CSV)", data=csv_cl, file_name=f"clustered_data_{cl_algo}.csv", mime="text/csv")
 
         with t5_anomaly:
             if len(num_features) < 2:

@@ -263,3 +263,37 @@ def generate_ml_report(
         "csv_summary": csv_str,
         "summary": "Institutional report generated across PDF, HTML, and CSV formats.",
     }
+
+
+def cluster_data(
+    df: pd.DataFrame,
+    feature_cols: Optional[List[str]] = None,
+    algorithm: str = "kmeans",
+    n_clusters: int = 3,
+    auto_k: bool = False,
+) -> Dict[str, Any]:
+    """15. Discovers natural groupings and segments via K-Means, DBSCAN, or Agglomerative Clustering."""
+    from core.ml.clustering import run_clustering
+    return run_clustering(
+        df=df,
+        feature_cols=feature_cols,
+        algorithm=algorithm,
+        n_clusters=n_clusters,
+        auto_k=auto_k,
+    )
+
+
+def detect_anomalies(
+    df: pd.DataFrame,
+    feature_cols: Optional[List[str]] = None,
+    algorithm: str = "isolation_forest",
+    contamination: float = 0.05,
+) -> Dict[str, Any]:
+    """16. Detects multi-dimensional outliers using Isolation Forest, LOF, One-Class SVM, or Elliptic Envelope."""
+    from core.ml.anomaly_detection import run_anomaly_detection
+    return run_anomaly_detection(
+        df=df,
+        feature_cols=feature_cols,
+        algorithm=algorithm,
+        contamination=contamination,
+    )
