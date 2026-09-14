@@ -42,7 +42,8 @@ ANALYSIS_ITEMS = [
 INTELLIGENCE_ITEMS = [
     ("⚡ SQL Analytics", "SQL Analytics"),
     ("✨ AI Insights", "AI Insights"),
-    ("💬 Chat with Data", "AI Chat")
+    ("💬 Chat with Data", "AI Chat"),
+    ("🤖 AI Model Copilot", "AI Model Copilot")
 ]
 
 OUTPUT_ITEMS = [
@@ -347,6 +348,9 @@ def dispatch_active_view(route: str):
     elif route == "AI Chat":
         from ui.views.chat_view import render_chat_view
         render_chat_view()
+    elif route == "AI Model Copilot":
+        from ui.views.copilot_view import render_copilot_full_view
+        render_copilot_full_view()
     elif route == "Reports":
         from ui.views.reports_view import render_reports_view
         render_reports_view()

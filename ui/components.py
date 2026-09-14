@@ -826,7 +826,19 @@ def render_top_navbar(breadcrumb: str = "Workspace / Dashboard", active_dataset:
             st.session_state["pending_chat_prompt"] = query
 
     with col_right:
-        c_theme, c_notif, c_prof = st.columns([1.0, 1.1, 1.9], gap="small")
+        c_copilot, c_theme, c_notif, c_prof = st.columns([1.3, 1.0, 1.0, 1.8], gap="small")
+
+        # 0. AI MODEL COPILOT & VOICE SHORTCUT
+        with c_copilot:
+            if st.button(
+                "🤖 Copilot",
+                key="top_ai_copilot_quick_btn",
+                use_container_width=True,
+                help="Open AI Model Copilot & Voice Assistant"
+            ):
+                st.session_state["copilot_open"] = True
+                st.session_state["active_nav"] = "AI Model Copilot"
+                st.rerun()
 
         # 1. THEME TOGGLE (Dark / Light)
         with c_theme:

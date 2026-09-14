@@ -2,12 +2,13 @@
 ui.copilot_widget
 =================
 Floating AI Model Copilot & Voice Assistant Widget for Quantum Analyst.
-Renders an interactive floating button on the bottom-right of the screen that expands
+Renders an ultra-visible floating pill on the bottom-right of the screen that expands
 into an AI Assistant specialized in explaining models in simple language with real-world
 business uses, intuitive analogies, and native Web Speech Voice Input & Output.
 """
 
 import json
+from typing import Optional, Dict, Any, List
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -57,177 +58,200 @@ def render_floating_ai_copilot():
         st.session_state["copilot_pending_query"] = None
         _process_copilot_question(user_q, copilot_engine, df, champ_info, bench_res)
 
-    # 1. Custom CSS for Floating Anchor Button
-    st.markdown("""
-    <style>
-    /* Floating Copilot Fixed Container */
-    .copilot-floating-anchor {
-        position: fixed;
-        bottom: 24px;
-        right: 28px;
-        z-index: 999999;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-    }
-    .copilot-pulse-badge {
-        background: linear-gradient(135deg, #00F0FF, #3B82F6);
-        color: #0B0F19;
-        font-weight: 800;
-        font-size: 0.85rem;
-        padding: 10px 18px;
-        border-radius: 30px;
-        box-shadow: 0 0 20px rgba(0, 240, 255, 0.45);
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        transition: all 0.25s ease-in-out;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-    }
-    .copilot-pulse-badge:hover {
-        transform: scale(1.05);
-        box-shadow: 0 0 28px rgba(0, 240, 255, 0.7);
-    }
-    .copilot-drawer {
-        background: rgba(11, 15, 25, 0.95);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border: 1px solid #00F0FF;
-        box-shadow: 0 10px 35px rgba(0, 240, 255, 0.25);
-        border-radius: 14px;
-        padding: 18px;
-        margin-top: 14px;
-        margin-bottom: 20px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
     # If audio voice synthesis is triggered, render invisible Web Speech audio tag
     if st.session_state.get("copilot_voice_to_play"):
         voice_script = st.session_state["copilot_voice_to_play"]
         st.session_state["copilot_voice_to_play"] = None
         _render_speech_synthesis(voice_script)
 
-    # 2. Floating Bottom-Right Controls
     is_open = st.session_state.get("copilot_open", False)
 
-    # Floating trigger bar
-    f_c1, f_c2 = st.columns([8, 2])
-    with f_c2:
+    # 1. Inject Bulletproof CSS for Fixed Bottom-Right Positioning
+    st.markdown("""
+    <style>
+    /* Fixed Floating Copilot Launcher Container */
+    div[data-testid="stElementContainer"]:has(.copilot-marker-pin) {
+        display: none !important;
+    }
+
+    div[data-testid="stElementContainer"]:has(.copilot-marker-pin) + div[data-testid="stElementContainer"] {
+        position: fixed !important;
+        bottom: 24px !important;
+        right: 28px !important;
+        z-index: 9999999 !important;
+        width: auto !important;
+        background: transparent !important;
+        display: block !important;
+    }
+
+    div[data-testid="stElementContainer"]:has(.copilot-marker-pin) + div[data-testid="stElementContainer"] button {
+        background: linear-gradient(135deg, #00F0FF 0%, #0284C7 100%) !important;
+        color: #0B0F19 !important;
+        font-weight: 800 !important;
+        font-size: 0.95rem !important;
+        border-radius: 50px !important;
+        padding: 12px 24px !important;
+        box-shadow: 0 4px 25px rgba(0, 240, 255, 0.75) !important;
+        border: 2px solid rgba(255, 255, 255, 0.7) !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        transition: all 0.25s ease-in-out !important;
+    }
+
+    div[data-testid="stElementContainer"]:has(.copilot-marker-pin) + div[data-testid="stElementContainer"] button:hover {
+        transform: scale(1.06) translateY(-2px) !important;
+        box-shadow: 0 6px 35px rgba(0, 240, 255, 0.95) !important;
+    }
+
+    /* Pinned Slide-Up Copilot Chat Window */
+    div[data-testid="stElementContainer"]:has(.copilot-drawer-pin) {
+        display: none !important;
+    }
+
+    div[data-testid="stVerticalBlock"]:has(> div[data-testid="stElementContainer"] .copilot-drawer-pin) {
+        position: fixed !important;
+        bottom: 78px !important;
+        right: 28px !important;
+        z-index: 9999998 !important;
+        width: 520px !important;
+        max-width: calc(100vw - 36px) !important;
+        max-height: 82vh !important;
+        overflow-y: auto !important;
+        background: rgba(11, 15, 25, 0.98) !important;
+        backdrop-filter: blur(20px) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
+        border: 2px solid #00F0FF !important;
+        border-radius: 18px !important;
+        box-shadow: 0 15px 50px rgba(0, 0, 0, 0.95), 0 0 35px rgba(0, 240, 255, 0.45) !important;
+        padding: 18px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # 2. Inject DOM Floating Pill via JS into Parent Document
+    # This guarantees that even if CSS selectors are ignored by older browsers,
+    # the floating button is 100% visible in the bottom-right corner!
+    _render_dom_floating_pill(is_open)
+
+    # 3. Streamlit Native Trigger Button Container
+    with st.container():
+        st.markdown('<div class="copilot-marker-pin"></div>', unsafe_allow_html=True)
         btn_label = "✖ Close AI Copilot" if is_open else "🤖 AI Model Copilot (Voice Ready)"
-        if st.button(btn_label, type="primary" if not is_open else "secondary", key="copilot_toggle_btn", use_container_width=True):
+        if st.button(btn_label, key="copilot_floating_btn", type="primary" if not is_open else "secondary"):
             st.session_state["copilot_open"] = not is_open
             st.rerun()
 
-    # 3. If Open, render the Copilot Window
+    # 4. If Open, render the Copilot Window pinned to bottom right
     if is_open:
-        st.markdown("""
-        <div class="copilot-drawer">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1E293B; padding-bottom: 10px; margin-bottom: 12px;">
+        with st.container():
+            st.markdown('<div class="copilot-drawer-pin"></div>', unsafe_allow_html=True)
+
+            # Window Header
+            h_c1, h_c2 = st.columns([8, 2])
+            with h_c1:
+                st.markdown("""
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 1.3rem;">🤖</span>
+                    <span style="font-size: 1.4rem;">🤖</span>
                     <div>
                         <div style="font-weight: 800; color: #FFFFFF; font-size: 1.05rem;">Quantum AI Model Copilot</div>
                         <div style="font-size: 0.72rem; color: #00F0FF; font-weight: 700; letter-spacing: 0.05em;">● VOICE & REASONING ENGINE ACTIVE</div>
                     </div>
                 </div>
-            </div>
-        """, unsafe_allow_html=True)
-
-        # Context Ribbon
-        ds_name = st.session_state.get("current_project_name", "No Active Dataset")
-        champ_name = champ_info.get("model_name") if champ_info else (bench_res.get("champion_name") if bench_res else "None Trained")
-        target_v = st.session_state.get("ml_target_col", "None")
-
-        c_ctx1, c_ctx2, c_ctx3, c_ctx4 = st.columns([3, 3, 2, 2])
-        with c_ctx1:
-            st.caption(f"📁 **Dataset**: `{ds_name}`")
-        with c_ctx2:
-            st.caption(f"🏆 **Champion**: `{champ_name}`")
-        with c_ctx3:
-            st.caption(f"🎯 **Target**: `{target_v}`")
-        with c_ctx4:
-            if st.button("🧹 Clear Chat", key="copilot_clear_chat_btn"):
-                st.session_state["copilot_messages"] = []
-                st.rerun()
-
-        # One-Click Suggestion Chips
-        st.markdown("<div style='font-size: 0.76rem; font-weight: 700; color: #94A3B8; margin-top: 6px; margin-bottom: 4px;'>QUICK INQUIRY CHIPS:</div>", unsafe_allow_html=True)
-        q_cols = st.columns(4)
-        with q_cols[0]:
-            if st.button("💡 Explain all models simply", key="chip_1", use_container_width=True):
-                st.session_state["copilot_pending_query"] = "Explain all models in simple words"
-                st.rerun()
-        with q_cols[1]:
-            if st.button("🌲 Random Forest vs XGBoost", key="chip_2", use_container_width=True):
-                st.session_state["copilot_pending_query"] = "Compare Random Forest vs XGBoost in simple language"
-                st.rerun()
-        with q_cols[2]:
-            if st.button("📷 Explain PCA in 1 minute", key="chip_3", use_container_width=True):
-                st.session_state["copilot_pending_query"] = "Explain PCA simply with analogy"
-                st.rerun()
-        with q_cols[3]:
-            if st.button("🚨 Anomaly detection in business", key="chip_4", use_container_width=True):
-                st.session_state["copilot_pending_query"] = "How does anomaly detection work in business?"
-                st.rerun()
-
-        st.markdown("<hr style='border-color: #1E293B; margin: 12px 0;'>", unsafe_allow_html=True)
-
-        # Message Feed
-        for idx, msg in enumerate(st.session_state["copilot_messages"]):
-            if msg["role"] == "user":
-                st.markdown(f"""
-                <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
-                    <div style="background: #1E293B; border: 1px solid #334155; color: #E2E8F0; padding: 10px 16px; border-radius: 16px 16px 2px 16px; max-width: 85%; font-size: 0.88rem;">
-                        <b>You:</b> {msg['content']}
-                    </div>
-                </div>
                 """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div style="display: flex; justify-content: flex-start; margin-bottom: 12px;">
-                    <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(0, 240, 255, 0.3); color: #F1F5F9; padding: 14px 18px; border-radius: 16px 16px 16px 2px; max-width: 95%; font-size: 0.88rem; line-height: 1.6;">
-                        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-                            <span style="color: #00F0FF; font-weight: 800; font-size: 0.78rem;">🤖 QUANTUM MODEL COPILOT</span>
-                        </div>
-                        {msg['content']}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                # Voice Output Button for Assistant Response
-                if msg.get("voice_text"):
-                    v_col1, v_col2 = st.columns([1, 8])
-                    with v_col1:
-                        if st.button("🔊 Listen", key=f"voice_speak_{idx}"):
-                            st.session_state["copilot_voice_to_play"] = msg["voice_text"]
-                            st.rerun()
-
-        st.markdown("<hr style='border-color: #1E293B; margin: 12px 0;'>", unsafe_allow_html=True)
-
-        # Voice Input & Text Input Bar
-        st.markdown("##### 💬 Ask a Model Question or Use Voice:")
-        c_mic, c_input, c_btn = st.columns([1, 7, 2])
-
-        with c_mic:
-            _render_voice_input_button()
-
-        with c_input:
-            user_text = st.text_input(
-                "Your question:",
-                placeholder="e.g. Which model is best for predicting sales? Why did my champion win? Explain Ridge vs Lasso...",
-                label_visibility="collapsed",
-                key="copilot_text_input",
-            )
-
-        with c_btn:
-            if st.button("⚡ Ask Copilot", type="primary", use_container_width=True, key="copilot_send_btn"):
-                if user_text.strip():
-                    _process_copilot_question(user_text, copilot_engine, df, champ_info, bench_res)
+            with h_c2:
+                if st.button("🧹 Clear", key="copilot_clear_chat_btn_2", use_container_width=True):
+                    st.session_state["copilot_messages"] = []
                     st.rerun()
 
-        st.markdown("</div>", unsafe_allow_html=True)
+            # Active Context Ribbon
+            ds_name = st.session_state.get("current_project_name", "No Active Dataset")
+            champ_name = champ_info.get("model_name") if champ_info else (bench_res.get("champion_name") if bench_res else "None Trained")
+            target_v = st.session_state.get("ml_target_col", "None")
+
+            st.markdown(f"""
+            <div style="background: rgba(0, 240, 255, 0.06); border: 1px solid rgba(0, 240, 255, 0.2); border-radius: 8px; padding: 6px 12px; margin: 10px 0; font-size: 0.78rem; color: #CBD5E1; display: flex; justify-content: space-between;">
+                <div>📁 <b>Data:</b> {ds_name}</div>
+                <div>🏆 <b>Model:</b> {champ_name}</div>
+                <div>🎯 <b>Target:</b> {target_v}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Quick Question Chips
+            st.markdown("<div style='font-size: 0.74rem; font-weight: 700; color: #94A3B8; margin-bottom: 4px;'>POPULAR INQUIRIES:</div>", unsafe_allow_html=True)
+            q1, q2 = st.columns(2)
+            with q1:
+                if st.button("💡 Explain all models simply", key="chip_1", use_container_width=True):
+                    st.session_state["copilot_pending_query"] = "Explain all models in simple words"
+                    st.rerun()
+                if st.button("🌲 Random Forest vs XGBoost", key="chip_2", use_container_width=True):
+                    st.session_state["copilot_pending_query"] = "Compare Random Forest vs XGBoost in simple language"
+                    st.rerun()
+            with q2:
+                if st.button("📷 Explain PCA in 1 minute", key="chip_3", use_container_width=True):
+                    st.session_state["copilot_pending_query"] = "Explain PCA simply with analogy"
+                    st.rerun()
+                if st.button("🚨 Anomaly detection in business", key="chip_4", use_container_width=True):
+                    st.session_state["copilot_pending_query"] = "How does anomaly detection work in business?"
+                    st.rerun()
+
+            st.markdown("<hr style='border-color: #1E293B; margin: 10px 0;'>", unsafe_allow_html=True)
+
+            # Message Feed
+            msg_box = st.container(height=320)
+            with msg_box:
+                for idx, msg in enumerate(st.session_state["copilot_messages"]):
+                    if msg["role"] == "user":
+                        st.markdown(f"""
+                        <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+                            <div style="background: #1E293B; border: 1px solid #334155; color: #E2E8F0; padding: 8px 14px; border-radius: 14px 14px 2px 14px; max-width: 85%; font-size: 0.88rem;">
+                                <b>You:</b> {msg['content']}
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"""
+                        <div style="display: flex; justify-content: flex-start; margin-bottom: 10px;">
+                            <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(0, 240, 255, 0.35); color: #F1F5F9; padding: 12px 16px; border-radius: 14px 14px 14px 2px; max-width: 95%; font-size: 0.88rem; line-height: 1.5;">
+                                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                                    <span style="color: #00F0FF; font-weight: 800; font-size: 0.74rem;">🤖 QUANTUM MODEL COPILOT</span>
+                                </div>
+                                {msg['content']}
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        if msg.get("voice_text"):
+                            if st.button(f"🔊 Listen to Voice Explanation", key=f"voice_speak_{idx}"):
+                                st.session_state["copilot_voice_to_play"] = msg["voice_text"]
+                                st.rerun()
+
+            st.markdown("<hr style='border-color: #1E293B; margin: 10px 0;'>", unsafe_allow_html=True)
+
+            # Voice Input + Question Input
+            c_mic, c_input, c_btn = st.columns([1.2, 6.8, 2])
+            with c_mic:
+                _render_voice_input_button()
+            with c_input:
+                user_text = st.text_input(
+                    "Your question:",
+                    placeholder="Type or click 🎙️ to talk: e.g. What is the best model? Explain Ridge vs Lasso...",
+                    label_visibility="collapsed",
+                    key="copilot_text_input_bottom",
+                )
+            with c_btn:
+                if st.button("⚡ Ask AI", type="primary", use_container_width=True, key="copilot_send_btn_bottom"):
+                    if user_text.strip():
+                        _process_copilot_question(user_text, copilot_engine, df, champ_info, bench_res)
+                        st.rerun()
+
+            # Direct shortcut to Full-Page Copilot View
+            st.markdown("<div style='margin-top: 6px;'></div>", unsafe_allow_html=True)
+            if st.button("↗️ Open Dedicated Full-Page Copilot", key="drawer_open_fullpage_btn", use_container_width=True):
+                st.session_state["copilot_open"] = False
+                st.session_state["active_nav"] = "AI Model Copilot"
+                st.rerun()
 
 
 def _process_copilot_question(
@@ -261,6 +285,34 @@ def _process_copilot_question(
         st.session_state["copilot_voice_to_play"] = ans_dict["voice_text"]
 
 
+def _render_dom_floating_pill(is_open: bool):
+    """Direct DOM anchor helper to guarantee bottom-right fixed positioning across all browsers."""
+    script = """
+    <script>
+    (function() {
+        try {
+            const markers = document.querySelectorAll('.copilot-marker-pin');
+            markers.forEach(m => {
+                const elem = m.closest('[data-testid="stElementContainer"]');
+                if (elem && elem.nextElementSibling) {
+                    const btnBox = elem.nextElementSibling;
+                    btnBox.style.setProperty('position', 'fixed', 'important');
+                    btnBox.style.setProperty('bottom', '24px', 'important');
+                    btnBox.style.setProperty('right', '28px', 'important');
+                    btnBox.style.setProperty('z-index', '9999999', 'important');
+                    btnBox.style.setProperty('width', 'auto', 'important');
+                }
+            });
+        } catch(e) {}
+    })();
+    </script>
+    """
+    try:
+        st.html(script, unsafe_allow_javascript=True)
+    except Exception:
+        pass
+
+
 def _render_speech_synthesis(text: str):
     """Injects Web Speech API Text-to-Speech into browser to speak text aloud."""
     clean_json_text = json.dumps(text)
@@ -268,21 +320,25 @@ def _render_speech_synthesis(text: str):
         f"""
         <script>
         (function() {{
-            if ('speechSynthesis' in window) {{
-                window.speechSynthesis.cancel(); // cancel any active speech
-                const msg = new SpeechSynthesisUtterance({clean_json_text});
-                msg.rate = 1.0;
-                msg.pitch = 1.0;
-                msg.lang = 'en-US';
+            try {{
+                const targetWindow = window.parent || window;
+                if ('speechSynthesis' in targetWindow) {{
+                    targetWindow.speechSynthesis.cancel();
+                    const msg = new targetWindow.SpeechSynthesisUtterance({clean_json_text});
+                    msg.rate = 1.0;
+                    msg.pitch = 1.0;
+                    msg.lang = 'en-US';
 
-                // Try to find natural sounding English voice
-                const voices = window.speechSynthesis.getVoices();
-                const preferredVoice = voices.find(v => v.lang === 'en-US' && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha')));
-                if (preferredVoice) {{
-                    msg.voice = preferredVoice;
+                    const voices = targetWindow.speechSynthesis.getVoices();
+                    const preferredVoice = voices.find(v => v.lang === 'en-US' && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha')));
+                    if (preferredVoice) {{
+                        msg.voice = preferredVoice;
+                    }}
+
+                    targetWindow.speechSynthesis.speak(msg);
                 }}
-
-                window.speechSynthesis.speak(msg);
+            }} catch(e) {{
+                console.warn("Speech synthesis error: ", e);
             }}
         }})();
         </script>
@@ -337,7 +393,8 @@ def _render_voice_input_button():
             <button id="micBtn" title="Speak Question (Voice Input)">🎙️</button>
             <script>
                 const btn = document.getElementById('micBtn');
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                const targetWindow = window.parent || window;
+                const SpeechRecognition = targetWindow.SpeechRecognition || targetWindow.webkitSpeechRecognition || window.SpeechRecognition || window.webkitSpeechRecognition;
 
                 if (!SpeechRecognition) {
                     btn.title = "Speech recognition not supported in this browser.";
@@ -361,10 +418,9 @@ def _render_voice_input_button():
                     recognition.onresult = (event) => {
                         btn.classList.remove('listening');
                         const transcript = event.results[0][0].transcript;
-                        // Populate Streamlit text input via DOM access if accessible
-                        const parentInputs = window.parent.document.querySelectorAll('input[type="text"]');
+                        const parentInputs = targetWindow.document.querySelectorAll('input[type="text"]');
                         for (let inp of parentInputs) {
-                            if (inp.placeholder && inp.placeholder.includes('Which model is best')) {
+                            if (inp.placeholder && (inp.placeholder.includes('talk') || inp.placeholder.includes('model') || inp.placeholder.includes('Ask') || inp.placeholder.includes('question') || inp.placeholder.includes('Which'))) {
                                 inp.value = transcript;
                                 inp.dispatchEvent(new Event('input', { bubbles: true }));
                                 inp.dispatchEvent(new Event('change', { bubbles: true }));

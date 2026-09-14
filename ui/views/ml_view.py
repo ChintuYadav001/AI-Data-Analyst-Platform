@@ -128,6 +128,26 @@ def render_ml_view():
     </div>
     """, unsafe_allow_html=True)
 
+    # AI Model Copilot Quick Access Ribbon
+    c_banner1, c_banner2 = st.columns([7.8, 2.2])
+    with c_banner1:
+        st.markdown("""
+        <div style="background: rgba(0, 240, 255, 0.05); border: 1px solid rgba(0, 240, 255, 0.25); border-radius: 10px; padding: 8px 14px; display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1.2rem;">🎙️</span>
+            <div>
+                <span style="font-weight: 700; color: #FFFFFF; font-size: 0.88rem;">AI Model Copilot & Voice Assistant Active</span>
+                <span style="color: #94A3B8; font-size: 0.8rem; margin-left: 8px;">Ask about any model in simple words, PCA analogies, or listen with voice.</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with c_banner2:
+        if st.button("🤖 Ask AI Copilot", key="ml_cockpit_open_copilot_btn", use_container_width=True, type="primary"):
+            st.session_state["copilot_open"] = True
+            st.session_state["active_nav"] = "AI Model Copilot"
+            st.rerun()
+
+    st.markdown("<div style='margin-bottom: 8px;'></div>", unsafe_allow_html=True)
+
     # 13 Institutional Tabs
     tabs = st.tabs([
         "Overview",
