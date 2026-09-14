@@ -1,0 +1,106 @@
+{
+  "datasets": {
+    "ds_e234e3c2": {
+      "dataset_id": "ds_e234e3c2",
+      "name": "Test Sales",
+      "dataset_hash": "330be1378c3cae5d",
+      "created_at": 1789341954.3604517,
+      "versions": {
+        "dataset_v1": {
+          "parquet_path": "D:\\antigrevity_project\\data analyse\\data\\parquet\\330be1378c3cae5d.parquet",
+          "rows": 54,
+          "columns": 10,
+          "registered_at": 1789341954.3604555,
+          "lineage": {
+            "source_file": "test_sales.csv",
+            "source_type": "csv"
+          }
+        }
+      },
+      "active_version": "dataset_v1"
+    },
+    "ds_07c9874d": {
+      "dataset_id": "ds_07c9874d",
+      "name": "Million Transactions",
+      "dataset_hash": "b7023dfb6a09560f",
+      "created_at": 1789342073.1431406,
+      "versions": {
+        "dataset_v1": {
+          "parquet_path": "D:\\antigrevity_project\\data analyse\\data\\parquet\\b7023dfb6a09560f.parquet",
+          "rows": 1000000,
+          "columns": 8,
+          "registered_at": 1789342073.1431446,
+          "lineage": {
+            "source_file": "million_transactions.csv",
+            "source_type": "csv"
+          }
+        }
+      },
+      "active_version": "dataset_v1"
+    },
+    "ds_f0fc83ff": {
+      "dataset_id": "ds_f0fc83ff",
+      "name": "Ecommerce Customer Data Large",
+      "dataset_hash": "10a90d26b6f6cada",
+      "created_at": 1789342155.038052,
+      "versions": {
+        "dataset_v1": {
+          "parquet_path": "D:\\antigrevity_project\\data analyse\\data\\parquet\\10a90d26b6f6cada.parquet",
+          "rows": 250000,
+          "columns": 13,
+          "registered_at": 1789342155.0380597,
+          "lineage": {
+            "source_file": "ecommerce_customer_data_large.csv",
+            "source_type": "csv"
+          }
+        }
+      },
+      "active_version": "dataset_v1"
+    },
+    "ds_d4c1e5d6": {
+      "dataset_id": "ds_d4c1e5d6",
+      "name": "Sales 250K",
+      "dataset_hash": "2d594c24215cd8d6",
+      "created_at": 1789342613.5018752,
+      "versions": {
+        "dataset_v1": {
+          "parquet_path": "D:\\antigrevity_project\\data analyse\\data\\parquet\\2d594c24215cd8d6.parquet",
+          "rows": 250000,
+          "columns": 3,
+          "registered_at": 1789342613.5018835,
+          "lineage": {
+            "source_file": "sales_250k.csv",
+            "source_type": "csv"
+          }
+        }
+      },
+      "active_version": "dataset_v1"
+    },
+    "ds_9c3b8718": {
+      "dataset_id": "ds_9c3b8718",
+      "name": "Titanic",
+      "dataset_hash": "4a437fde05fe5264",
+      "created_at": 1789344202.7700813,
+      "versions": {
+        "dataset_v1": {
+          "parquet_path": "D:\\antigrevity_project\\data analyse\\data\\parquet\\4a437fde05fe5264.parquet",
+          "rows": 891,
+          "columns": 12,
+          "registered_at": 1789344202.7700863,
+          "lineage": {
+            "source_file": "titanic.csv",
+            "source_type": "csv"
+          }
+        }
+      },
+      "active_version": "dataset_v1"
+    }
+  },
+  "hashes": {
+    "330be1378c3cae5d": "ds_e234e3c2",
+    "b7023dfb6a09560f": "ds_07c9874d",
+    "10a90d26b6f6cada": "ds_f0fc83ff",
+    "2d594c24215cd8d6": "ds_d4c1e5d6",
+    "4a437fde05fe5264": "ds_9c3b8718"
+  }
+}

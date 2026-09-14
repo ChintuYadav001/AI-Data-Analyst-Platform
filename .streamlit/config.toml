@@ -1,0 +1,13 @@
+[server]
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+runOnSave = false
+fileWatcherType = "none"
+maxUploadSize = 100
+
+[browser]
+gatherUsageStats = false
+
+[runner]
+fastReruns = true

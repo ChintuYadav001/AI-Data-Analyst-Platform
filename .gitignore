@@ -1,0 +1,40 @@
+﻿# Python & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# Testing & Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Secrets & Local Configuration
+.env
+.env.local
+.env.*.local
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary Files, Databases & Logs
+*.log
+*.db
+data/cache/
+data/temp/
+data/staging/
+data/parquet/
+data/uploads/
+data/projects/
+data/analytics_results/
+data/exports/*.csv
