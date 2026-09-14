@@ -35,7 +35,8 @@ ANALYSIS_ITEMS = [
     ("🛡️ Data Quality", "Data Quality"),
     ("🧹 Data Cleaning", "Data Cleaning"),
     ("🔬 EDA Engine", "EDA"),
-    ("⚙️ Feature Engineering", "Feature Engineering")
+    ("⚙️ Feature Engineering", "Feature Engineering"),
+    ("🤖 ML & Predictive Analytics", "Machine Learning")
 ]
 
 INTELLIGENCE_ITEMS = [
@@ -331,6 +332,9 @@ def dispatch_active_view(route: str):
     elif route == "Feature Engineering":
         from ui.views.feature_view import render_feature_view
         render_feature_view()
+    elif route == "Machine Learning":
+        from ui.views.ml_view import render_ml_view
+        render_ml_view()
     elif route == "SQL Analytics":
         from ui.views.sql_view import render_sql_view
         render_sql_view()

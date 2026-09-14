@@ -1017,19 +1017,20 @@ def render_workflow_stepper(df_loaded: bool = False, current_stage: str = "INGES
         {"num": "03", "name": "CLEAN", "icon": "🧹", "desc": "Audit & Cleanse", "route": "Data Cleaning"},
         {"num": "04", "name": "EDA", "icon": "🔬", "desc": "Distributions & EDA", "route": "EDA"},
         {"num": "05", "name": "FEATURE ENG", "icon": "⚡", "desc": "Transformations", "route": "Feature Engineering"},
-        {"num": "06", "name": "SQL", "icon": "💾", "desc": "Query Engine", "route": "SQL Analytics"},
-        {"num": "07", "name": "AI INSIGHTS", "icon": "✨", "desc": "Multi-Horizon AI", "route": "AI Insights"},
-        {"num": "08", "name": "DASHBOARD", "icon": "📊", "desc": "Interactive Matrix", "route": "Dashboard"}
+        {"num": "06", "name": "ML PREDICT", "icon": "🤖", "desc": "Predictive Analytics", "route": "Machine Learning"},
+        {"num": "07", "name": "SQL", "icon": "💾", "desc": "Query Engine", "route": "SQL Analytics"},
+        {"num": "08", "name": "AI INSIGHTS", "icon": "✨", "desc": "Multi-Horizon AI", "route": "AI Insights"},
+        {"num": "09", "name": "DASHBOARD", "icon": "📊", "desc": "Interactive Matrix", "route": "Dashboard"}
     ]
 
     st.markdown("""
     <div style="display: flex; align-items: center; justify-content: space-between; margin: 12px 0 10px 0;">
         <span style="font-size: 0.78rem; font-weight: 700; color: #00F0FF; letter-spacing: 0.08em;">// AI ANALYTICS WORKFLOW</span>
-        <span style="font-size: 0.78rem; color: #64748B;">Autonomous 8-stage intelligence pipeline</span>
+        <span style="font-size: 0.78rem; color: #64748B;">Autonomous 9-stage intelligence pipeline</span>
     </div>
     """, unsafe_allow_html=True)
 
-    cols = st.columns(8)
+    cols = st.columns(9)
     for idx, s in enumerate(steps):
         with cols[idx]:
             if not df_loaded:
@@ -1228,7 +1229,7 @@ def render_quick_actions():
     </div>
     """, unsafe_allow_html=True)
     
-    c1, c2, c3, c4, c5 = st.columns(5)
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
     
     with c1:
         st.markdown("""
@@ -1257,6 +1258,18 @@ def render_quick_actions():
     with c3:
         st.markdown("""
         <div class="saas-card">
+            <div style="font-size: 1.4rem; margin-bottom: 8px;">🤖</div>
+            <div style="font-weight: 700; color: #FFFFFF; font-size: 0.96rem; margin-bottom: 4px;">Predictive ML</div>
+            <div style="font-size: 0.8rem; color: #94A3B8; margin-bottom: 12px;">Automated models, XAI, and forecasting.</div>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Train Models →", key="qa_ml", use_container_width=True):
+            st.session_state["active_nav"] = "Machine Learning"
+            st.rerun()
+
+    with c4:
+        st.markdown("""
+        <div class="saas-card">
             <div style="font-size: 1.4rem; margin-bottom: 8px;">⚡</div>
             <div style="font-weight: 700; color: #FFFFFF; font-size: 0.96rem; margin-bottom: 4px;">Run SQL</div>
             <div style="font-size: 0.8rem; color: #94A3B8; margin-bottom: 12px;">Natural language queries executed via DuckDB.</div>
@@ -1266,19 +1279,19 @@ def render_quick_actions():
             st.session_state["active_nav"] = "SQL Analytics"
             st.rerun()
 
-    with c4:
+    with c5:
         st.markdown("""
         <div class="saas-card">
             <div style="font-size: 1.4rem; margin-bottom: 8px;">✨</div>
             <div style="font-weight: 700; color: #FFFFFF; font-size: 0.96rem; margin-bottom: 4px;">Generate Insights</div>
-            <div style="font-size: 0.8rem; color: #94A3B8; margin-bottom: 12px;">Multi-horizon diagnostic and predictive synthesis.</div>
+            <div style="font-size: 0.8rem; color: #94A3B8; margin-bottom: 12px;">Multi-horizon diagnostic & predictive synthesis.</div>
         </div>
         """, unsafe_allow_html=True)
         if st.button("View Insights →", key="qa_insights", use_container_width=True):
             st.session_state["active_nav"] = "AI Insights"
             st.rerun()
 
-    with c5:
+    with c6:
         st.markdown("""
         <div class="saas-card">
             <div style="font-size: 1.4rem; margin-bottom: 8px;">📈</div>

@@ -18,7 +18,48 @@ class AIChatModel:
 
     def answer_query(self, user_message: str, df: pd.DataFrame, table_name: str = "dataset") -> Dict[str, Any]:
         msg_lower = user_message.lower().strip()
-        
+
+        # 0. Machine Learning & Predictive Analytics queries
+        if any(w in msg_lower for w in ["predict", "forecast", "machine learning", "train model", "best model", "champion model", "ml readiness", "feature importance"]):
+            try:
+                from core.ml.ai_ml_tools import prepare_ml_data, generate_ml_executive_summary
+                from core.ml.experiment_tracker import get_active_champion
+                
+                # Check for active champion model
+                champ = get_active_champion()
+                readiness = prepare_ml_data(df)
+
+                if "champion" in msg_lower or "best model" in msg_lower:
+                    if champ:
+                        champ_metrics = ", ".join([f"{k}: {v}" for k, v in champ.get("metrics", {}).items() if isinstance(v, (int, float))])
+                        resp = (
+                            f"🏆 **Active Production Champion Model**: **{champ.get('model_name', 'Trained Estimator')}**\n"
+                            f"- **Task Type:** {champ.get('task_type', 'N/A')}\n"
+                            f"- **Target Variable:** `{champ.get('target_col', 'N/A')}`\n"
+                            f"- **Validation Metrics:** {champ_metrics}\n"
+                            f"- **Trained On:** {champ.get('created_at')}\n\n"
+                            f"You can simulate predictions in the **🤖 ML & Predictive Analytics** workspace tab."
+                        )
+                    else:
+                        resp = "No champion model has been registered yet. Visit the **🤖 ML & Predictive Analytics** workspace to launch automated training."
+                    return {
+                        "tool_used": "get_active_champion()",
+                        "response": resp,
+                        "data": pd.DataFrame([champ]) if champ else None,
+                    }
+
+                # General ML readiness / prediction summary
+                target = readiness.get("selected_target")
+                if target:
+                    summary = generate_ml_executive_summary(df, target)
+                    return {
+                        "tool_used": "prepare_ml_data()",
+                        "response": summary + "\n\nNavigate to **🤖 ML & Predictive Analytics** in the sidebar to benchmark models and run predictions.",
+                        "data": pd.DataFrame(readiness.get("target_candidates", [])).head(5),
+                    }
+            except Exception:
+                pass
+
         # 1. Natural Language SQL queries
         # E.g. "show top 5 products by revenue", "which region has highest profit", "average sales by category"
         sql_generated = self._infer_sql_query(msg_lower, df, table_name)
