@@ -118,55 +118,28 @@ def render_sidebar_demo_countdown():
     progress_pct = max(0.0, min(1.0, rem_secs / duration))
     color = "#EF4444" if rem_secs <= 30 else "#F59E0B"
 
-    st.markdown(f"""
-    <div id="demo-pass-timer-box" style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.16) 0%, rgba(245, 158, 11, 0.16) 100%); 
-                border: 1px solid {color}; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;
-                box-shadow: 0 0 16px rgba(239, 68, 68, 0.22);">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 0.72rem; font-weight: 800; color: {color}; letter-spacing: 0.05em; display: flex; align-items: center; gap: 5px;">
-                <span style="width: 7px; height: 7px; border-radius: 50%; background: {color}; box-shadow: 0 0 8px {color}; display: inline-block;"></span>
-                DEMO PASS ACTIVE
-            </span>
-            <span id="demo-timer-display" style="font-family: 'JetBrains Mono', monospace; font-size: 1rem; font-weight: 800; color: #FFFFFF; background: rgba(0,0,0,0.55); padding: 2px 8px; border-radius: 6px; border: 1px solid {color};">
-                {m_cnt:02d}:{s_cnt:02d}
-            </span>
-        </div>
-        <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 99px; overflow: hidden; margin-top: 8px;">
-            <div id="demo-timer-progress" style="width: {int(progress_pct * 100)}%; height: 100%; background: {color}; transition: width 1s linear;"></div>
-        </div>
-        <div style="font-size: 0.72rem; color: #FCA5A5; margin-top: 5px; line-height: 1.3;">
-            ⏳ Auto-logout in <b id="demo-timer-secs">{rem_secs}s</b> (2-minute limit).
-        </div>
-    </div>
-    <script>
-    (function() {{
-        var rem = {rem_secs};
-        var dur = {duration};
-        var timerDisplay = document.getElementById("demo-timer-display");
-        var timerProgress = document.getElementById("demo-timer-progress");
-        var timerSecs = document.getElementById("demo-timer-secs");
-        if (!timerDisplay) return;
-        
-        var interval = setInterval(function() {{
-            rem -= 1;
-            if (rem <= 0) {{
-                clearInterval(interval);
-                window.location.reload();
-                return;
-            }}
-            var m = Math.floor(rem / 60);
-            var s = rem % 60;
-            var formatted = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
-            timerDisplay.innerText = formatted;
-            if (timerSecs) timerSecs.innerText = rem + 's';
-            if (timerProgress) {{
-                var pct = Math.max(0, Math.min(100, (rem / dur) * 100));
-                timerProgress.style.width = pct + '%';
-            }}
-        }}, 1000);
-    }})();
-    </script>
-    """, unsafe_allow_html=True)
+    timer_html = (
+        f'<div id="demo-pass-timer-box" style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.16) 0%, rgba(245, 158, 11, 0.16) 100%); '
+        f'border: 1px solid {color}; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; '
+        f'box-shadow: 0 0 16px rgba(239, 68, 68, 0.22);">'
+        f'<div style="display: flex; justify-content: space-between; align-items: center;">'
+        f'<span style="font-size: 0.72rem; font-weight: 800; color: {color}; letter-spacing: 0.05em; display: flex; align-items: center; gap: 5px;">'
+        f'<span style="width: 7px; height: 7px; border-radius: 50%; background: {color}; box-shadow: 0 0 8px {color}; display: inline-block;"></span>'
+        f'DEMO PASS ACTIVE'
+        f'</span>'
+        f'<span id="demo-timer-display" style="font-family: monospace; font-size: 1rem; font-weight: 800; color: #FFFFFF; background: rgba(0,0,0,0.55); padding: 2px 8px; border-radius: 6px; border: 1px solid {color};">'
+        f'{m_cnt:02d}:{s_cnt:02d}'
+        f'</span>'
+        f'</div>'
+        f'<div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 99px; overflow: hidden; margin-top: 8px;">'
+        f'<div id="demo-timer-progress" style="width: {int(progress_pct * 100)}%; height: 100%; background: {color}; transition: width 1s linear;"></div>'
+        f'</div>'
+        f'<div style="font-size: 0.72rem; color: #FCA5A5; margin-top: 5px; line-height: 1.3;">'
+        f'⏳ Auto-logout in <b>{rem_secs}s</b> (2-minute limit).'
+        f'</div>'
+        f'</div>'
+    )
+    st.markdown(timer_html, unsafe_allow_html=True)
 
 # Sidebar
 with st.sidebar:

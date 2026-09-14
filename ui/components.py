@@ -1131,7 +1131,7 @@ def render_dataset_header_card(df, project_name: str, quality_score: int = 94):
         f'</div>'
         f'</div>'
     )
-    st.markdown(header_html, unsafe_allow_html=True)
+    st.html(header_html)
 
     # Next-Level Glass Quick Command Bar
     c_b1, c_b2, c_b3, c_b4, c_b5 = st.columns(5)
@@ -1182,7 +1182,7 @@ def render_autonomous_intelligence_banner(df, quality_dict: dict = None):
 
     banner_html = (
         f'<div style="background: linear-gradient(135deg, rgba(124, 58, 237, 0.12) 0%, rgba(15, 23, 42, 0.95) 100%); '
-        f'border: 1px solid rgba(139, 92, 246, 0.35); border-left: 4px solid #A78BFA; border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; '
+        f'border: 1px solid rgba(139, 92, 246, 0.35); border-left: 4px solid #A78BFA; border-radius: 14px; padding: 16px 20px; margin-bottom: 14px; '
         f'box-shadow: 0 8px 24px -8px rgba(124, 58, 237, 0.2);">'
         f'<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">'
         f'<div style="display: flex; align-items: center; gap: 8px;">'
@@ -1191,12 +1191,34 @@ def render_autonomous_intelligence_banner(df, quality_dict: dict = None):
         f'</div>'
         f'<span style="font-size: 0.72rem; color: #94A3B8; font-family: monospace;">LATENCY: 0.04ms • ZERO RAW DATA EXPOSURE</span>'
         f'</div>'
-        f'<div style="font-size: 0.86rem; color: #E2E8F0; line-height: 1.5; margin-bottom: 6px;">'
+        f'<div style="font-size: 0.86rem; color: #E2E8F0; line-height: 1.5;">'
         f'{" ".join(narrative_points)} <span style="color: #67E8F9;">{action_advice}</span>'
         f'</div>'
         f'</div>'
     )
-    st.markdown(banner_html, unsafe_allow_html=True)
+    st.html(banner_html)
+
+    # Next-Level Quick AI Prompt Chips
+    chip_col1, chip_col2, chip_col3, chip_col4 = st.columns(4)
+    with chip_col1:
+        if st.button("💡 Key Variance Drivers", key="ai_chip_drivers", use_container_width=True, help="Analyze primary drivers of variance"):
+            st.session_state["active_nav"] = "EDA"
+            st.session_state["eda_active_tab"] = "Drivers"
+            st.rerun()
+    with chip_col2:
+        if st.button("🔍 Outlier Radar Scan", key="ai_chip_outliers", use_container_width=True, help="Scan multivariate Isolation Forest outliers"):
+            st.session_state["active_nav"] = "EDA"
+            st.session_state["eda_active_tab"] = "Anomalies"
+            st.rerun()
+    with chip_col3:
+        if st.button("📊 Correlation Matrix", key="ai_chip_corrs", use_container_width=True, help="Inspect collinearity and relationship clusters"):
+            st.session_state["active_nav"] = "EDA"
+            st.session_state["eda_active_tab"] = "Correlations"
+            st.rerun()
+    with chip_col4:
+        if st.button("📑 Export Analytics PDF", key="ai_chip_report", use_container_width=True, help="Open formal report generator"):
+            st.session_state["active_nav"] = "Reports"
+            st.rerun()
 
 def render_quick_actions():
     """Renders 4 clean SaaS cards for Quick Actions."""
