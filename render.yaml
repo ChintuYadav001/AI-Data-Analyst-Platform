@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: quantum-analyst-platform
+    name: ai-data-analyst-platform
     env: python
     region: oregon
     plan: free
@@ -25,5 +25,9 @@ services:
         value: "false"
       - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
         value: "false"
+      - key: STREAMLIT_BROWSER_SERVER_ADDRESS
+        value: "ai-data-analyst-platform-7rhs.onrender.com"
+      - key: STREAMLIT_BROWSER_SERVER_PORT
+        value: "443"
       - key: NEON_DATABASE_URL
         sync: false
