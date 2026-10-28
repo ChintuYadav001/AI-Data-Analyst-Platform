@@ -807,83 +807,79 @@ div[data-testid="stPopover"] > button:hover {
                 </div>
                 """, unsafe_allow_html=True)
 
-                show_logs = st.toggle("🔍 Load Real-Time Security Audit Ledger", value=False, key="toggle_show_audit_logs")
-                if show_logs:
-                    logs = auth_model.list_login_logs(limit=25)
-                    if logs:
-                        df_logs = pd.DataFrame(logs)
-                        
-                        # Summary Metrics
-                        total_attempts = len(df_logs)
-                        success_attempts = len(df_logs[df_logs["status"] == "SUCCESS"])
-                        failed_attempts = len(df_logs[df_logs["status"] == "FAILED"])
+                logs = auth_model.list_login_logs(limit=50)
+                if logs:
+                    df_logs = pd.DataFrame(logs)
+                    
+                    # Summary Metrics
+                    total_attempts = len(df_logs)
+                    success_attempts = len(df_logs[df_logs["status"] == "SUCCESS"])
+                    failed_attempts = len(df_logs[df_logs["status"] == "FAILED"])
 
-                        m1, m2, m3 = st.columns(3)
-                        with m1:
-                            st.metric("Total Attempts", total_attempts)
-                        with m2:
-                            st.metric("Successful", success_attempts)
-                        with m3:
-                            st.metric("Failed / Blocked", failed_attempts)
+                    m1, m2, m3 = st.columns(3)
+                    with m1:
+                        st.metric("Total Attempts", total_attempts)
+                    with m2:
+                        st.metric("Successful", success_attempts)
+                    with m3:
+                        st.metric("Failed / Blocked", failed_attempts)
 
-                        st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
+                    st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
+                    st.dataframe(
+                        df_logs,
+                        use_container_width=True,
+                        column_config={
+                            "timestamp": st.column_config.DatetimeColumn("Timestamp", format="YYYY-MM-DD HH:mm:ss"),
+                            "status": st.column_config.TextColumn("Status"),
+                            "username": st.column_config.TextColumn("Username / Identifier"),
+                            "ip_address": st.column_config.TextColumn("IP Address"),
+                            "failure_reason": st.column_config.TextColumn("Failure Note")
+                        }
+                    )
+                else:
+                    st.info("No authentication attempts logged yet.")
+
+                # Outbound Dispatch Ledger
+                st.markdown("<hr style='border-color: rgba(255, 255, 255, 0.08); margin: 16px 0 12px 0;'>", unsafe_allow_html=True)
+                st.markdown("""
+                <div style="font-size: 0.92rem; font-weight: 700; color: #FFFFFF; margin-bottom: 4px;">
+                    Outbound OTP Dispatch Outbox
+                </div>
+                """, unsafe_allow_html=True)
+
+                from core.config import DATA_DIR
+                outbox_file = DATA_DIR / "outbox.log"
+                if outbox_file.exists():
+                    import json
+                    outbox_entries = []
+                    try:
+                        with open(outbox_file, "r", encoding="utf-8") as f:
+                            for line in f:
+                                line = line.strip()
+                                if line:
+                                    try:
+                                        outbox_entries.append(json.loads(line))
+                                    except Exception:
+                                        pass
+                    except Exception:
+                        pass
+
+                    if outbox_entries:
+                        df_outbox = pd.DataFrame(outbox_entries[-20:])
+                        display_cols = [c for c in ["timestamp", "target", "target_type", "dispatched_live", "otp_code", "error"] if c in df_outbox.columns]
                         st.dataframe(
-                            df_logs,
+                            df_outbox[display_cols],
                             use_container_width=True,
                             column_config={
-                                "timestamp": st.column_config.DatetimeColumn("Timestamp", format="YYYY-MM-DD HH:mm:ss"),
-                                "status": st.column_config.TextColumn("Status"),
-                                "username": st.column_config.TextColumn("Username / Identifier"),
-                                "ip_address": st.column_config.TextColumn("IP Address"),
-                                "failure_reason": st.column_config.TextColumn("Failure Note")
+                                "timestamp": st.column_config.DatetimeColumn("Timestamp"),
+                                "target": st.column_config.TextColumn("Destination"),
+                                "target_type": st.column_config.TextColumn("Channel"),
+                                "dispatched_live": st.column_config.CheckboxColumn("Live Delivered?"),
+                                "otp_code": st.column_config.TextColumn("Dispatched OTP Code"),
+                                "error": st.column_config.TextColumn("Gateway Note")
                             }
                         )
                     else:
-                        st.info("No authentication attempts logged yet.")
-
-                    # Outbound Dispatch Ledger
-                    st.markdown("<hr style='border-color: rgba(255, 255, 255, 0.08); margin: 16px 0 12px 0;'>", unsafe_allow_html=True)
-                    st.markdown("""
-                    <div style="font-size: 0.92rem; font-weight: 700; color: #FFFFFF; margin-bottom: 4px;">
-                        Outbound OTP Dispatch Outbox
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    from core.config import DATA_DIR
-                    outbox_file = DATA_DIR / "outbox.log"
-                    if outbox_file.exists():
-                        import json
-                        outbox_entries = []
-                        try:
-                            with open(outbox_file, "r", encoding="utf-8") as f:
-                                for line in f:
-                                    line = line.strip()
-                                    if line:
-                                        try:
-                                            outbox_entries.append(json.loads(line))
-                                        except Exception:
-                                            pass
-                        except Exception:
-                            pass
-
-                        if outbox_entries:
-                            df_outbox = pd.DataFrame(outbox_entries[-20:])
-                            display_cols = [c for c in ["timestamp", "target", "target_type", "dispatched_live", "otp_code", "error"] if c in df_outbox.columns]
-                            st.dataframe(
-                                df_outbox[display_cols],
-                                use_container_width=True,
-                                column_config={
-                                    "timestamp": st.column_config.DatetimeColumn("Timestamp"),
-                                    "target": st.column_config.TextColumn("Destination"),
-                                    "target_type": st.column_config.TextColumn("Channel"),
-                                    "dispatched_live": st.column_config.CheckboxColumn("Live Delivered?"),
-                                    "otp_code": st.column_config.TextColumn("Dispatched OTP Code"),
-                                    "error": st.column_config.TextColumn("Gateway Note")
-                                }
-                            )
-                        else:
-                            st.caption("Outbox is currently clear.")
-                    else:
-                        st.caption("No outbox log file generated yet.")
+                        st.caption("Outbox is currently clear.")
                 else:
-                    st.caption("Toggle the switch above to inspect real-time authentication events and OTP audit dispatches.")
+                    st.caption("No outbox log file generated yet.")
