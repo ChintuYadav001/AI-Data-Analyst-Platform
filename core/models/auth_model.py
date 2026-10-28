@@ -39,6 +39,9 @@ def _get_target_variations(target: str) -> List[str]:
     """Generate variations of email/phone so formatting differences (+91, spaces) match."""
     raw = target.strip().lower()
     variations = [raw]
+    compact = re.sub(r'[\s\-\(\)\.]', '', raw)
+    if compact not in variations:
+        variations.append(compact)
     digits = re.sub(r'[^0-9]', '', raw)
     if digits and len(digits) >= 6:
         if digits not in variations:
@@ -81,6 +84,11 @@ class AuthModel:
         target = target.strip().lower()
         if not target:
             raise ValueError("Target destination (email or phone) cannot be empty for OTP generation")
+
+        if target_type == "phone" or ("@" not in target and any(c.isdigit() for c in target)):
+            has_plus = target.startswith("+")
+            digits = re.sub(r'[^0-9]', '', target)
+            target = ("+" if has_plus else "") + digits
 
         otp_code = f"{random.randint(100000, 999999)}"
         now = datetime.now(timezone.utc)
