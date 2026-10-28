@@ -7,6 +7,7 @@ maxUploadSize = 500
 fileWatcherType = "none"
 runOnSave = false
 fastReruns = true
+enableWebsocketCompression = true
 
 [browser]
 gatherUsageStats = false
