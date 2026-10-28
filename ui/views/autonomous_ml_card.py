@@ -120,8 +120,22 @@ def render_autonomous_1click_ml_tab(df: pd.DataFrame, proj_name: str = "Active D
         )
         tune_cv = st.checkbox("🎯 Enable 3-Fold CV Hyperparameter Tuning", value=True)
 
+        # Detect target skewness for regression and suggest log-transformation
+        is_classif = "classification" in task_detected
+        target_is_num = pd.api.types.is_numeric_dtype(df[target_col]) if target_col in df.columns else False
+        target_skew_val = float(df[target_col].dropna().skew()) if target_is_num and len(df[target_col].dropna()) > 2 else 0.0
+        suggest_log = (not is_classif) and target_is_num and target_skew_val > 0.75 and (df[target_col].dropna() >= 0).all()
+
+        if not is_classif and target_is_num:
+            log_transform_opt = st.checkbox(
+                "📐 Target np.log1p(y) Transform",
+                value=suggest_log,
+                help=f"Target skewness = {target_skew_val:.2f}. Log-transforming the target during training and converting predictions via np.expm1() prevents underestimating high-sales observations."
+            )
+        else:
+            log_transform_opt = False
+
     # Resolve internal model ID
-    is_classif = "classification" in task_detected
     resolved_model_id = "auto"
     if selected_model_key == "random_forest":
         resolved_model_id = "random_forest_classifier" if is_classif else "random_forest_regressor"
@@ -172,6 +186,7 @@ def render_autonomous_1click_ml_tab(df: pd.DataFrame, proj_name: str = "Active D
                     preferred_model_id=resolved_model_id,
                     test_size=split_ratio,
                     tune_hyperparameters=tune_cv,
+                    use_log_transform=log_transform_opt,
                     dataset_name=proj_name,
                     progress_callback=update_progress
                 )
