@@ -1173,7 +1173,8 @@ def render_top_navbar(breadcrumb: str = "Workspace / Dashboard", active_dataset:
             )
 
             brand_html = (
-                f'<div style="display: flex; align-items: center; gap: 12px; height: 42px;">'
+                f'<div onclick="(function(){{ try {{ var exp = window.parent.document.querySelector(\'button[data-testid=\\\'stExpandSidebarButton\\\']\') || window.parent.document.querySelector(\'[data-testid=\\\'stSidebarCollapseButton\\\'] button\'); if (exp) exp.click(); }} catch(e){{}} }})()" '
+                f'style="cursor: pointer; display: flex; align-items: center; gap: 12px; height: 42px;" title="Quantum Analyst • Click to toggle sidebar">'
                 f'{logo_img_tag}'
                 f'<div style="line-height: 1.15; flex-shrink: 0;">'
                 f'<div style="font-size: 1.05rem; font-weight: 800; color: {title_color}; letter-spacing: -0.01em; white-space: nowrap;">QUANTUM ANALYST</div>'
