@@ -59,7 +59,7 @@ assert "rmse_mae_ratio" in metrics, "Missing rmse_mae_ratio in metrics!"
 assert diag["step_2_outliers_and_high_sales"]["has_high_sales_underestimation"] is True, "Should detect high sales underestimation!"
 assert len(diag["step_2_outliers_and_high_sales"]["worst_underpredicted_records"]) > 0, "Should extract worst underpredicted records!"
 assert diag["step_6_log_transformation"]["log_transform_recommended"] is True, "Should recommend log transformation for skewed sales!"
-print("✓ Step 1 & Step 2 & Step 5 Diagnostics passed successfully!")
+print("[PASS] Step 1 & Step 2 & Step 5 Diagnostics passed successfully!")
 
 # 3. Test Trainer with Log Transformation (np.log1p / np.expm1)
 print("\n>>> Step 6 Test: Model Trainer with np.log1p Log-Transformation...")
@@ -86,7 +86,7 @@ train_res_log = train_single_model(
 print("Log-Transformed Ridge RMSE:", train_res_log["metrics"]["rmse"])
 print("Log-transformed active flag:", train_res_log["log_transformed"])
 assert train_res_log["log_transformed"] is True, "Log transformed flag should be True!"
-print("✓ Step 6 Log Transformation in trainer passed successfully!")
+print("[PASS] Step 6 Log Transformation in trainer passed successfully!")
 
 # 4. Test 10-Step Autonomous Pipeline with Multi-Algorithm Comparison
 print("\n>>> Step 4 Test: Autonomous Pipeline with Algorithm Benchmarking...")
@@ -103,7 +103,7 @@ print("Autonomous Pipeline Completed Successfully!")
 print("Step 8 Metrics:", s8_data["metrics"])
 print("Step 8 Algorithm Comparison Count:", len(s8_data.get("algorithm_comparison", [])))
 for m in s8_data.get("algorithm_comparison", []):
-    print(f"  - {m['model_name']}: Test R² = {m['test_r2']}, Test RMSE = {m['test_rmse']}")
+    print(f"  - {m['model_name']}: Test R2 = {m['test_r2']}, Test RMSE = {m['test_rmse']}")
 
 assert len(s8_data.get("algorithm_comparison", [])) >= 3, "Multi-algorithm comparison should have at least 3 models!"
-print("✓ All 6 predictive model improvements verified and working perfectly!")
+print("[PASS] All 6 predictive model improvements verified and working perfectly!")
