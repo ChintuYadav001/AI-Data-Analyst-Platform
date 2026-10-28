@@ -374,7 +374,19 @@ def render_autonomous_1click_ml_tab(df: pd.DataFrame, proj_name: str = "Active D
         with col_m_left:
             st.markdown("##### 🎯 Final Holdout Validation Metrics")
             for k, v in s8.get("metrics", {}).items():
-                st.write(f"• **{k.replace('_', ' ')}:** `{v}`")
+                k_clean = k.replace('_', ' ')
+                # Handle MAPE percentage formatting
+                if "mape" in k.lower():
+                    try:
+                        num_v = float(str(v).replace("%", ""))
+                        v_clean = f"{min(500.0, num_v):.1f}%"
+                    except Exception:
+                        v_clean = str(v)
+                elif isinstance(v, float):
+                    v_clean = f"{v:,.4f}"
+                else:
+                    v_clean = str(v)
+                st.write(f"• **{k_clean}:** `{v_clean}`")
             
             # Confusion Matrix Heatmap if available
             cm = s8.get("confusion_matrix")
