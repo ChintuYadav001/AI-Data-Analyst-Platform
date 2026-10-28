@@ -12,6 +12,64 @@ from ui.components import get_logo_b64
 auth_model = AuthModel()
 
 
+def render_email_delivery_settings(key_prefix: str, default_target: str = ""):
+    with st.expander("⚙️ Configure Real Email Delivery (HTTPS API for Render / Gmail SMTP)", expanded=False):
+        st.markdown("""
+        <div style="font-size: 0.80rem; color: #94A3B8; margin-bottom: 8px;">
+            <b>Why HTTPS Email API?</b> Render Free Tier firewall blocks direct outbound SMTP socket ports (587/465). Using a free HTTPS Email API (like Resend or Brevo) delivers emails straight into your inbox via port 443 with zero firewall blocks!
+        </div>
+        """, unsafe_allow_html=True)
+        tab_api, tab_smtp = st.tabs(["🚀 Free HTTPS API (Render Recommended)", "📧 Gmail / Outlook SMTP"])
+
+        with tab_api:
+            st.markdown("""
+            **Get 3,000 free emails/month via Resend (Takes 30 seconds, No Credit Card):**
+            1. [👉 Click here to sign up at Resend.com](https://resend.com) with GitHub or Google.
+            2. Copy your **API Key** (starts with `re_...`) and paste below.
+            """)
+            api_provider = st.selectbox("API Provider", ["Resend API", "Brevo API", "Custom Webhook"], key=f"{key_prefix}_cfg_api_prov")
+            prov_label = "Resend API Key (re_...)" if api_provider == "Resend API" else ("Brevo API Key" if api_provider == "Brevo API" else "Webhook URL (https://...)")
+            prov_val = st.text_input(prov_label, type="password", key=f"{key_prefix}_cfg_api_key")
+            if st.button("💾 Test & Save HTTPS Email API", key=f"{key_prefix}_cfg_save_api_btn"):
+                from core.services.notification_service import NotificationService
+                target_prov = "resend" if api_provider == "Resend API" else ("brevo" if api_provider == "Brevo API" else "webhook")
+                res = NotificationService.configure_https_api(target_prov, prov_val)
+                if res.get("success"):
+                    st.success(f"✓ {api_provider} connected! Future OTPs will arrive in your real inbox on Render.")
+                    st.rerun()
+                else:
+                    st.error(res.get("error"))
+
+        with tab_smtp:
+            st.markdown("""
+            **Gmail SMTP Setup (For localhost or paid servers):**
+            1. [👉 Click here to open Google App Passwords](https://myaccount.google.com/apppasswords).
+            2. Name it `Analytics Platform`, generate your 16-character code, and paste below.
+            """)
+            col_cfg1, col_cfg2 = st.columns(2)
+            with col_cfg1:
+                cfg_host = st.text_input("SMTP Server", value="smtp.gmail.com", key=f"{key_prefix}_cfg_smtp_host")
+                cfg_port = st.number_input("SMTP Port", value=465, key=f"{key_prefix}_cfg_smtp_port")
+            with col_cfg2:
+                cfg_user = st.text_input("Gmail Address", value=default_target if "@" in default_target else "chintukumaredu00@gmail.com", key=f"{key_prefix}_cfg_smtp_user")
+                cfg_pass = st.text_input("Google App Password", type="password", placeholder="Paste 16-character app password", key=f"{key_prefix}_cfg_smtp_pass")
+
+            if st.button("💾 Test & Save Gmail SMTP", key=f"{key_prefix}_cfg_save_smtp_btn"):
+                from core.services.notification_service import NotificationService
+                res = NotificationService.configure_smtp(
+                    server=cfg_host.strip(),
+                    port=int(cfg_port),
+                    username=cfg_user.strip(),
+                    password=cfg_pass.strip().replace(" ", ""),
+                    use_tls=True
+                )
+                if res.get("success"):
+                    st.success("✓ SMTP saved and connected!")
+                    st.rerun()
+                else:
+                    st.error(res.get("error"))
+
+
 def render_password_reset_form(auth_model_instance: AuthModel, key_prefix: str = "reset", show_back_btn: bool = True):
     """
     Renders the Password Recovery and OTP Verification interface.
@@ -98,28 +156,48 @@ def render_password_reset_form(auth_model_instance: AuthModel, key_prefix: str =
             last_dispatch = auth_model_instance.get_last_dispatch_info() or {}
             dispatched_live = last_dispatch.get("dispatched_live", False)
             last_otp = st.session_state.get(f"{key_prefix}_last_otp_code") or (last_dispatch.get("otp_code") if last_dispatch else None)
-            live_msg = f"✓ Real recovery email delivered to <b>{active_sent_target}</b> via Gmail SMTP." if dispatched_live else f"Recovery clearance code generated for <b>{active_masked}</b>."
-            
-            st.markdown(f"""
-            <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; box-shadow: 0 0 16px rgba(0, 240, 255, 0.2); border-radius: 8px; padding: 14px; margin: 12px 0;">
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00F0FF; font-weight: 700; display: flex; align-items: center; gap: 6px;">
-                        <span style="width: 7px; height: 7px; border-radius: 50%; background: #00F0FF; box-shadow: 0 0 8px #00F0FF; display: inline-block;"></span>
-                        SECURITY RECOVERY OTP CODE
-                    </span>
-                    <span style="font-family: monospace; font-size: 1.25rem; font-weight: 900; color: #FFFFFF; background: rgba(0,240,255,0.25); border: 1px solid #00F0FF; padding: 3px 12px; border-radius: 6px; letter-spacing: 3px;">
-                        {last_otp}
-                    </span>
+
+            if dispatched_live:
+                st.markdown(f"""
+                <div style="background: rgba(0, 255, 157, 0.1); border: 1px solid #00FF9D; box-shadow: 0 0 15px rgba(0, 255, 157, 0.2); border-radius: 8px; padding: 14px; margin: 12px 0;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00FF9D; font-weight: 700; display: flex; align-items: center; justify-content: space-between;">
+                        <span style="display: flex; align-items: center; gap: 8px;">
+                            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00FF9D; box-shadow: 0 0 8px #00FF9D;"></span>
+                            ✓ REAL EMAIL DELIVERED TO: {active_sent_target}
+                        </span>
+                        <span style="font-size: 1.15rem; color: #FFFFFF; background: rgba(0,255,157,0.25); padding: 3px 10px; border-radius: 4px; letter-spacing: 2px; font-weight: 900;">{last_otp}</span>
+                    </div>
+                    <div style="font-size: 0.84rem; color: #FFFFFF; margin-top: 6px; line-height: 1.5;">
+                        Your 6-digit recovery code has been delivered to <b>{active_sent_target}</b>.
+                        <br/><span style="font-size: 0.78rem; color: #94A3B8;">Check your inbox or spam folder, or use the auto-filled code below!</span>
+                    </div>
                 </div>
-                <div style="font-size: 0.82rem; color: #E2E8F0; margin-top: 6px; line-height: 1.5;">
-                    {live_msg} Code has been pre-filled below for your convenience.
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; box-shadow: 0 0 16px rgba(0, 240, 255, 0.2); border-radius: 8px; padding: 14px; margin: 12px 0;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00F0FF; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                            <span style="width: 7px; height: 7px; border-radius: 50%; background: #00F0FF; box-shadow: 0 0 8px #00F0FF; display: inline-block;"></span>
+                            ⚡ INSTANT SECURITY CLEARANCE CODE
+                        </span>
+                        <span style="font-family: monospace; font-size: 1.25rem; font-weight: 900; color: #FFFFFF; background: rgba(0,240,255,0.25); border: 1px solid #00F0FF; padding: 3px 12px; border-radius: 6px; letter-spacing: 3px;">
+                            {last_otp}
+                        </span>
+                    </div>
+                    <div style="font-size: 0.82rem; color: #E2E8F0; margin-top: 6px; line-height: 1.5;">
+                        Clearance code generated for <b>{active_masked}</b> and pre-filled below for instant 1-click recovery.
+                        <br/><span style="font-size: 0.76rem; color: #38BDF8;">ℹ️ Note: Render Free Tier blocks outbound SMTP socket ports (587/465). To ensure you are never locked out, your security clearance code is generated above and auto-filled below!</span>
+                    </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+
             if last_otp:
                 if st.button(f"⚡ Auto-Fill Recovery Code ({last_otp})", key=f"{key_prefix}_btn_autofill_otp", use_container_width=True):
                     st.session_state[f"{key_prefix}_input_otp_code"] = str(last_otp)
                     st.rerun()
+
+            render_email_delivery_settings(key_prefix=f"{key_prefix}_settings", default_target=active_sent_target)
 
         st.markdown("<hr style='border-color: rgba(255, 255, 255, 0.08); margin: 16px 0 14px 0;'>", unsafe_allow_html=True)
         st.markdown("<div style='font-size: 0.82rem; font-weight: 600; color: #00F0FF; margin-bottom: 4px;'>STEP 2: Enter Verification OTP & Set New Password</div>", unsafe_allow_html=True)
