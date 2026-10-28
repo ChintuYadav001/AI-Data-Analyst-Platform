@@ -35,8 +35,10 @@ from sklearn.preprocessing import LabelEncoder
 
 from core.ml.ml_readiness import classify_task_type, detect_target_candidates
 from core.ml.preprocessing import build_preprocessor, get_feature_names_after_preprocessing
-from core.ml.model_registry import create_model_instance, REGISTRY
-from core.ml.trainer import LabelEncodedClassifier
+from core.ml.model_registry import create_model_instance, REGISTRY, XGB_AVAILABLE
+from core.ml.trainer import LabelEncodedClassifier, LogTransformedRegressor
+from core.ml.feature_engineering import engineer_sales_and_business_features
+from core.ml.evaluation import evaluate_regression
 from core.ml.explainability import extract_global_feature_importance
 from core.ml.experiment_tracker import save_experiment, set_active_champion
 
@@ -47,6 +49,7 @@ def run_autonomous_1click_pipeline(
     preferred_model_id: str = "auto",
     test_size: float = 0.20,
     tune_hyperparameters: bool = True,
+    use_log_transform: Any = "auto",
     dataset_name: str = "Active Dataset",
     progress_callback: Optional[Callable[[int, str, Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
