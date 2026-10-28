@@ -538,6 +538,12 @@ class AICleaningOrchestrator:
     def _scan_category_missing(cls, df: pd.DataFrame, plan_items: List[Dict[str, Any]]) -> None:
         """Category 1: Missing Values (Nulls, sentinel text strings, skewness-aware strategies)."""
         n_rows = len(df)
+        def _to_clean_str(s):
+            try:
+                return s.astype(str)
+            except Exception:
+                return s.map(lambda x: x.decode("latin-1", errors="replace") if isinstance(x, bytes) else str(x))
+
         for col in df.columns:
             # 1. Standard nulls
             standard_nulls = int(df[col].isna().sum())
@@ -547,11 +553,6 @@ class AICleaningOrchestrator:
             if pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_string_dtype(df[col]):
                 valid_raw = df[col].dropna()
                 if not valid_raw.empty:
-                    def _to_clean_str(s):
-                        try:
-                            return s.astype(str)
-                        except Exception:
-                            return s.map(lambda x: x.decode("latin-1", errors="replace") if isinstance(x, bytes) else str(x))
 
                     if n_rows > 20000:
                         test_sample = _to_clean_str(valid_raw.head(2000)).str.strip().str.lower()
