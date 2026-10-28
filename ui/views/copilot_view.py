@@ -38,7 +38,7 @@ def render_copilot_full_view():
 
     # Active Context Telemetry Card
     ds_name = st.session_state.get("current_project_name", "No Dataset Loaded")
-    champ_name = champ_info.get("model_name") if champ_info else (bench_res.get("champion_name") if bench_res else "None Trained Yet")
+    champ_name = champ_info.get("model_name") if champ_info else (bench_res.get("champion_name") if (bench_res and isinstance(bench_res, dict)) else "None Trained Yet")
     target_v = st.session_state.get("ml_target_col", "None Configured")
     task_t = st.session_state.get("ml_task_type", "auto").replace("_", " ").title()
 
