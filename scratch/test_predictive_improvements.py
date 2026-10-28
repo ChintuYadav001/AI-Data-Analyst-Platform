@@ -11,6 +11,8 @@ End-to-end verification of the 6-Step Model Improvement Framework:
 """
 
 import sys
+import os
+sys.path.insert(0, os.path.abspath("."))
 import numpy as np
 import pandas as pd
 
@@ -35,7 +37,7 @@ eng_df, new_feats = engineer_sales_and_business_features(sample_sales_df, target
 print(f"Generated {len(new_feats)} new domain features: {new_feats[:6]}...")
 assert any("gross_val" in f for f in new_feats), "Missing volume interaction feature!"
 assert any("month" in f for f in new_feats), "Missing calendar seasonality feature!"
-print("✓ Step 3 Feature Engineering passed successfully!")
+print("[PASS] Step 3 Feature Engineering passed successfully!")
 
 # 2. Test Evaluation Diagnostics & High-Sales Underestimation
 print("\n>>> Step 1 & Step 2 & Step 5 Test: Regression Evaluation & High-Sales Diagnostics...")
