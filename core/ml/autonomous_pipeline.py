@@ -361,7 +361,7 @@ def run_autonomous_1click_pipeline(
         target_num = pd.to_numeric(y_train, errors="coerce").dropna()
         target_skew = float(target_num.skew()) if len(target_num) > 2 else 0.0
         target_non_neg = bool((target_num >= 0).all()) if len(target_num) > 0 else False
-        if target_non_neg and (use_log_transform is True or (str(use_log_transform).lower() == "auto" and target_skew > 0.85)):
+        if target_non_neg and (use_log_transform is True or (str(use_log_transform).lower() == "auto" and target_skew > 0.70)):
             is_log_transformed = True
 
     # Build memory-safe preprocessing pipeline
