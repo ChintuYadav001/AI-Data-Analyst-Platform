@@ -114,6 +114,25 @@ def clean_all_cache(keep_active_project_id: str = None) -> Dict[str, Any]:
                     logger.warning(f"Could not delete upload file {f}: {e}")
         dirs_cleaned.append("data/uploads/")
 
+    # 5b. Clean temporary exports in data/exports/
+    exports_dir = DATA_DIR / "exports"
+    if exports_dir.exists():
+        for f in exports_dir.glob("Project *.csv"):
+            try:
+                total_freed_bytes += f.stat().st_size
+                f.unlink(missing_ok=True)
+                files_deleted += 1
+            except Exception:
+                pass
+        for f in exports_dir.glob("test_*.pdf"):
+            try:
+                total_freed_bytes += f.stat().st_size
+                f.unlink(missing_ok=True)
+                files_deleted += 1
+            except Exception:
+                pass
+        dirs_cleaned.append("data/exports/")
+
     # 6. Clean stale exp_* directories inside data/experiments/ (keep active_champion.json)
     exp_dir = DATA_DIR / "experiments"
     if exp_dir.exists():
