@@ -485,6 +485,9 @@ def run_autonomous_1click_pipeline(
         "status": "Success",
         "sample_comparisons": comparison_records,
         "interactive_input_template": interactive_defaults,
+        "holdout_actuals": [str(x) for x in y_test.values.tolist()] if is_classification else [float(x) for x in y_test.values.tolist()],
+        "holdout_predictions": [str(x) for x in test_preds.tolist()] if is_classification else [float(x) for x in test_preds.tolist()],
+        "is_classification": is_classification,
         "pipeline_ready": True,
     })
 
