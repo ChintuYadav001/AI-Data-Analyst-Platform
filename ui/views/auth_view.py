@@ -783,35 +783,7 @@ div[data-testid="stPopover"] > button:hover {
                             st.session_state["main_user_otp_input_val"] = str(last_otp)
                             st.rerun()
 
-                    with st.expander("⚙️ Configure Real Email Delivery (Gmail / Outlook / SMTP)", expanded=False):
-                        st.markdown("""
-                        **Step-by-Step Instructions (Takes 60 seconds):**
-                        1. [👉 Click here to open your Google App Passwords page](https://myaccount.google.com/apppasswords).
-                        2. In the **App name** box, type `Analytics Platform` and click **Create**.
-                        3. Paste the **16-character code** below and click **Test & Save**.
-                        """)
-                        col_cfg1, col_cfg2 = st.columns(2)
-                        with col_cfg1:
-                            cfg_host = st.text_input("SMTP Server", value="smtp.gmail.com", key="cfg_smtp_host")
-                            cfg_port = st.number_input("SMTP Port", value=587, key="cfg_smtp_port")
-                        with col_cfg2:
-                            cfg_user = st.text_input("Gmail Address", value=main_sent_dest if "@" in main_sent_dest else "shambhuray0002@gmail.com", placeholder="your.email@gmail.com", key="cfg_smtp_user")
-                            cfg_pass = st.text_input("Google App Password (16 letters)", type="password", placeholder="Paste 16-character app password", key="cfg_smtp_pass")
-
-                        if st.button("💾 Test & Save Gmail SMTP to .env", key="cfg_save_btn"):
-                            from core.services.notification_service import NotificationService
-                            res = NotificationService.configure_smtp(
-                                server=cfg_host.strip(),
-                                port=int(cfg_port),
-                                username=cfg_user.strip(),
-                                password=cfg_pass.strip().replace(" ", ""),
-                                use_tls=True
-                            )
-                            if res.get("success"):
-                                st.success("✓ Gmail SMTP connected and saved! Future OTPs will arrive in your real Gmail inbox.")
-                                st.rerun()
-                            else:
-                                st.error(res.get("error"))
+                    render_email_delivery_settings(key_prefix="main_reg", default_target=main_sent_dest)
 
                 if url_code and not st.session_state.get("main_user_otp_input"):
                     st.session_state["main_user_otp_input"] = str(url_code)
