@@ -898,7 +898,7 @@ def render_ml_view():
                     st.error(f"Benchmark failed: {str(e)}")
 
         bench_res = st.session_state.get("ml_benchmark_results")
-        if bench_res:
+        if bench_res and isinstance(bench_res, dict):
             st.markdown(f"""
             <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 14px; margin: 16px 0;">
                 <div style="color: #10B981; font-weight: 800; font-size: 0.8rem; text-transform: uppercase;">🏆 Production Champion Selected</div>
