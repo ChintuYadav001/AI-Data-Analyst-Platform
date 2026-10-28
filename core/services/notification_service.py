@@ -440,6 +440,44 @@ class NotificationService:
         env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
         return {"success": True, "message": "SMTP credentials verified and saved successfully."}
 
+    @classmethod
+    def configure_https_api(cls, provider: str, key_or_url: str) -> Dict[str, Any]:
+        """Test and save HTTPS Email API credentials (Resend, Brevo, Webhook)."""
+        from core import config
+        clean_val = key_or_url.strip()
+        if not clean_val:
+            return {"success": False, "error": "API Key or Webhook URL cannot be empty."}
+
+        env_key = "RESEND_API_KEY" if provider.lower() == "resend" else ("BREVO_API_KEY" if provider.lower() == "brevo" else "EMAIL_WEBHOOK_URL")
+
+        if provider.lower() == "resend":
+            config.RESEND_API_KEY = clean_val
+        elif provider.lower() == "brevo":
+            config.BREVO_API_KEY = clean_val
+        else:
+            config.EMAIL_WEBHOOK_URL = clean_val
+
+        os.environ[env_key] = clean_val
+
+        env_path = config.BASE_DIR / ".env"
+        lines = []
+        if env_path.exists():
+            lines = env_path.read_text(encoding="utf-8").splitlines()
+
+        updated = False
+        new_lines = []
+        for line in lines:
+            if line.startswith(f"{env_key}="):
+                new_lines.append(f"{env_key}={clean_val}")
+                updated = True
+            else:
+                new_lines.append(line)
+        if not updated:
+            new_lines.append(f"{env_key}={clean_val}")
+
+        env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        return {"success": True, "message": f"{provider} HTTPS Email integration configured and active!"}
+
     @staticmethod
     def _record_outbox(
         target: str,
