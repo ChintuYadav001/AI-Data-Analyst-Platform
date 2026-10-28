@@ -83,7 +83,8 @@ def run_autonomous_1click_pipeline(
     if not target_col or target_col not in df.columns:
         candidates = detect_target_candidates(df)
         if candidates:
-            target_col = getattr(candidates[0], "column", candidates[0].get("column", str(candidates[0]))) if not isinstance(candidates[0], str) else candidates[0]
+            c0 = candidates[0]
+            target_col = c0.column if hasattr(c0, "column") else (c0.get("column", str(c0)) if isinstance(c0, dict) else str(c0))
         else:
             # Fallback: choose last column or first categorical/binary column
             target_col = df.columns[-1]
