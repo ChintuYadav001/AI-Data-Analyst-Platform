@@ -133,10 +133,24 @@ def apply_custom_css(theme: str = "dark_futuristic", *args, **kwargs):
             padding-top: 0.5rem !important;
         }
 
+        @media (min-width: 768px) {
+            section[data-testid="stSidebar"] {
+                transform: none !important;
+                margin-left: 0px !important;
+                width: 300px !important;
+                min-width: 300px !important;
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+        }
+
         button[data-testid="stSidebarCollapseButton"],
         [data-testid="stSidebarCollapseButton"] {
             top: 72px !important;
             z-index: 999999 !important;
+            pointer-events: auto !important;
+            visibility: visible !important;
         }
         
         section[data-testid="stSidebar"] {
@@ -477,25 +491,58 @@ def apply_custom_css(theme: str = "dark_futuristic", *args, **kwargs):
             position: static !important;
         }
 
-        /* Streamlit Header & Deployment Toolbar - Hidden for clean edge-to-edge navbar */
+        /* Streamlit Header - Transparent container allowing sidebar expand controls */
         header[data-testid="stHeader"],
         [data-testid="stHeader"] {
-            display: none !important;
-            visibility: hidden !important;
+            display: block !important;
+            visibility: visible !important;
             background: transparent !important;
             height: 0px !important;
             min-height: 0px !important;
             margin: 0px !important;
             padding: 0px !important;
             pointer-events: none !important;
-            z-index: -1 !important;
+            border: none !important;
+            z-index: 999999 !important;
         }
 
-        [data-testid="stToolbar"] {
+        /* Sidebar Expand Button - Dark Futuristic Floating Neon Cyan Badge */
+        button[data-testid="stExpandSidebarButton"],
+        [data-testid="stExpandSidebarButton"],
+        [data-testid="stSidebarCollapsedControl"],
+        header[data-testid="stHeader"] button[data-testid="stExpandSidebarButton"],
+        header[data-testid="stHeader"] [data-testid="stSidebarCollapsedControl"] {
             display: flex !important;
             visibility: visible !important;
             opacity: 1 !important;
             pointer-events: auto !important;
+            position: fixed !important;
+            top: 14px !important;
+            left: 14px !important;
+            z-index: 99999999 !important;
+            background: rgba(11, 15, 28, 0.95) !important;
+            border: 1.5px solid #00F0FF !important;
+            border-radius: 8px !important;
+            color: #00F0FF !important;
+            box-shadow: 0 0 16px rgba(0, 240, 255, 0.45) !important;
+            width: 38px !important;
+            height: 38px !important;
+            align-items: center !important;
+            justify-content: center !important;
+            cursor: pointer !important;
+            transition: all 0.2s ease-in-out !important;
+        }
+
+        button[data-testid="stExpandSidebarButton"]:hover,
+        [data-testid="stSidebarCollapsedControl"]:hover {
+            background: rgba(0, 240, 255, 0.2) !important;
+            box-shadow: 0 0 22px rgba(0, 240, 255, 0.75) !important;
+            transform: scale(1.08) !important;
+        }
+
+        [data-testid="stToolbar"] {
+            display: none !important;
+            visibility: hidden !important;
         }
 
         footer {
