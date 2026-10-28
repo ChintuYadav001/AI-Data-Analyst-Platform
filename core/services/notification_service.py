@@ -220,7 +220,7 @@ class NotificationService:
                     headers={"Content-Type": "application/json"},
                     method="POST"
                 )
-                with urllib.request.urlopen(req, timeout=4) as resp:
+                with urllib.request.urlopen(req, timeout=12) as resp:
                     if resp.status in (200, 201, 204):
                         dispatched_live = True
                         dispatch_error = None
