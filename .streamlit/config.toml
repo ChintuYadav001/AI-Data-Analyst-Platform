@@ -1,13 +1,16 @@
 [server]
 headless = true
+address = "0.0.0.0"
 enableCORS = false
 enableXsrfProtection = false
-runOnSave = false
-fileWatcherType = "none"
 maxUploadSize = 4096
 
 [browser]
 gatherUsageStats = false
 
-[runner]
-fastReruns = true
+[theme]
+base = "dark"
+primaryColor = "#00F0FF"
+backgroundColor = "#080C14"
+secondaryBackgroundColor = "#0F172A"
+textColor = "#F8FAFC"
