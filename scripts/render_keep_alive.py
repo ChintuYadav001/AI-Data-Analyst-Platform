@@ -19,7 +19,7 @@ logging.basicConfig(
 )
 
 DEFAULT_URL = "https://ai-data-analyst-platform-7rhs.onrender.com"
-PING_INTERVAL_SECONDS = 600  # 10 minutes (Render spins down at 15 minutes)
+PING_INTERVAL_SECONDS = 300  # 5 minutes (Keeps Render container 100% active and warm)
 
 
 def ping_service(url: str = DEFAULT_URL) -> bool:
