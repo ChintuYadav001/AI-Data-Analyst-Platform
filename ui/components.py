@@ -8,7 +8,7 @@ def apply_custom_css(theme: str = "dark_futuristic", *args, **kwargs):
     is_light = (theme == "light_classic")
 
     if is_light:
-        st.markdown("""<div class="quantum-css-root"></div>
+        st.html("""<div class="quantum-css-root"></div>
         <style>
         /* Zero-Latency Native Font Stack */
 
@@ -418,9 +418,9 @@ def apply_custom_css(theme: str = "dark_futuristic", *args, **kwargs):
             padding: 0px !important;
         }
         </style>
-        """, unsafe_allow_html=True)
+        """)
     else:
-        st.markdown("""<div class="quantum-css-root"></div>
+        st.html("""<div class="quantum-css-root"></div>
         <style>
         /* Zero-Latency Native Font Stack */
 
