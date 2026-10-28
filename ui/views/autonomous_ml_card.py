@@ -396,13 +396,117 @@ def render_autonomous_1click_ml_tab(df: pd.DataFrame, proj_name: str = "Active D
     # STEP 9
     s9 = steps.get("step_9", {}).get("data", {})
     with st.expander(f"🔮 Step 9: Make Predictions & Real-Time Scoring — {s9.get('status', 'Completed')}", expanded=True):
+        st.markdown("#### 📊 Target Variable Prediction Visuals (Holdout Test Set)")
+        
+        # Check holdout actuals and predictions
+        actuals = s9.get("holdout_actuals", [])
+        preds = s9.get("holdout_predictions", [])
+        is_clf = s9.get("is_classification", "classification" in res.get("task_type", ""))
+        
+        if not actuals and s9.get("sample_comparisons"):
+            actuals = [r["Actual"] for r in s9["sample_comparisons"]]
+            preds = [r["Predicted"] for r in s9["sample_comparisons"]]
+
+        if actuals and preds:
+            col_v1, col_v2 = st.columns([1.2, 1.0])
+            if is_clf:
+                with col_v1:
+                    df_comp = pd.DataFrame({"Actual": [str(x) for x in actuals], "Predicted": [str(x) for x in preds]})
+                    act_c = df_comp["Actual"].value_counts().reset_index()
+                    act_c.columns = ["Target Class", "Count"]
+                    act_c["Type"] = "Actual Ground Truth"
+
+                    pred_c = df_comp["Predicted"].value_counts().reset_index()
+                    pred_c.columns = ["Target Class", "Count"]
+                    pred_c["Type"] = "Model Predicted"
+
+                    merged_c = pd.concat([act_c, pred_c], ignore_index=True)
+                    fig_dist = px.bar(
+                        merged_c,
+                        x="Target Class",
+                        y="Count",
+                        color="Type",
+                        barmode="group",
+                        color_discrete_map={"Actual Ground Truth": "#38BDF8", "Model Predicted": "#A855F7"},
+                        title=f"Actual vs. Predicted Target ({target_col})"
+                    )
+                    fig_dist.update_layout(
+                        height=280,
+                        margin=dict(l=10, r=10, t=35, b=10),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(15,23,42,0.6)",
+                        font_color="#E2E8F0",
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
+                    st.plotly_chart(fig_dist, use_container_width=True)
+
+                with col_v2:
+                    matches = sum(1 for a, p in zip(actuals, preds) if str(a) == str(p))
+                    discrepancies = len(actuals) - matches
+                    match_rate = round((matches / max(1, len(actuals))) * 100, 1)
+
+                    fig_match = go.Figure(data=[go.Pie(
+                        labels=["Correct Prediction", "Error / Discrepancy"],
+                        values=[matches, discrepancies],
+                        hole=0.62,
+                        marker_colors=["#10B981", "#EF4444"],
+                        textinfo="percent+label",
+                        insidetextorientation="radial"
+                    )])
+                    fig_match.update_layout(
+                        title=f"Holdout Prediction Accuracy: {match_rate}%",
+                        height=280,
+                        margin=dict(l=10, r=10, t=35, b=10),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        font_color="#E2E8F0",
+                        annotations=[dict(text=f"{match_rate}%", x=0.5, y=0.5, font_size=20, font_color="#10B981", showarrow=False)]
+                    )
+                    st.plotly_chart(fig_match, use_container_width=True)
+            else:
+                try:
+                    act_num = [float(x) for x in actuals]
+                    pred_num = [float(x) for x in preds]
+                    with col_v1:
+                        df_reg = pd.DataFrame({"Actual": act_num, "Predicted": pred_num})
+                        fig_reg = px.scatter(
+                            df_reg,
+                            x="Actual",
+                            y="Predicted",
+                            trendline="ols",
+                            trendline_color_override="#00F0FF",
+                            title=f"Actual vs. Predicted Scatter (y vs ŷ: {target_col})",
+                            color_discrete_sequence=["#38BDF8"]
+                        )
+                        min_v = min(min(act_num), min(pred_num))
+                        max_v = max(max(act_num), max(pred_num))
+                        fig_reg.add_shape(
+                            type="line", line=dict(dash="dash", color="#F59E0B", width=2),
+                            x0=min_v, y0=min_v, x1=max_v, y1=max_v
+                        )
+                        fig_reg.update_layout(height=280, margin=dict(l=10, r=10, t=35, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                        st.plotly_chart(fig_reg, use_container_width=True)
+
+                    with col_v2:
+                        residuals = [a - p for a, p in zip(act_num, pred_num)]
+                        fig_res = px.histogram(
+                            x=residuals,
+                            nbins=20,
+                            color_discrete_sequence=["#10B981"],
+                            title="Residual Error Distribution (y - ŷ)"
+                        )
+                        fig_res.add_vline(x=0, line_dash="dash", line_color="#EF4444")
+                        fig_res.update_layout(height=280, margin=dict(l=10, r=10, t=35, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                        st.plotly_chart(fig_res, use_container_width=True)
+                except Exception as ex:
+                    st.caption(f"Regression visual calculation notice: {ex}")
+
         st.markdown("##### 🧪 Test Set Prediction Verification (First 10 Records)")
         if s9.get("sample_comparisons"):
             st.dataframe(pd.DataFrame(s9["sample_comparisons"]), use_container_width=True)
 
         st.markdown("---")
-        st.markdown("##### 🎮 Interactive Single-Record Prediction Playground")
-        st.caption("Adjust input parameters below and click 'Predict Outcome' to test the deployed model in real time:")
+        st.markdown("##### 🎮 Interactive Real-Time Prediction Simulator")
+        st.caption("Adjust input parameters below and click 'Predict Outcome' to generate live target prediction visuals:")
 
         interactive_defs = res.get("interactive_defaults", {})
         pipeline = res.get("pipeline")
@@ -417,8 +521,6 @@ def render_autonomous_1click_ml_tab(df: pd.DataFrame, proj_name: str = "Active D
                 val = interactive_defs[col_name]
                 with c:
                     if isinstance(val, (int, float)):
-                        min_v = 0.0 if val >= 0 else float(val * 2)
-                        max_v = float(val * 3) if val > 0 else 100.0
                         user_inputs[col_name] = st.number_input(
                             f"{col_name}",
                             value=float(val),
@@ -440,17 +542,124 @@ def render_autonomous_1click_ml_tab(df: pd.DataFrame, proj_name: str = "Active D
                 try:
                     input_df = pd.DataFrame([user_inputs])
                     pred_res = pipeline.predict(input_df)[0]
-                    proba_text = ""
+                    confidence_pct = None
                     if hasattr(pipeline.named_steps.get("model"), "predict_proba"):
                         try:
                             proba = pipeline.predict_proba(input_df)[0]
-                            max_prob = max(proba)
-                            proba_text = f" (Confidence: {round(max_prob * 100, 2)}%)"
+                            confidence_pct = round(float(max(proba)) * 100, 2)
                         except Exception:
                             pass
-                    st.success(f"🎯 **Predicted {target_col}:** `{pred_res}`{proba_text}")
+                    st.session_state["auto_last_prediction"] = {
+                        "prediction": str(pred_res),
+                        "confidence_pct": confidence_pct,
+                        "inputs": user_inputs,
+                    }
                 except Exception as e:
                     st.error(f"Prediction failed: {str(e)}")
+
+            # Display prediction result and visual graph
+            last_p = st.session_state.get("auto_last_prediction")
+            if last_p:
+                pred_val = last_p["prediction"]
+                conf = last_p.get("confidence_pct")
+                
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, rgba(0, 240, 255, 0.12) 0%, rgba(168, 85, 247, 0.08) 100%);
+                            border: 1px solid #00F0FF; border-radius: 12px; padding: 16px 20px; margin: 14px 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                        <div>
+                            <div style="font-size: 0.75rem; color: #38BDF8; font-weight: 800; text-transform: uppercase;">
+                                // SIMULATED MODEL TARGET PREDICTION
+                            </div>
+                            <div style="font-size: 2.2rem; font-weight: 900; color: #FFFFFF; margin: 2px 0;">
+                                {target_col} = <span style="color: #00F0FF;">{pred_val}</span>
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            <span style="background: rgba(16, 185, 129, 0.18); color: #10B981; border: 1px solid #10B981; padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 0.85rem;">
+                                {f'Confidence: {conf}%' if conf is not None else 'Regression Output'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                col_g1, col_g2 = st.columns([1, 1.2])
+                with col_g1:
+                    # Confidence / Output Gauge
+                    if conf is not None:
+                        fig_g = go.Figure(go.Indicator(
+                            mode="gauge+number",
+                            value=conf,
+                            title={'text': f"Predicted: {pred_val}<br><span style='font-size:0.75em;color:#94A3B8'>Model Confidence</span>"},
+                            gauge={
+                                'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#E2E8F0"},
+                                'bar': {'color': "#00F0FF"},
+                                'steps': [
+                                    {'range': [0, 50], 'color': "rgba(239, 68, 68, 0.35)"},
+                                    {'range': [50, 75], 'color': "rgba(245, 158, 11, 0.35)"},
+                                    {'range': [75, 100], 'color': "rgba(16, 185, 129, 0.35)"}
+                                ],
+                            }
+                        ))
+                        fig_g.update_layout(height=250, margin=dict(l=15, r=15, t=30, b=15), paper_bgcolor="rgba(0,0,0,0)", font_color="#FFFFFF")
+                        st.plotly_chart(fig_g, use_container_width=True)
+                    else:
+                        try:
+                            t_min = float(df[target_col].min())
+                            t_max = float(df[target_col].max())
+                            fig_g = go.Figure(go.Indicator(
+                                mode="gauge+number",
+                                value=float(pred_val),
+                                title={'text': f"Predicted {target_col}<br><span style='font-size:0.75em;color:#94A3B8'>Historical Range [{t_min:.1f} - {t_max:.1f}]</span>"},
+                                gauge={
+                                    'axis': {'range': [t_min, t_max], 'tickwidth': 1, 'tickcolor': "#E2E8F0"},
+                                    'bar': {'color': "#00F0FF"},
+                                }
+                            ))
+                            fig_g.update_layout(height=250, margin=dict(l=15, r=15, t=30, b=15), paper_bgcolor="rgba(0,0,0,0)", font_color="#FFFFFF")
+                            st.plotly_chart(fig_g, use_container_width=True)
+                        except Exception:
+                            pass
+
+                with col_g2:
+                    st.markdown("###### 🌐 Target Population Benchmark Context")
+                    if target_col in df.columns:
+                        if pd.api.types.is_numeric_dtype(df[target_col]) and not is_clf:
+                            fig_hist = px.histogram(
+                                df,
+                                x=target_col,
+                                nbins=25,
+                                title=f"Historical Distribution of {target_col}",
+                                color_discrete_sequence=["#64748B"]
+                            )
+                            try:
+                                fig_hist.add_vline(
+                                    x=float(pred_val),
+                                    line_dash="solid",
+                                    line_color="#00F0FF",
+                                    line_width=3,
+                                    annotation_text="🎯 New Prediction",
+                                    annotation_position="top right"
+                                )
+                            except Exception:
+                                pass
+                            fig_hist.update_layout(height=240, margin=dict(l=10, r=10, t=35, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                            st.plotly_chart(fig_hist, use_container_width=True)
+                        else:
+                            cls_counts = df[target_col].astype(str).value_counts().reset_index()
+                            cls_counts.columns = [target_col, "Count"]
+                            cls_counts["Highlight"] = cls_counts[target_col].apply(lambda x: "Predicted Outcome" if x == str(pred_val) else "Other Classes")
+                            fig_cls = px.bar(
+                                cls_counts,
+                                x=target_col,
+                                y="Count",
+                                color="Highlight",
+                                color_discrete_map={"Predicted Outcome": "#00F0FF", "Other Classes": "#334155"},
+                                title=f"Historical Target Class Breakdown vs Predicted"
+                            )
+                            fig_cls.update_layout(height=240, margin=dict(l=10, r=10, t=35, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                            st.plotly_chart(fig_cls, use_container_width=True)
 
     # STEP 10
     s10 = steps.get("step_10", {}).get("data", {})
