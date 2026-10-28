@@ -247,11 +247,35 @@ def run_autonomous_1click_pipeline(
 
     # Select valid feature candidates
     feature_candidates = [c for c in engineered_df.columns if c != target_col]
-    # Filter out pure unique ID columns with len == unique
+
+    # Filter out pure unique ID columns, primary keys, and high-cardinality ID/Name columns that cause severe overfitting
     feature_cols = []
+    id_name_keywords = [
+        "id", "key", "row_id", "row id", "order_id", "order id",
+        "customer_id", "customer id", "product_id", "product id",
+        "employee_id", "customer_name", "customer name", "contact_name",
+        "contact name", "product_name", "product name", "postal_code", "postal code"
+    ]
     for c in feature_candidates:
-        if engineered_df[c].nunique() == len(engineered_df) and engineered_df[c].dtype == object:
-            continue  # skip unique primary keys
+        c_clean = c.lower().strip()
+        # Skip if column name matches identifier or name keywords (unless it's an engineered domain feature)
+        is_leak_id = any(
+            c_clean == kw or
+            c_clean.startswith(f"{kw}_") or
+            c_clean.endswith(f"_{kw}") or
+            f" {kw}" in c_clean or
+            f"{kw} " in c_clean
+            for kw in id_name_keywords
+        )
+        if is_leak_id and not any(ef in c for ef in ["_gross_val", "_net_after_discount", "_month", "_quarter", "_dayofweek"]):
+            continue
+
+        # Skip text columns with excessive cardinality (> 60 unique categories or > 5% of dataset size)
+        if engineered_df[c].dtype == object or isinstance(engineered_df[c].dtype, pd.CategoricalDtype):
+            num_unq = engineered_df[c].nunique()
+            if num_unq > 60 or (len(engineered_df) > 50 and (num_unq / len(engineered_df)) > 0.05):
+                continue
+
         feature_cols.append(c)
 
     if not feature_cols:
