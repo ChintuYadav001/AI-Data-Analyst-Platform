@@ -475,10 +475,10 @@ def run_autonomous_1click_pipeline(
     # Interactive input template based on feature medians/modes
     interactive_defaults = {}
     for col in feature_cols:
-        if col in numeric_cols_raw:
-            interactive_defaults[col] = float(clean_df[col].median())
+        if pd.api.types.is_numeric_dtype(engineered_df[col]):
+            interactive_defaults[col] = float(engineered_df[col].median())
         else:
-            interactive_defaults[col] = str(clean_df[col].mode().iloc[0]) if len(clean_df[col].mode()) > 0 else "Default"
+            interactive_defaults[col] = str(engineered_df[col].mode().iloc[0]) if len(engineered_df[col].mode()) > 0 else "Default"
 
     notify(9, "Predictions & Scoring Engine", {
         "status": "Success",
