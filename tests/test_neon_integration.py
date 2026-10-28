@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock
 from core.neon_db import (
     get_neon_url,
     sanitize_table_name,
-    test_neon_connection,
+    test_neon_connection as check_neon_connection,
     list_neon_tables,
     fetch_table_from_neon,
     store_dataframe_to_neon,
@@ -38,13 +38,13 @@ def test_sanitize_table_name():
     assert sanitize_table_name("___ecom___sales___") == "ecom_sales"
 
 def test_neon_connection_invalid_url():
-    res = test_neon_connection("invalid_connection_string")
+    res = check_neon_connection("invalid_connection_string")
     assert res["success"] is False
     assert "error" in res
 
 def test_neon_connection_empty():
     with patch.dict("os.environ", {}, clear=True):
-        res = test_neon_connection("")
+        res = check_neon_connection("")
         assert res["success"] is False
         assert "No Neon connection URL provided" in res["error"]
 
@@ -58,7 +58,7 @@ def test_neon_connection_mocked_success():
     mock_conn.cursor.return_value.__enter__.return_value = mock_cur
 
     with patch("psycopg2.connect", return_value=mock_conn):
-        res = test_neon_connection("postgresql://chintu:pass@ep-xyz.neon.tech/neondb")
+        res = check_neon_connection("postgresql://chintu:pass@ep-xyz.neon.tech/neondb")
         assert res["success"] is True
         assert res["database_name"] == "neondb"
         assert res["current_user"] == "chintu"
