@@ -303,11 +303,11 @@ def run_autonomous_1click_pipeline(
     model_name = model_meta.name if model_meta else chosen_model_id
 
     # Build memory-safe preprocessing pipeline
-    preprocessor = build_preprocessor(
-        X_train,
+    preprocessor, col_types = build_preprocessor(
+        df=X_train,
+        feature_cols=feature_cols,
         scaler_type="standard",
         cat_encoding="onehot" if len(clean_df) < 50000 else "ordinal",
-        max_categories=15
     )
 
     # Instantiate estimator
