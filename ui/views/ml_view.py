@@ -72,6 +72,7 @@ def init_ml_session_state():
         "ml_anomaly_results": None,
         "ml_scenario_results": None,
         "ml_last_dataset_signature": None,
+        "ml_autonomous_results": None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
