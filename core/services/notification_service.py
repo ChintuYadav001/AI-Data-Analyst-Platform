@@ -134,11 +134,12 @@ class NotificationService:
 
         from dotenv import load_dotenv
         load_dotenv(override=True)
-        smtp_server = os.getenv("SMTP_SERVER", "")
-        smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        smtp_user = os.getenv("SMTP_USERNAME", "")
-        smtp_pass = os.getenv("SMTP_PASSWORD", "")
-        smtp_from = os.getenv("SMTP_FROM", smtp_user or "no-reply@analytics.platform")
+        from core.config import SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM, SMTP_USE_TLS
+        smtp_server = os.getenv("SMTP_SERVER") or SMTP_SERVER
+        smtp_port = int(os.getenv("SMTP_PORT") or SMTP_PORT or 587)
+        smtp_user = os.getenv("SMTP_USERNAME") or SMTP_USERNAME
+        smtp_pass = os.getenv("SMTP_PASSWORD") or SMTP_PASSWORD
+        smtp_from = os.getenv("SMTP_FROM") or SMTP_FROM or smtp_user
         smtp_use_tls = os.getenv("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
 
         if smtp_server and smtp_user and smtp_pass:
