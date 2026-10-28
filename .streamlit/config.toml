@@ -11,6 +11,12 @@ enableWebsocketCompression = true
 
 [browser]
 gatherUsageStats = false
+serverAddress = "ai-data-analyst-platform-7rhs.onrender.com"
+serverPort = 443
+
+[client]
+toolbarMode = "minimal"
+showErrorDetails = false
 
 [theme]
 base = "dark"
