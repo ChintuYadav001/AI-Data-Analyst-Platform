@@ -803,7 +803,6 @@ div[data-testid="stPopover"] > button:hover {
                                     del st.session_state[k]
                             st.success(f"Account successfully verified and created! Logged in as {registered_user['username']}.")
                             st.rerun()
-                            st.rerun()
                         except ValueError as ve:
                             st.error(str(ve))
                         except Exception as e:
@@ -832,10 +831,9 @@ div[data-testid="stPopover"] > button:hover {
                             st.session_state["authenticated"] = True
                             st.session_state["user"] = registered_user
                             st.session_state["active_nav"] = "Dashboard"
-                            if "main_otp_sent_to" in st.session_state:
-                                del st.session_state["main_otp_sent_to"]
-                            if "main_user_otp_input_val" in st.session_state:
-                                del st.session_state["main_user_otp_input_val"]
+                            for k in ["main_otp_sent_to", "main_user_otp_input", "main_user_otp_input_val", "main_otp_verified_flag", "main_last_otp_code"]:
+                                if k in st.session_state:
+                                    del st.session_state[k]
                             st.success(f"Account successfully created! Logged in as {registered_user['username']}.")
                             st.rerun()
                         except ValueError as ve:
