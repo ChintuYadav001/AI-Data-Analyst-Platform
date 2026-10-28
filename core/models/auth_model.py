@@ -528,14 +528,20 @@ class AuthModel:
             "dispatch_info": dispatch_info,
         }
 
-    def reset_password_with_otp(self, identifier: str, otp_code: str, new_password: str) -> bool:
+    def reset_password(
+        self,
+        identifier: str,
+        new_password: str,
+        otp_code: Optional[str] = None,
+        require_otp: bool = False
+    ) -> bool:
         """
-        Verify the OTP and securely update the user's password with PBKDF2 hashing.
-        Consumes the OTP so it cannot be reused.
+        Securely updates the user's password with PBKDF2 hashing.
+        Allows instant password reset or optional OTP verification.
         """
         user = self.find_user_by_identifier(identifier)
         if not user:
-            raise ValueError("No account found matching this identifier.")
+            raise ValueError(f"No account found matching '{identifier}'.")
 
         if not user.get("is_active", True):
             raise ValueError("This account has been disabled. Please contact your administrator.")
@@ -543,23 +549,19 @@ class AuthModel:
         if not new_password or len(new_password) < 4:
             raise ValueError("New password must be at least 4 characters long.")
 
-        clean_otp = str(otp_code).strip()
-        if not clean_otp:
-            raise ValueError("One-Time Password (OTP) verification code is required.")
+        if require_otp and otp_code:
+            clean_otp = str(otp_code).strip()
+            user_email = (user.get("email") or "").strip().lower()
+            user_phone = (user.get("phone") or "").strip()
+            user_ident = identifier.strip().lower()
 
-        user_email = (user.get("email") or "").strip().lower()
-        user_phone = (user.get("phone") or "").strip()
-        user_ident = identifier.strip().lower()
-
-        # Verify and consume OTP against email, phone, or raw identifier
-        verified = (
-            (bool(user_email) and self.verify_and_consume_otp(user_email, clean_otp))
-            or (bool(user_phone) and self.verify_and_consume_otp(user_phone, clean_otp))
-            or self.verify_and_consume_otp(user_ident, clean_otp)
-        )
-
-        if not verified:
-            raise ValueError("Invalid or expired One-Time Password (OTP). Please check the code or request a new one.")
+            verified = (
+                (bool(user_email) and self.verify_and_consume_otp(user_email, clean_otp))
+                or (bool(user_phone) and self.verify_and_consume_otp(user_phone, clean_otp))
+                or self.verify_and_consume_otp(user_ident, clean_otp)
+            )
+            if not verified:
+                raise ValueError("Invalid or expired One-Time Password (OTP). Please check the code.")
 
         pwd_hash, salt = hash_password(new_password)
         now = datetime.now(timezone.utc).isoformat()
@@ -578,11 +580,16 @@ class AuthModel:
             cursor.execute(
                 """
                 INSERT INTO login_logs (id, user_id, username, timestamp, ip_address, user_agent, status, failure_reason)
-                VALUES (?, ?, ?, ?, ?, ?, 'PASSWORD_RESET', 'User reset password via verified OTP')
+                VALUES (?, ?, ?, ?, ?, ?, 'PASSWORD_RESET', 'User password successfully updated')
                 """,
                 (log_id, user["id"], user["username"], now, "127.0.0.1", "Web-Password-Recovery")
             )
             conn.commit()
+        return True
+
+    def reset_password_with_otp(self, identifier: str, otp_code: str, new_password: str) -> bool:
+        """Verify the OTP and securely update password."""
+        return self.reset_password(identifier=identifier, new_password=new_password, otp_code=otp_code, require_otp=True)
 
         return True
 
