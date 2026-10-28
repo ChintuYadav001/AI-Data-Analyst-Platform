@@ -607,156 +607,10 @@ div[data-testid="stPopover"] > button:hover {
                 with col_p2:
                     new_password_confirm = st.text_input("Confirm Password", type="password", placeholder="Re-enter password", key="main_reg_pwd2")
 
-                st.markdown("<div style='font-size: 0.82rem; font-weight: 600; color: #00F0FF; margin-top: 10px; margin-bottom: 4px;'>📲 Select OTP Dispatch Channel:</div>", unsafe_allow_html=True)
-                otp_channel = st.radio(
-                    "OTP Channel",
-                    ["📧 Send OTP & Link to Institutional Email (Active via Gmail SMTP)", "📱 Send OTP & Link to Mobile / Phone Number (SMS)"],
-                    label_visibility="collapsed",
-                    key="main_otp_channel_choice"
-                )
-
-                if st.button("📲 Send OTP / Verification Link", key="main_reg_send_otp_btn", use_container_width=True):
-                    is_phone_target = "Phone" in otp_channel or "Mobile" in otp_channel
-                    target_dest = new_phone.strip() if is_phone_target else new_email.strip()
-
-                    if is_phone_target and (not new_phone or len(new_phone.strip()) < 6):
-                        st.error("Please provide a valid mobile or phone number (at least 6 digits).")
-                    elif not is_phone_target and (not new_email or "@" not in new_email):
-                        st.error("Please provide a valid institutional email address.")
-                    else:
-                        try:
-                            target_type = "phone" if is_phone_target else "email"
-                            generated_otp = auth_model.generate_otp(target_dest, target_type=target_type)
-                            st.session_state["main_otp_sent_to"] = target_dest
-                            st.session_state["main_otp_type"] = target_type
-                            st.session_state["main_last_otp_code"] = str(generated_otp)
-                            st.session_state["main_user_otp_input"] = str(generated_otp)
-                            st.session_state["main_user_otp_input_val"] = str(generated_otp)
-                            st.toast(f"OTP code {generated_otp} dispatched to your {target_type}!", icon="📬")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Failed to dispatch OTP: {str(e)}")
-
-                main_sent_dest = st.session_state.get("main_otp_sent_to")
-                main_dest_type = st.session_state.get("main_otp_type", "channel")
-
-                if main_sent_dest:
-                    masked_dest = mask_destination(main_sent_dest, main_dest_type)
-                    last_dispatch = auth_model.get_last_dispatch_info() or {}
-                    dispatched_live = last_dispatch.get("dispatched_live", False)
-                    last_otp = st.session_state.get("main_last_otp_code") or (last_dispatch.get("otp_code") if last_dispatch else None)
-
-                    if dispatched_live:
-                        st.markdown(f"""
-                        <div style="background: rgba(0, 255, 157, 0.1); border: 1px solid #00FF9D; box-shadow: 0 0 15px rgba(0, 255, 157, 0.2); border-radius: 8px; padding: 14px; margin: 12px 0;">
-                            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00FF9D; font-weight: 700; display: flex; align-items: center; justify-content: space-between;">
-                                <span style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00FF9D; box-shadow: 0 0 8px #00FF9D;"></span>
-                                    ✓ REAL EMAIL DELIVERED TO: {masked_dest}
-                                </span>
-                                <span style="font-size: 1.15rem; color: #FFFFFF; background: rgba(0,255,157,0.25); padding: 3px 10px; border-radius: 4px; letter-spacing: 2px; font-weight: 900;">{last_otp or 'READY'}</span>
-                            </div>
-                            <div style="font-size: 0.84rem; color: #FFFFFF; margin-top: 6px; line-height: 1.5;">
-                                Your 6-digit OTP code has been delivered to <b>{main_sent_dest}</b> via Gmail SMTP.
-                                <br/><span style="font-size: 0.78rem; color: #94A3B8;">Code is also ready above. Click <b>Auto-Fill Code</b> or type it below to complete registration!</span>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"""
-                        <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid rgba(0, 240, 255, 0.4); border-radius: 8px; padding: 14px; margin: 12px 0;">
-                            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00F0FF; font-weight: 700; display: flex; align-items: center; justify-content: space-between;">
-                                <span>⚡ INSTANT VERIFICATION CLEARANCE CODE</span>
-                                <span style="font-size: 1.15rem; color: #FFFFFF; background: rgba(0,240,255,0.25); padding: 3px 10px; border-radius: 4px; letter-spacing: 2px; font-weight: 900;">{last_otp or 'READY'}</span>
-                            </div>
-                            <div style="font-size: 0.80rem; color: #CBD5E1; margin-top: 6px; line-height: 1.5;">
-                                Target: <code>{masked_dest}</code>. Clearance code generated above. Click <b>Auto-Fill Code</b> or use <b>1-Click Fast Register</b> below!
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                    if last_otp:
-                        if st.button(f"⚡ Auto-Fill Verification Code ({last_otp})", key="btn_autofill_dev_otp", use_container_width=True):
-                            st.session_state["main_user_otp_input"] = str(last_otp)
-                            st.session_state["main_user_otp_input_val"] = str(last_otp)
-                            st.rerun()
-
-                    render_email_delivery_settings(key_prefix="main_reg", default_target=main_sent_dest)
-
-                if url_code and not st.session_state.get("main_user_otp_input"):
-                    st.session_state["main_user_otp_input"] = str(url_code)
-
-                col_otp_inp, col_otp_chk = st.columns([1.2, 0.8])
-                with col_otp_inp:
-                    user_otp_input = st.text_input(
-                        "Enter 6-Digit Verification OTP (from Email or Phone)",
-                        placeholder="e.g. 123456",
-                        max_chars=6,
-                        key="main_user_otp_input"
-                    )
-                with col_otp_chk:
-                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                    if st.button("🔍 Check OTP", key="main_check_otp_now_btn", use_container_width=True):
-                        candidate_dest = st.session_state.get("main_otp_sent_to") or new_email or new_phone
-                        curr_code = st.session_state.get("main_user_otp_input", "").strip()
-                        if not curr_code:
-                            st.error("Please enter 6-digit OTP")
-                        elif not candidate_dest:
-                            st.error("Please enter email/phone first")
-                        else:
-                            if auth_model.verify_otp(candidate_dest, curr_code):
-                                st.session_state["main_otp_verified_flag"] = True
-                                st.success("✓ OTP Verified! Click Register below.")
-                            else:
-                                st.error("❌ Invalid or expired code.")
-
-                if st.session_state.get("main_otp_verified_flag"):
-                    st.markdown(f"<div style='background: rgba(16, 185, 129, 0.12); border: 1px solid #10B981; border-radius: 6px; padding: 8px 12px; color: #10B981; font-size: 0.82rem; font-weight: 700; margin-bottom: 10px;'>✓ 6-Digit OTP Verified for {st.session_state.get('main_otp_sent_to', 'Account')}</div>", unsafe_allow_html=True)
-
-                col_reg_act1, col_reg_act2 = st.columns([1.1, 1.0])
-                with col_reg_act1:
-                    register_btn = st.button("🛡️ Verify OTP & Register", type="primary", use_container_width=True, key="main_submit_reg_btn")
-                with col_reg_act2:
-                    fast_reg_btn = st.button("⚡ 1-Click Fast Register", type="secondary", use_container_width=True, key="main_fast_reg_btn", help="Instant cloud activation without waiting for OTP")
+                st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+                register_btn = st.button("🚀 Create Account & Enter Workspace", type="primary", use_container_width=True, key="main_submit_reg_btn")
 
                 if register_btn:
-                    if not new_username or not new_email or not new_password:
-                        st.error("Username, Email, and Password are required fields.")
-                    elif not new_phone or len(new_phone.strip()) < 6:
-                        st.error("Please provide a valid phone number.")
-                    elif new_password != new_password_confirm:
-                        st.error("Passwords do not match. Please verify your password.")
-                    elif len(new_password) < 4:
-                        st.error("Password must be at least 4 characters in length.")
-                    elif not user_otp_input:
-                        st.error("Please enter the 6-digit One-Time Password (OTP) received on your email or phone.")
-                    else:
-                        try:
-                            registered_user = auth_model.register(
-                                username=new_username,
-                                email=new_email,
-                                password=new_password,
-                                full_name=new_fullname,
-                                phone=new_phone.strip(),
-                                role=new_role,
-                                otp_code=user_otp_input,
-                                require_otp=True,
-                                otp_target=st.session_state.get("main_otp_sent_to")
-                            )
-                            st.session_state["authenticated"] = True
-                            st.session_state["user"] = registered_user
-                            st.session_state["active_nav"] = "Dashboard"
-                            for k in ["main_otp_sent_to", "main_user_otp_input", "main_user_otp_input_val", "main_otp_verified_flag", "main_last_otp_code"]:
-                                if k in st.session_state:
-                                    del st.session_state[k]
-                            st.success(f"Account successfully verified and created! Logged in as {registered_user['username']}.")
-                            st.rerun()
-                        except ValueError as ve:
-                            st.error(str(ve))
-                        except Exception as e:
-                            st.error(f"Error registering user: {str(e)}")
-
-                if fast_reg_btn:
                     if not new_username or not new_email or not new_password:
                         st.error("Username, Email, and Password are required fields.")
                     elif not new_phone or len(new_phone.strip()) < 6:
@@ -788,6 +642,150 @@ div[data-testid="stPopover"] > button:hover {
                             st.error(str(ve))
                         except Exception as e:
                             st.error(f"Error registering user: {str(e)}")
+
+                with st.expander("📲 Advanced: Institutional OTP Verification (Optional)", expanded=bool(url_code or st.session_state.get("main_otp_sent_to"))):
+                    st.caption("If your organization requires multi-factor clearance code, request an OTP below.")
+                    otp_channel = st.radio(
+                        "OTP Channel",
+                        ["📧 Send OTP & Link to Institutional Email (Active via Gmail SMTP)", "📱 Send OTP & Link to Mobile / Phone Number (SMS)"],
+                        label_visibility="collapsed",
+                        key="main_otp_channel_choice"
+                    )
+
+                    if st.button("📲 Send OTP / Verification Link", key="main_reg_send_otp_btn", use_container_width=True):
+                        is_phone_target = "Phone" in otp_channel or "Mobile" in otp_channel
+                        target_dest = new_phone.strip() if is_phone_target else new_email.strip()
+
+                        if is_phone_target and (not new_phone or len(new_phone.strip()) < 6):
+                            st.error("Please provide a valid mobile or phone number (at least 6 digits).")
+                        elif not is_phone_target and (not new_email or "@" not in new_email):
+                            st.error("Please provide a valid institutional email address.")
+                        else:
+                            try:
+                                target_type = "phone" if is_phone_target else "email"
+                                generated_otp = auth_model.generate_otp(target_dest, target_type=target_type)
+                                st.session_state["main_otp_sent_to"] = target_dest
+                                st.session_state["main_otp_type"] = target_type
+                                st.session_state["main_last_otp_code"] = str(generated_otp)
+                                st.session_state["main_user_otp_input"] = str(generated_otp)
+                                st.session_state["main_user_otp_input_val"] = str(generated_otp)
+                                st.toast(f"OTP code {generated_otp} dispatched to your {target_type}!", icon="📬")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed to dispatch OTP: {str(e)}")
+
+                    main_sent_dest = st.session_state.get("main_otp_sent_to")
+                    main_dest_type = st.session_state.get("main_otp_type", "channel")
+
+                    if main_sent_dest:
+                        masked_dest = mask_destination(main_sent_dest, main_dest_type)
+                        last_dispatch = auth_model.get_last_dispatch_info() or {}
+                        dispatched_live = last_dispatch.get("dispatched_live", False)
+                        last_otp = st.session_state.get("main_last_otp_code") or (last_dispatch.get("otp_code") if last_dispatch else None)
+
+                        if dispatched_live:
+                            st.markdown(f"""
+                            <div style="background: rgba(0, 255, 157, 0.1); border: 1px solid #00FF9D; box-shadow: 0 0 15px rgba(0, 255, 157, 0.2); border-radius: 8px; padding: 14px; margin: 12px 0;">
+                                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00FF9D; font-weight: 700; display: flex; align-items: center; justify-content: space-between;">
+                                    <span style="display: flex; align-items: center; gap: 8px;">
+                                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00FF9D; box-shadow: 0 0 8px #00FF9D;"></span>
+                                        ✓ REAL EMAIL DELIVERED TO: {masked_dest}
+                                    </span>
+                                    <span style="font-size: 1.15rem; color: #FFFFFF; background: rgba(0,255,157,0.25); padding: 3px 10px; border-radius: 4px; letter-spacing: 2px; font-weight: 900;">{last_otp or 'READY'}</span>
+                                </div>
+                                <div style="font-size: 0.84rem; color: #FFFFFF; margin-top: 6px; line-height: 1.5;">
+                                    Your 6-digit OTP code has been delivered to <b>{main_sent_dest}</b> via Gmail SMTP.
+                                    <br/><span style="font-size: 0.78rem; color: #94A3B8;">Click <b>Auto-Fill Code</b> or type it below to complete registration!</span>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                            <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid rgba(0, 240, 255, 0.4); border-radius: 8px; padding: 14px; margin: 12px 0;">
+                                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00F0FF; font-weight: 700; display: flex; align-items: center; justify-content: space-between;">
+                                    <span>⚡ INSTANT VERIFICATION CLEARANCE CODE</span>
+                                    <span style="font-size: 1.15rem; color: #FFFFFF; background: rgba(0,240,255,0.25); padding: 3px 10px; border-radius: 4px; letter-spacing: 2px; font-weight: 900;">{last_otp or 'READY'}</span>
+                                </div>
+                                <div style="font-size: 0.80rem; color: #CBD5E1; margin-top: 6px; line-height: 1.5;">
+                                    Target: <code>{masked_dest}</code>. Clearance code generated above.
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                        if last_otp:
+                            if st.button(f"⚡ Auto-Fill Verification Code ({last_otp})", key="btn_autofill_dev_otp", use_container_width=True):
+                                st.session_state["main_user_otp_input"] = str(last_otp)
+                                st.session_state["main_user_otp_input_val"] = str(last_otp)
+                                st.rerun()
+
+                        render_email_delivery_settings(key_prefix="main_reg", default_target=main_sent_dest)
+
+                    if url_code and not st.session_state.get("main_user_otp_input"):
+                        st.session_state["main_user_otp_input"] = str(url_code)
+
+                    col_otp_inp, col_otp_chk = st.columns([1.2, 0.8])
+                    with col_otp_inp:
+                        user_otp_input = st.text_input(
+                            "Enter 6-Digit Verification OTP (from Email or Phone)",
+                            placeholder="e.g. 123456",
+                            max_chars=6,
+                            key="main_user_otp_input"
+                        )
+                    with col_otp_chk:
+                        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                        if st.button("🔍 Check OTP", key="main_check_otp_now_btn", use_container_width=True):
+                            candidate_dest = st.session_state.get("main_otp_sent_to") or new_email or new_phone
+                            curr_code = st.session_state.get("main_user_otp_input", "").strip()
+                            if not curr_code:
+                                st.error("Please enter 6-digit OTP")
+                            elif not candidate_dest:
+                                st.error("Please enter email/phone first")
+                            else:
+                                if auth_model.verify_otp(candidate_dest, curr_code):
+                                    st.session_state["main_otp_verified_flag"] = True
+                                    st.success("✓ OTP Verified! Click Register below.")
+                                else:
+                                    st.error("❌ Invalid or expired code.")
+
+                    if st.session_state.get("main_otp_verified_flag"):
+                        st.markdown(f"<div style='background: rgba(16, 185, 129, 0.12); border: 1px solid #10B981; border-radius: 6px; padding: 8px 12px; color: #10B981; font-size: 0.82rem; font-weight: 700; margin-bottom: 10px;'>✓ 6-Digit OTP Verified for {st.session_state.get('main_otp_sent_to', 'Account')}</div>", unsafe_allow_html=True)
+
+                    if st.button("🛡️ Verify OTP & Register", type="secondary", use_container_width=True, key="main_otp_verified_reg_btn"):
+                        if not new_username or not new_email or not new_password:
+                            st.error("Username, Email, and Password are required fields.")
+                        elif not new_phone or len(new_phone.strip()) < 6:
+                            st.error("Please provide a valid phone number.")
+                        elif new_password != new_password_confirm:
+                            st.error("Passwords do not match. Please verify your password.")
+                        elif len(new_password) < 4:
+                            st.error("Password must be at least 4 characters in length.")
+                        elif not user_otp_input:
+                            st.error("Please enter the 6-digit One-Time Password (OTP) received on your email or phone.")
+                        else:
+                            try:
+                                registered_user = auth_model.register(
+                                    username=new_username,
+                                    email=new_email,
+                                    password=new_password,
+                                    full_name=new_fullname or new_username,
+                                    phone=new_phone.strip(),
+                                    role=new_role,
+                                    otp_code=user_otp_input,
+                                    require_otp=True,
+                                    otp_target=st.session_state.get("main_otp_sent_to")
+                                )
+                                st.session_state["authenticated"] = True
+                                st.session_state["user"] = registered_user
+                                st.session_state["active_nav"] = "Dashboard"
+                                for k in ["main_otp_sent_to", "main_user_otp_input", "main_user_otp_input_val", "main_otp_verified_flag", "main_last_otp_code"]:
+                                    if k in st.session_state:
+                                        del st.session_state[k]
+                                st.success(f"Account successfully verified and created! Logged in as {registered_user['username']}.")
+                                st.rerun()
+                            except ValueError as ve:
+                                st.error(str(ve))
+                            except Exception as e:
+                                st.error(f"Error registering user: {str(e)}")
 
         # ---------------------------------------------------------------------
         # TAB 3: RESET PASSWORD (OTP VERIFICATION)
