@@ -62,6 +62,35 @@ class LabelEncodedClassifier(BaseEstimator, ClassifierMixin):
         return getattr(self.base_estimator, "coef_", None)
 
 
+class LogTransformedRegressor(BaseEstimator):
+    """
+    Wraps any base regressor (e.g. Ridge, RandomForest, GradientBoosting, XGBoost)
+    to train on np.log1p(y) and predict with np.expm1(pred), preventing high-sales
+    underestimation on right-skewed business and revenue datasets.
+    """
+
+    def __init__(self, base_estimator=None):
+        self.base_estimator = base_estimator
+
+    def fit(self, X, y):
+        y_arr = np.maximum(0.0, np.asarray(y, dtype=float))
+        y_log = np.log1p(y_arr)
+        self.base_estimator.fit(X, y_log)
+        return self
+
+    def predict(self, X):
+        preds_log = self.base_estimator.predict(X)
+        return np.maximum(0.0, np.expm1(preds_log))
+
+    @property
+    def feature_importances_(self):
+        return getattr(self.base_estimator, "feature_importances_", None)
+
+    @property
+    def coef_(self):
+        return getattr(self.base_estimator, "coef_", None)
+
+
 def train_single_model(
     df: pd.DataFrame,
     target_col: str,
@@ -73,10 +102,12 @@ def train_single_model(
     cv_folds: int = 3,
     scaler_type: str = "standard",
     cat_encoding: str = "onehot",
+    use_log_transform: Any = False,
     random_state: int = 42,
 ) -> Dict[str, Any]:
     """
     Trains and evaluates a single model pipeline with zero data leakage.
+    Supports automatic target log-transformation (np.log1p / np.expm1) to eliminate high-sales underestimation.
     Returns trained pipeline, validation metrics, feature importance, and diagnostic alerts.
     """
     start_time = time.perf_counter()
@@ -98,6 +129,8 @@ def train_single_model(
     y = clean_df[target_col]
 
     is_classification = "classification" in task_type
+    is_log_transformed = False
+
     if is_classification:
         val_counts = y.value_counts()
         min_count = val_counts.min()
@@ -111,6 +144,12 @@ def train_single_model(
         y = y[valid_mask].astype(float)
         if len(y) < 8:
             raise ValueError(f"Insufficient valid numeric values in target '{target_col}'.")
+
+        # Determine if target should be log-transformed
+        target_non_neg = bool((y >= 0).all())
+        target_skew = float(y.skew()) if len(y) > 2 else 0.0
+        if target_non_neg and (use_log_transform is True or (str(use_log_transform).lower() == "auto" and target_skew > 0.85)):
+            is_log_transformed = True
 
     # Dynamic test size adjustment for small datasets
     actual_test_size = test_size
@@ -147,15 +186,18 @@ def train_single_model(
     if ("knn" in model_id) and hasattr(raw_estimator, "n_neighbors"):
         raw_estimator.n_neighbors = min(raw_estimator.n_neighbors, max(1, len(X_train) - 1))
 
-    # Wrap classifier with LabelEncodedClassifier for robust string/boolean target handling
+    # Wrap classifier with LabelEncodedClassifier or regressor with LogTransformedRegressor
     if is_classification:
         estimator = LabelEncodedClassifier(base_estimator=raw_estimator)
         estimator.fit(X_train_trans, y_train.values)
     else:
-        estimator = raw_estimator
+        if is_log_transformed:
+            estimator = LogTransformedRegressor(base_estimator=raw_estimator)
+        else:
+            estimator = raw_estimator
         estimator.fit(X_train_trans, y_train.values)
 
-    # Evaluate predictions
+    # Evaluate predictions (already back-transformed by LogTransformedRegressor if active)
     y_pred_val = estimator.predict(X_val_trans)
     y_pred_train = estimator.predict(X_train_trans)
 
@@ -201,7 +243,7 @@ def train_single_model(
 
     return {
         "model_id": model_id,
-        "model_name": REGISTRY.get(model_id, {}).name if model_id in REGISTRY else model_id,
+        "model_name": REGISTRY.get(model_id).name if model_id in REGISTRY else model_id,
         "task_type": task_type,
         "target_col": target_col,
         "feature_cols": valid_features,
@@ -209,6 +251,10 @@ def train_single_model(
         "metrics": eval_result["metrics"],
         "warnings": eval_result["warnings"],
         "is_overfitting": eval_result["is_overfitting"],
+        "is_underfitting": eval_result.get("is_underfitting", False),
+        "fit_status": eval_result.get("fit_status", "optimal"),
+        "improvement_diagnostics": eval_result.get("improvement_diagnostics", {}),
+        "log_transformed": is_log_transformed,
         "feature_importance": feat_exp["ranked_features"],
         "importance_disclaimer": feat_exp["disclaimer"],
         "pipeline": full_pipeline,
