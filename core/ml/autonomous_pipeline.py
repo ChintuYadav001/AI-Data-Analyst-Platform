@@ -431,7 +431,7 @@ def run_autonomous_1click_pipeline(
         }
 
     # Feature importances
-    feature_names_out = get_feature_names_after_preprocessing(preprocessor, X_train)
+    feature_names_out = get_feature_names_after_preprocessing(preprocessor)
     feat_importance = extract_global_feature_importance(
         model=estimator,
         feature_names=feature_names_out,
