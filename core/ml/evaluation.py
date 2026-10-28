@@ -48,10 +48,16 @@ def evaluate_regression(
     rmse = float(np.sqrt(mse))
     r2 = float(r2_score(y_true, y_pred))
     
-    try:
-        mape = float(mean_absolute_percentage_error(y_true, y_pred))
-    except Exception:
-        mape = 0.0
+    # Safe MAPE: ignore near-zero denominator points and clamp percentage error to prevent float explosion
+    valid_denom = np.abs(y_true) > 1.0
+    if np.any(valid_denom):
+        mape_arr = (np.abs((y_true[valid_denom] - y_pred[valid_denom]) / y_true[valid_denom])) * 100.0
+        mape = float(np.mean(np.clip(mape_arr, 0.0, 500.0)))
+    else:
+        try:
+            mape = min(500.0, float(mean_absolute_percentage_error(y_true, y_pred)) * 100.0)
+        except Exception:
+            mape = 0.0
 
     mx_err = float(max_error(y_true, y_pred))
 
