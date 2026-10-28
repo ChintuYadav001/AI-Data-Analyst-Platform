@@ -18,7 +18,7 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 
-DEFAULT_URL = "https://quantum-analyst-platform.onrender.com"
+DEFAULT_URL = "https://ai-data-analyst-platform-7rhs.onrender.com"
 PING_INTERVAL_SECONDS = 600  # 10 minutes (Render spins down at 15 minutes)
 
 
