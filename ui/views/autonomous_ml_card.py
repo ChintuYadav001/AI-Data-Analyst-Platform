@@ -57,7 +57,7 @@ def render_autonomous_1click_ml_tab(df: pd.DataFrame, proj_name: str = "Active D
     # STEP 0: CONFIGURATION COCKPIT
     # -------------------------------------------------------------------------
     candidates = detect_target_candidates(df)
-    candidate_cols = [c["column"] for c in candidates]
+    candidate_cols = [getattr(c, "column", c.get("column", str(c))) if not isinstance(c, str) else c for c in candidates]
     all_cols = list(df.columns)
     
     # Default target logic
