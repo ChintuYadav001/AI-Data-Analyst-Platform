@@ -311,7 +311,7 @@ def run_autonomous_1click_pipeline(
     )
 
     # Instantiate estimator
-    base_estimator = create_model_instance(chosen_model_id, random_state=42)
+    base_estimator = create_model_instance(chosen_model_id)
 
     # Wrap classification with LabelEncoder wrapper for string/bool class compatibility
     if is_classification:
