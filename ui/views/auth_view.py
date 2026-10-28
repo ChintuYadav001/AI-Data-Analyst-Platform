@@ -207,12 +207,16 @@ button[data-testid="stSidebarCollapseButton"],
 }
 header[data-testid="stHeader"],
 [data-testid="stHeader"] {
-    display: none !important;
-    visibility: hidden !important;
+    display: block !important;
+    visibility: visible !important;
+    background: transparent !important;
     height: 0px !important;
     min-height: 0px !important;
     margin: 0px !important;
     padding: 0px !important;
+    pointer-events: none !important;
+    border: none !important;
+    z-index: 999999 !important;
 }
 [data-testid="stToolbar"] {
     display: none !important;
