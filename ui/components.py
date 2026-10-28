@@ -1037,10 +1037,24 @@ def apply_custom_css(theme: str = "dark_futuristic", *args, **kwargs):
             height: calc(100vh - 64px) !important;
         }
 
+        @media (min-width: 768px) {
+            section[data-testid="stSidebar"] {
+                transform: none !important;
+                margin-left: 0px !important;
+                width: 300px !important;
+                min-width: 300px !important;
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+        }
+
         button[data-testid="stSidebarCollapseButton"],
         [data-testid="stSidebarCollapseButton"] {
             top: 72px !important;
             z-index: 999999 !important;
+            pointer-events: auto !important;
+            visibility: visible !important;
         }
 
         div[data-testid="stLayoutWrapper"]:has(.quantum-sticky-navbar-anchor) div[data-testid="stVerticalBlock"] {
