@@ -720,7 +720,7 @@ div[data-testid="stPopover"] > button:hover {
                 with col_otp_inp:
                     user_otp_input = st.text_input(
                         "Enter 6-Digit Verification OTP (from Email or Phone)",
-                        value=st.session_state.get("main_user_otp_input", ""),
+                        value=url_code if url_code else "",
                         placeholder="e.g. 123456",
                         max_chars=6,
                         key="main_user_otp_input"
