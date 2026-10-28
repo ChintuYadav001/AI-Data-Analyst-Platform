@@ -1003,7 +1003,7 @@ def apply_custom_css(theme: str = "dark_futuristic", *args, **kwargs):
             padding: 0px !important;
         }
         </style>
-        """, unsafe_allow_html=True)
+        """)
 
 @st.cache_data
 def get_logo_b64() -> str:
