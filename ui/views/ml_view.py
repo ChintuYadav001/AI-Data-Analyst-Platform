@@ -844,6 +844,19 @@ def render_ml_view():
             )
             st.session_state["ml_cat_encoding"] = cat_choice
 
+            # Target Log-Transformation for regression
+            if "classification" not in task_curr:
+                t_col = st.session_state.get("ml_target_col")
+                t_is_num = pd.api.types.is_numeric_dtype(df[t_col]) if (t_col and t_col in df.columns) else False
+                t_skew = float(df[t_col].dropna().skew()) if (t_is_num and len(df[t_col].dropna()) > 2) else 0.0
+                suggest_log = t_is_num and t_skew > 0.75 and (df[t_col].dropna() >= 0).all()
+                log_choice = st.checkbox(
+                    "📐 Target np.log1p(y) Log-Transformation",
+                    value=st.session_state.get("ml_use_log_trans", suggest_log),
+                    help=f"Target skewness is {t_skew:.2f}. Transforming target y via np.log1p during training and converting predictions back via np.expm1 prevents underestimating high-sales observations."
+                )
+                st.session_state["ml_use_log_trans"] = log_choice
+
         st.markdown("---")
         st.markdown("#### 📚 Algorithm Library Catalog")
         available_models = get_candidate_models(task_curr, comp_prof)
@@ -886,6 +899,7 @@ def render_ml_view():
                         cv_folds=int(st.session_state.get("ml_cv_folds", 3)),
                         scaler_type=st.session_state.get("ml_scaler", "standard"),
                         cat_encoding=st.session_state.get("ml_cat_encoding", "onehot"),
+                        use_log_transform=st.session_state.get("ml_use_log_trans", False),
                         model_subset=st.session_state.get("ml_selected_models"),
                         dataset_name=proj_name,
                     )
@@ -1007,6 +1021,13 @@ def render_ml_view():
                 )
                 fig_cm.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#E2E8F0")
                 st.plotly_chart(fig_cm, width="stretch")
+
+            # -----------------------------------------------------------------
+            # 6-STEP MODEL IMPROVEMENT & HIGH-SALES UNDERESTIMATION SUITE
+            # -----------------------------------------------------------------
+            if "classification" not in bench_res.get("task_type", ""):
+                from ui.views.model_improvement_card import render_model_improvement_section
+                render_model_improvement_section(m_data, df=df, target_col=bench_res.get("target_col"), is_autonomous=False)
 
     # =========================================================================
     # TAB 9: EXPLAINABLE AI
