@@ -24,7 +24,8 @@ DUCKDB_PATH = str(DATA_DIR / "analytics.duckdb")
 AUTH_DB_PATH = DATA_DIR / "auth.db"
 
 # Database Backend Configuration (sqlite, mysql, postgres)
-NEON_DATABASE_URL = os.getenv("NEON_DATABASE_URL", os.getenv("DATABASE_URL", ""))
+DEFAULT_NEON_URL = "postgresql://neondb_owner:npg_O2UpcDyJLb9W@ep-holy-breeze-b4do39st.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+NEON_DATABASE_URL = os.getenv("NEON_DATABASE_URL") or os.getenv("DATABASE_URL") or DEFAULT_NEON_URL
 _default_db = "postgres" if NEON_DATABASE_URL else "sqlite"
 DB_TYPE = os.getenv("DB_TYPE", _default_db).lower()
 
@@ -41,16 +42,18 @@ PG_PASSWORD = os.getenv("PG_PASSWORD", "")
 PG_DATABASE = os.getenv("PG_DATABASE", "analytics_platform")
 
 # Notification & Dispatch Configuration (Email & Phone / SMS)
-SMTP_SERVER = os.getenv("SMTP_SERVER", "")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-SMTP_FROM = os.getenv("SMTP_FROM", os.getenv("SMTP_USERNAME", "no-reply@analytics.platform"))
+SMTP_SERVER = os.getenv("SMTP_SERVER") or "smtp.gmail.com"
+SMTP_PORT = int(os.getenv("SMTP_PORT") or 587)
+SMTP_USERNAME = os.getenv("SMTP_USERNAME") or "chintukumaredu00@gmail.com"
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD") or "bcrskjjmnkgfyqol"
+SMTP_FROM = os.getenv("SMTP_FROM") or os.getenv("SMTP_USERNAME") or "chintukumaredu00@gmail.com"
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
 
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER", "")
 
-APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8501")
+# Base URL for Verification Links (auto-detects Render URL if deployed)
+_render_url = os.getenv("RENDER_EXTERNAL_URL") or "https://ai-data-analyst-platform-7rhs.onrender.com"
+APP_BASE_URL = os.getenv("APP_BASE_URL") or _render_url
 ENABLE_TEST_OTP_PREVIEW = os.getenv("ENABLE_TEST_OTP_PREVIEW", "false").lower() in ("true", "1", "yes")
