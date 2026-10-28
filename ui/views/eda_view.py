@@ -93,18 +93,27 @@ def render_eda_view():
     </div>
     """, unsafe_allow_html=True)
 
-    is_large_dataset = len(df) >= 250000 or st.session_state.get("dataset_profile", {}).get("rows", 0) >= 250000
+    total_row_count = max(len(df), st.session_state.get("dataset_profile", {}).get("rows", 0))
+    is_large_dataset = total_row_count >= 250000
     if is_large_dataset:
         c_mode1, c_mode2 = st.columns([4, 1.2])
         with c_mode1:
-            st.markdown(f"""
-            <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; border-radius: 10px; padding: 12px 18px; margin-bottom: 16px;">
-                <span style="font-family: monospace; font-size: 0.8rem; color: #00F0FF; font-weight: 700;">⚡ LARGE DATASET MODE ACTIVE</span>
-                <span style="color: #94A3B8; font-size: 0.82rem; margin-left: 8px;">DuckDB acceleration &bull; Smart sampling &bull; Sub-millisecond reruns</span>
-            </div>
-            """, unsafe_allow_html=True)
+            if total_row_count >= 2000000:
+                st.markdown(f"""
+                <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid #10B981; border-radius: 10px; padding: 12px 18px; margin-bottom: 16px;">
+                    <span style="font-family: monospace; font-size: 0.8rem; color: #10B981; font-weight: 700;">⚡ 2M+ ULTRA SCALE MODE ACTIVE &bull; {total_row_count:,} ROWS</span>
+                    <span style="color: #94A3B8; font-size: 0.82rem; margin-left: 8px;">DuckDB SIMD Engine &bull; WebGL Adaptive Sampling &bull; Real-time Aggregation</span>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; border-radius: 10px; padding: 12px 18px; margin-bottom: 16px;">
+                    <span style="font-family: monospace; font-size: 0.8rem; color: #00F0FF; font-weight: 700;">⚡ LARGE DATASET MODE ACTIVE</span>
+                    <span style="color: #94A3B8; font-size: 0.82rem; margin-left: 8px;">DuckDB acceleration &bull; Smart sampling &bull; Sub-millisecond reruns</span>
+                </div>
+                """, unsafe_allow_html=True)
         with c_mode2:
-            if st.button("🚀 Run Deep EDA", type="secondary", use_container_width=True, help="Executes background Isolation Forest and high-dimensional driver rankings"):
+            if st.button("🚀 Run Deep EDA", type="secondary", width="stretch", help="Executes background Isolation Forest and high-dimensional driver rankings"):
                 with st.spinner("Executing Deep EDA models in background..."):
                     from core.eda_engine import EDAEngine
                     from core.eda_planner import EDAPlanner
@@ -250,7 +259,7 @@ def render_eda_view():
                 with col:
                     fig = _render_chart_spec(df, spec)
                     if fig:
-                        st.plotly_chart(fig, use_container_width=True, key=f"eda_l1_chart_{spec.get('id', i)}")
+                        st.plotly_chart(fig, width="stretch", key=f"eda_l1_chart_{spec.get('id', i)}")
                     _render_chart_action_bar(df, spec, key_prefix=f"l1_{i}")
         else:
             st.info("Ingest dataset to view automated executive charts.")
@@ -278,7 +287,7 @@ def render_eda_view():
             if drivers:
                 st.markdown("#### // Ranked Predictive Drivers")
                 driver_table = pd.DataFrame(drivers)[["feature", "feature_type", "metric_type", "association_score", "relationship_type", "strength"]]
-                st.dataframe(driver_table, use_container_width=True)
+                st.dataframe(driver_table, width="stretch")
 
                 # Top driver visualization
                 top_d = drivers[0]
@@ -303,7 +312,7 @@ def render_eda_view():
                         color_discrete_sequence=["#8B5CF6"]
                     )
                 fig.update_layout(paper_bgcolor="#0A0E1A", plot_bgcolor="#0A0E1A")
-                st.plotly_chart(fig, use_container_width=True, key="eda_top_driver_fig")
+                st.plotly_chart(fig, width="stretch", key="eda_top_driver_fig")
             else:
                 st.info("Insufficient variance or sample records to establish driver associations.")
 
@@ -315,7 +324,7 @@ def render_eda_view():
         num_stats = eda_res.get("univariate_numerical", [])
         if num_stats:
             summary_cols = ["column", "mean", "median", "mode", "std", "min", "max", "q25", "q75", "iqr", "skewness", "kurtosis", "distribution_shape", "recommended_transform"]
-            st.dataframe(pd.DataFrame(num_stats)[summary_cols], use_container_width=True)
+            st.dataframe(pd.DataFrame(num_stats)[summary_cols], width="stretch")
 
             selected_num = st.selectbox("Inspect Target Distribution Spectrum:", [s["column"] for s in num_stats], key="eda_dist_num_sel")
             if selected_num:
@@ -334,7 +343,7 @@ def render_eda_view():
                             color_discrete_sequence=["#00F0FF"]
                         )
                         fig.update_layout(paper_bgcolor="#0A0E1A", plot_bgcolor="#0A0E1A")
-                        st.plotly_chart(fig, use_container_width=True, key=f"eda_dist_hist_{selected_num}")
+                        st.plotly_chart(fig, width="stretch", key=f"eda_dist_hist_{selected_num}")
                     with c2:
                         st.markdown(f"#### // Distribution Moments")
                         st.write(f"• **Shape:** `{chosen_num['distribution_shape']}`")
@@ -366,7 +375,7 @@ def render_eda_view():
                         )
                         fig.update_traces(texttemplate='%{text}%', textposition='outside')
                         fig.update_layout(paper_bgcolor="#0A0E1A", plot_bgcolor="#0A0E1A")
-                        st.plotly_chart(fig, use_container_width=True, key=f"eda_cat_bar_{selected_cat}")
+                        st.plotly_chart(fig, width="stretch", key=f"eda_cat_bar_{selected_cat}")
                     with c2:
                         st.markdown(f"#### // Pareto Concentration: `{selected_cat}`")
                         st.write(f"• **Unique Classes:** `{chosen_cat['unique_count']}`")
@@ -375,7 +384,7 @@ def render_eda_view():
 
                         st.markdown("##### // Rare Tail Categories (< 2% share)")
                         if chosen_cat["rare_categories"]:
-                            st.dataframe(pd.DataFrame(chosen_cat["rare_categories"]), use_container_width=True)
+                            st.dataframe(pd.DataFrame(chosen_cat["rare_categories"]), width="stretch")
                         else:
                             st.success("No rare tail anomalies identified.")
 
@@ -396,7 +405,7 @@ def render_eda_view():
                 title="// PEARSON MULTIVARIATE CORRELATION MATRIX"
             )
             fig.update_layout(paper_bgcolor="#0A0E1A", plot_bgcolor="#0A0E1A")
-            st.plotly_chart(fig, use_container_width=True, key="eda_corr_heatmap")
+            st.plotly_chart(fig, width="stretch", key="eda_corr_heatmap")
 
             c1, c2 = st.columns(2)
             strong_pairs = corrs.get("strong_pairs", [])
@@ -441,7 +450,7 @@ def render_eda_view():
                     color_discrete_sequence=["#00F0FF"]
                 )
                 fig.update_layout(paper_bgcolor="#0A0E1A", plot_bgcolor="#0A0E1A")
-                st.plotly_chart(fig, use_container_width=True, key="eda_interactive_scatter")
+                st.plotly_chart(fig, width="stretch", key="eda_interactive_scatter")
         else:
             st.info("At least two numerical variables are required to evaluate correlation lattice.")
 
@@ -465,7 +474,7 @@ def render_eda_view():
                 )
                 fig.update_traces(fillcolor="rgba(0, 240, 255, 0.15)")
                 fig.update_layout(paper_bgcolor="#0A0E1A", plot_bgcolor="#0A0E1A")
-                st.plotly_chart(fig, use_container_width=True, key="eda_ts_wave_fig")
+                st.plotly_chart(fig, width="stretch", key="eda_ts_wave_fig")
 
                 c1, c2, c3 = st.columns(3)
                 with c1:
@@ -487,7 +496,7 @@ def render_eda_view():
                         color_discrete_sequence=["#8B5CF6"]
                     )
                     fig_dow.update_layout(paper_bgcolor="#0A0E1A", plot_bgcolor="#0A0E1A")
-                    st.plotly_chart(fig_dow, use_container_width=True, key="eda_dow_seasonality")
+                    st.plotly_chart(fig_dow, width="stretch", key="eda_dow_seasonality")
         else:
             st.info("No parseable datetime dimension identified for chronological wave analytics.")
 
@@ -518,9 +527,9 @@ def render_eda_view():
                     )
                     fig.update_traces(texttemplate='%{text}% share', textposition='outside')
                     fig.update_layout(paper_bgcolor="#0A0E1A", plot_bgcolor="#0A0E1A")
-                    st.plotly_chart(fig, use_container_width=True, key=f"eda_seg_{s['dimension']}")
+                    st.plotly_chart(fig, width="stretch", key=f"eda_seg_{s['dimension']}")
                 with c2:
-                    st.dataframe(cdf[["segment", "total_metric", "contribution_pct", "mean_metric", "status"]], use_container_width=True)
+                    st.dataframe(cdf[["segment", "total_metric", "contribution_pct", "mean_metric", "status"]], width="stretch")
                 st.markdown("---")
         else:
             st.info("Insufficient categorical dimensions to generate segmentation contribution matrices.")
@@ -538,7 +547,7 @@ def render_eda_view():
                 "column", "iqr_outliers_count", "iqr_outliers_pct", "original_mean",
                 "mean_without_outliers", "mean_shift_pct", "classification"
             ]]
-            st.dataframe(anom_df, use_container_width=True)
+            st.dataframe(anom_df, width="stretch")
 
             selected_anom_col = st.selectbox("Inspect Outlier Dispersion HUD:", [a["column"] for a in anomalies], key="eda_anom_col_sel")
             if selected_anom_col:
@@ -554,7 +563,7 @@ def render_eda_view():
                             color_discrete_sequence=["#EF4444"]
                         )
                         fig.update_layout(paper_bgcolor="#0A0E1A", plot_bgcolor="#0A0E1A")
-                        st.plotly_chart(fig, use_container_width=True, key=f"eda_anom_box_{selected_anom_col}")
+                        st.plotly_chart(fig, width="stretch", key=f"eda_anom_box_{selected_anom_col}")
                         if len(df) > 3000:
                             st.caption("ℹ️ Sampled 3,000 observations for responsive box dispersion rendering.")
                     with c2:
@@ -655,7 +664,7 @@ def render_eda_view():
 
             if answer_res.get("table") is not None and not answer_res["table"].empty:
                 st.markdown("##### // Calculated Data Aggregate")
-                st.dataframe(answer_res["table"], use_container_width=True)
+                st.dataframe(answer_res["table"], width="stretch")
 
     # -------------------------------------------------------------------------
     # TAB 10: RECOMMENDATIONS & ACTIONS
@@ -698,11 +707,11 @@ def render_eda_view():
 
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("### // EXPORT & INTEGRATION ACTIONS")
-            if st.button("📑 Export Full EDA Dossier to Reports Module", use_container_width=True, type="primary"):
+            if st.button("📑 Export Full EDA Dossier to Reports Module", width="stretch", type="primary"):
                 st.session_state["active_nav"] = "Reports"
                 st.rerun()
 
-            if st.button("📊 View Pinned Visuals on Dashboard", use_container_width=True):
+            if st.button("📊 View Pinned Visuals on Dashboard", width="stretch"):
                 st.session_state["active_nav"] = "Dashboard"
                 st.rerun()
 
@@ -806,13 +815,13 @@ def _render_chart_action_bar(df: pd.DataFrame, spec: Dict[str, Any], key_prefix:
 
         c_pin_dash, c_pin_rep = st.columns(2)
         with c_pin_dash:
-            if st.button("📌 Pin to Dashboard", key=f"{key_prefix}_pin_dash", use_container_width=True):
+            if st.button("📌 Pin to Dashboard", key=f"{key_prefix}_pin_dash", width="stretch"):
                 pinned = st.session_state.get("pinned_dashboard_charts", [])
                 pinned.append(spec)
                 st.session_state["pinned_dashboard_charts"] = pinned
                 st.success("Chart pinned to Executive Dashboard!")
         with c_pin_rep:
-            if st.button("📄 Pin to Report", key=f"{key_prefix}_pin_rep", use_container_width=True):
+            if st.button("📄 Pin to Report", key=f"{key_prefix}_pin_rep", width="stretch"):
                 pinned_rep = st.session_state.get("pinned_report_charts", [])
                 pinned_rep.append(spec)
                 st.session_state["pinned_report_charts"] = pinned_rep

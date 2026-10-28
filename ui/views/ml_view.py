@@ -86,7 +86,7 @@ def render_ml_view():
         st.warning("⚠️ No active dataset found in workspace. Please upload a dataset or select a sample dataset first.")
         c1, c2 = st.columns([1, 4])
         with c1:
-            if st.button("📂 Go to Upload Dataset", type="primary", use_container_width=True):
+            if st.button("📂 Go to Upload Dataset", type="primary", width="stretch"):
                 st.session_state["active_nav"] = "Upload Dataset"
                 st.rerun()
         return
@@ -158,7 +158,7 @@ def render_ml_view():
         </div>
         """, unsafe_allow_html=True)
     with c_banner2:
-        if st.button("🤖 Ask AI Copilot", key="ml_cockpit_open_copilot_btn", use_container_width=True, type="primary"):
+        if st.button("🤖 Ask AI Copilot", key="ml_cockpit_open_copilot_btn", width="stretch", type="primary"):
             st.session_state["copilot_open"] = True
             st.session_state["active_nav"] = "AI Model Copilot"
             st.rerun()
@@ -234,7 +234,7 @@ def render_ml_view():
         with q_c1:
             st.info("💡 **Have questions about how any ML model works or which model to pick?** Ask our AI Copilot & Voice Assistant on the bottom right!")
         with q_c2:
-            if st.button("🤖 Open AI Model Copilot", type="primary", use_container_width=True):
+            if st.button("🤖 Open AI Model Copilot", type="primary", width="stretch"):
                 st.session_state["copilot_open"] = True
                 st.rerun()
 
@@ -270,7 +270,8 @@ def render_ml_view():
                 st.write(f"• **Identifier Columns:** {len(report.id_columns)}")
             with c_c:
                 st.write(f"• **Leakage Risks:** {len(report.leakage_warnings)}")
-                st.write(f"• **Duplicates:** {df.duplicated().sum():,} rows")
+                dup_estimate = int(df.sample(min(30000, len(df)), random_state=42).duplicated().sum() * (len(df) / min(30000, len(df)))) if len(df) > 30000 else int(df.duplicated().sum())
+                st.write(f"• **Duplicates:** ~{dup_estimate:,} rows")
 
         if report.warnings:
             st.markdown("<br>", unsafe_allow_html=True)
@@ -336,17 +337,18 @@ def render_ml_view():
         </div>
         """, unsafe_allow_html=True)
 
-        # Visualizing Target Distribution
+        # Visualizing Target Distribution (sampled for large datasets)
+        plot_df = df.sample(min(30000, len(df)), random_state=42) if len(df) > 30000 else df
         if pd.api.types.is_numeric_dtype(df[selected_target]) and df[selected_target].nunique() > 10:
             fig_t = px.histogram(
-                df,
+                plot_df,
                 x=selected_target,
                 nbins=30,
-                title=f"Target Distribution: {selected_target}",
+                title=f"Target Distribution: {selected_target} ({'sampled' if len(df) > 30000 else 'full'})",
                 color_discrete_sequence=["#00F0FF"],
             )
             fig_t.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
-            st.plotly_chart(fig_t, use_container_width=True)
+            st.plotly_chart(fig_t, width="stretch")
         else:
             vc = df[selected_target].value_counts().reset_index()
             vc.columns = ["Class", "Count"]
@@ -359,7 +361,7 @@ def render_ml_view():
                 color_continuous_scale="Viridis",
             )
             fig_t.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
-            st.plotly_chart(fig_t, use_container_width=True)
+            st.plotly_chart(fig_t, width="stretch")
 
     # =========================================================================
     # TAB 4: FEATURES & SELECTION
@@ -395,7 +397,7 @@ def render_ml_view():
         with fs_col3:
             st.write("")
             st.write("")
-            run_fs_btn = st.button("🚀 Evaluate Features", type="primary", use_container_width=True)
+            run_fs_btn = st.button("🚀 Evaluate Features", type="primary", width="stretch")
 
         if run_fs_btn and target_c:
             with st.spinner("Executing statistical feature evaluation..."):
@@ -433,7 +435,7 @@ def render_ml_view():
                 plot_bgcolor="rgba(15,23,42,0.6)",
                 font_color="#E2E8F0",
             )
-            st.plotly_chart(fig_fs, use_container_width=True)
+            st.plotly_chart(fig_fs, width="stretch")
 
     # =========================================================================
     # TAB 5: DIMENSIONALITY (PCA) & ANOMALY DETECTION
@@ -470,7 +472,7 @@ def render_ml_view():
                 with p_col3:
                     st.write("")
                     st.write("")
-                    run_pca_btn = st.button("⚡ Run Decomposition", type="primary", use_container_width=True)
+                    run_pca_btn = st.button("⚡ Run Decomposition", type="primary", width="stretch")
 
                 if run_pca_btn:
                     with st.spinner("Executing dimensionality reduction & calculating loadings..."):
@@ -524,7 +526,7 @@ def render_ml_view():
                             plot_bgcolor="rgba(15,23,42,0.6)",
                             font_color="#E2E8F0",
                         )
-                        st.plotly_chart(fig_scree, use_container_width=True)
+                        st.plotly_chart(fig_scree, width="stretch")
 
                     # 2D & 3D Projections
                     st.markdown("#### 🗺️ Low-Dimensional Space Projection")
@@ -541,7 +543,7 @@ def render_ml_view():
                             color_discrete_sequence=px.colors.qualitative.Prism,
                         )
                         fig_2d.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
-                        st.plotly_chart(fig_2d, use_container_width=True)
+                        st.plotly_chart(fig_2d, width="stretch")
 
                     with p_tab3d:
                         if pca_res.get("proj_3d"):
@@ -557,7 +559,7 @@ def render_ml_view():
                                 color_discrete_sequence=px.colors.qualitative.Prism,
                             )
                             fig_3d.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#E2E8F0")
-                            st.plotly_chart(fig_3d, use_container_width=True)
+                            st.plotly_chart(fig_3d, width="stretch")
                         else:
                             st.info("3D projection requires selecting at least 3 component dimensions.")
 
@@ -572,7 +574,7 @@ def render_ml_view():
                             title="Feature Loadings Matrix ($V^T$)",
                         )
                         fig_load.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#E2E8F0")
-                        st.plotly_chart(fig_load, use_container_width=True)
+                        st.plotly_chart(fig_load, width="stretch")
 
         with t5_cluster:
             if len(num_features) < 2:
@@ -605,7 +607,7 @@ def render_ml_view():
                 with cl_col4:
                     st.write("")
                     st.write("")
-                    run_cl_btn = st.button("🔮 Run Clustering", type="primary", use_container_width=True, key="ml_run_clustering_btn")
+                    run_cl_btn = st.button("🔮 Run Clustering", type="primary", width="stretch", key="ml_run_clustering_btn")
 
                 if run_cl_btn:
                     with st.spinner("Partitioning feature space and calculating cluster metrics..."):
@@ -638,7 +640,7 @@ def render_ml_view():
 
                     if cl_res.get("k_evaluations"):
                         with st.expander("📊 Automated k Evaluation Scores (Elbow / Silhouette Search)", expanded=False):
-                            st.dataframe(pd.DataFrame(cl_res["k_evaluations"]), use_container_width=True)
+                            st.dataframe(pd.DataFrame(cl_res["k_evaluations"]), width="stretch")
 
                     # 2D PCA Space Projection
                     if cl_res.get("pca_projection"):
@@ -654,13 +656,13 @@ def render_ml_view():
                             color_discrete_sequence=px.colors.qualitative.Bold,
                         )
                         fig_cl.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
-                        st.plotly_chart(fig_cl, use_container_width=True)
+                        st.plotly_chart(fig_cl, width="stretch")
 
                     # Cluster Profiles Summary
                     if cl_res.get("cluster_summary"):
                         st.markdown("#### 📋 Cluster Profiles (Feature Centroids & Record Counts)")
                         prof_df = pd.DataFrame(cl_res["cluster_summary"])
-                        st.dataframe(prof_df, use_container_width=True)
+                        st.dataframe(prof_df, width="stretch")
 
                         # CSV Export with cluster labels appended
                         df_with_clusters = df.copy()
@@ -695,7 +697,7 @@ def render_ml_view():
                 with an_col3:
                     st.write("")
                     st.write("")
-                    run_an_btn = st.button("🚨 Detect Anomalies", type="primary", use_container_width=True, key="ml_run_anomaly_btn")
+                    run_an_btn = st.button("🚨 Detect Anomalies", type="primary", width="stretch", key="ml_run_anomaly_btn")
 
                 if run_an_btn:
                     with st.spinner("Computing robust multi-dimensional outlier distances..."):
@@ -737,13 +739,13 @@ def render_ml_view():
                             hover_data=["index", "score"],
                         )
                         fig_an.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
-                        st.plotly_chart(fig_an, use_container_width=True)
+                        st.plotly_chart(fig_an, width="stretch")
 
                     # Top Anomalous Records Table
                     if an_res.get("top_anomalies"):
                         st.markdown("#### 🚨 Top Ranked Outlier Records")
                         top_an_df = pd.DataFrame(an_res["top_anomalies"])
-                        st.dataframe(top_an_df, use_container_width=True)
+                        st.dataframe(top_an_df, width="stretch")
                         csv_an = top_an_df.to_csv(index=False).encode("utf-8")
                         st.download_button("📥 Export Anomalies (CSV)", data=csv_an, file_name="detected_anomalies.csv", mime="text/csv")
 
@@ -813,7 +815,7 @@ def render_ml_view():
             st.warning("Please select at least one feature column in the **Features & Selection** tab.")
         else:
             st.info(f"Ready to benchmark **{len(st.session_state.get('ml_selected_models', []))} models** predicting `{target_col}` using **{len(feature_cols)} features**.")
-            launch_train = st.button("🚀 Launch Automated Benchmark", type="primary", use_container_width=True)
+            launch_train = st.button("🚀 Launch Automated Benchmark", type="primary", width="stretch")
 
             if launch_train:
                 prog_bar = st.progress(0, text="Initializing scikit-learn preprocessing pipelines...")
@@ -870,7 +872,7 @@ def render_ml_view():
                     plot_bgcolor="rgba(15,23,42,0.6)",
                     font_color="#E2E8F0",
                 )
-                st.plotly_chart(fig_lb, use_container_width=True)
+                st.plotly_chart(fig_lb, width="stretch")
 
                 display_cols = ["rank", "model_name", "score", "training_time", "is_overfitting"]
                 available_disp = [c for c in display_cols if c in lb_df.columns]
@@ -880,7 +882,7 @@ def render_ml_view():
                     "score": f"Validation {bench_res.get('primary_metric', 'Score').upper()}",
                     "training_time": "Training Latency (s)",
                     "is_overfitting": "Overfitting Risk",
-                }), use_container_width=True)
+                }), width="stretch")
 
     # =========================================================================
     # TAB 8: EVALUATION & DIAGNOSTICS
@@ -935,7 +937,7 @@ def render_ml_view():
                 max_v = max(sc_df["actual"].max(), sc_df["predicted"].max())
                 fig_act.add_trace(go.Scatter(x=[min_v, max_v], y=[min_v, max_v], mode="lines", line=dict(color="#EF4444", dash="dash"), name="Ideal Fit (y = x)"))
                 fig_act.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
-                st.plotly_chart(fig_act, use_container_width=True)
+                st.plotly_chart(fig_act, width="stretch")
 
             elif "confusion_matrix" in m_data and m_data["confusion_matrix"]:
                 st.markdown("#### 🧩 Confusion Matrix")
@@ -950,7 +952,7 @@ def render_ml_view():
                     labels=dict(x="Predicted Class", y="Actual Class"),
                 )
                 fig_cm.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#E2E8F0")
-                st.plotly_chart(fig_cm, use_container_width=True)
+                st.plotly_chart(fig_cm, width="stretch")
 
     # =========================================================================
     # TAB 9: EXPLAINABLE AI
@@ -980,7 +982,7 @@ def render_ml_view():
                     color_continuous_scale="Viridis",
                 )
                 fig_fi.update_layout(yaxis={"categoryorder": "total ascending"}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
-                st.plotly_chart(fig_fi, use_container_width=True)
+                st.plotly_chart(fig_fi, width="stretch")
 
             st.markdown("#### 🔍 Single Prediction Local Attribution Explainer")
             row_idx = st.slider("Select Record Index to Explain:", min_value=0, max_value=min(200, len(df) - 1), value=0)
@@ -1000,7 +1002,7 @@ def render_ml_view():
                         color_continuous_scale="RdBu",
                     )
                     fig_loc.update_layout(yaxis={"categoryorder": "total ascending"}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
-                    st.plotly_chart(fig_loc, use_container_width=True)
+                    st.plotly_chart(fig_loc, width="stretch")
             except Exception as e:
                 st.caption(f"Local attribution unavailable: {str(e)}")
 
@@ -1075,7 +1077,7 @@ def render_ml_view():
                         st.write(f"Loaded {len(batch_df):,} rows.")
                         if st.button("🚀 Run Batch Scoring"):
                             scored_df = predict_batch(pipe, batch_df, task_type=task_t)
-                            st.dataframe(scored_df.head(10), use_container_width=True)
+                            st.dataframe(scored_df.head(10), width="stretch")
                             csv_data = scored_df.to_csv(index=False).encode("utf-8")
                             st.download_button("📥 Download Scored CSV", data=csv_data, file_name="scored_predictions.csv", mime="text/csv")
                     except Exception as e:
@@ -1110,7 +1112,7 @@ def render_ml_view():
         with f_opt2:
             ci_level = st.selectbox("Confidence Interval:", options=[0.90, 0.95], format_func=lambda x: f"{int(x*100)}% Confidence Band")
 
-        if st.button("🚀 Generate Future Forecast", type="primary", use_container_width=True):
+        if st.button("🚀 Generate Future Forecast", type="primary", width="stretch"):
             with st.spinner("Analyzing time-series diagnostics and training candidate models..."):
                 try:
                     fc_res = run_time_series_forecast(
@@ -1184,12 +1186,12 @@ def render_ml_view():
                 plot_bgcolor="rgba(15,23,42,0.6)",
                 font_color="#E2E8F0",
             )
-            st.plotly_chart(fig_fc, use_container_width=True)
+            st.plotly_chart(fig_fc, width="stretch")
 
             # Model Competition Leaderboard
             if fc_res.get("leaderboard"):
                 st.markdown("#### 🏆 Forecasting Model Benchmark Comparison")
-                st.dataframe(pd.DataFrame(fc_res["leaderboard"]), use_container_width=True)
+                st.dataframe(pd.DataFrame(fc_res["leaderboard"]), width="stretch")
 
     # =========================================================================
     # TAB 12: SCENARIO ANALYSIS (WHAT-IF)
@@ -1257,7 +1259,7 @@ def render_ml_view():
 
                 if scen_res.get("feature_impacts"):
                     st.markdown("##### 🔍 Feature Elasticity & Sensitivity Ranking")
-                    st.dataframe(pd.DataFrame(scen_res["feature_impacts"]), use_container_width=True)
+                    st.dataframe(pd.DataFrame(scen_res["feature_impacts"]), width="stretch")
 
     # =========================================================================
     # TAB 13: EXPERIMENTS & REGISTRY
@@ -1279,7 +1281,7 @@ def render_ml_view():
         exps = list_experiments()
         if exps:
             st.markdown("#### 📜 Experiment Version History")
-            st.dataframe(pd.DataFrame(exps), use_container_width=True)
+            st.dataframe(pd.DataFrame(exps), width="stretch")
 
         st.markdown("---")
         st.markdown("#### 📄 Institutional ML Report Export")
@@ -1314,7 +1316,7 @@ def render_ml_view():
                     data=pdf_bytes,
                     file_name="Quantum_Analyst_ML_Audit_Report.pdf",
                     mime="application/pdf",
-                    use_container_width=True,
+                    width="stretch",
                 )
             except Exception as e:
                 st.caption(f"PDF unavailable: {e}")
@@ -1327,7 +1329,7 @@ def render_ml_view():
                     data=html_code.encode("utf-8"),
                     file_name="Quantum_Analyst_ML_Report.html",
                     mime="text/html",
-                    use_container_width=True,
+                    width="stretch",
                 )
             except Exception as e:
                 st.caption(f"HTML export unavailable: {e}")
@@ -1340,7 +1342,7 @@ def render_ml_view():
                     data=csv_sum.encode("utf-8"),
                     file_name="ml_model_metrics.csv",
                     mime="text/csv",
-                    use_container_width=True,
+                    width="stretch",
                 )
             except Exception as e:
                 st.caption(f"CSV export unavailable: {e}")

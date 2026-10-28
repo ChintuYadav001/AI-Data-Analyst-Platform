@@ -1,3 +1,5 @@
+import base64
+from pathlib import Path
 import streamlit as st
 from typing import Dict, Any, List, Optional
 
@@ -6,28 +8,49 @@ def apply_custom_css(theme: str = "dark_futuristic", *args, **kwargs):
     is_light = (theme == "light_classic")
 
     if is_light:
-        st.markdown("""
+        st.markdown("""<div class="quantum-css-root"></div>
         <style>
         /* Zero-Latency Native Font Stack */
 
         /* Full-Screen Edge-to-Edge Responsive Layout */
-        .block-container {
+        .block-container,
+        div[data-testid="stMainBlockContainer"] {
             max-width: 100% !important;
             width: 100% !important;
-            padding-left: 2.5rem !important;
-            padding-right: 2.5rem !important;
-            padding-top: 3.5rem !important;
+            padding-left: 2rem !important;
+            padding-right: 2rem !important;
+            padding-top: 78px !important;
             padding-bottom: 2rem !important;
         }
 
-        /* Streamlit Header & Deployment Toolbar - Native & Non-Overlapping */
+        /* Hide the style container completely so navbar starts at Y = 0 */
+        div[data-testid="stElementContainer"]:has(.quantum-css-root),
+        div[data-testid="stElementContainer"]:has(style) {
+            display: none !important;
+            position: absolute !important;
+            height: 0px !important;
+            width: 0px !important;
+            margin: 0px !important;
+            padding: 0px !important;
+        }
+
+        div[data-testid="stVerticalBlock"] {
+            padding-top: 0px !important;
+            position: static !important;
+        }
+
+        /* Streamlit Header & Deployment Toolbar - Hidden for clean edge-to-edge navbar */
         header[data-testid="stHeader"],
         [data-testid="stHeader"] {
-            display: flex !important;
-            visibility: visible !important;
+            display: none !important;
+            visibility: hidden !important;
             background: transparent !important;
-            height: 2.875rem !important;
-            z-index: 99990 !important;
+            height: 0px !important;
+            min-height: 0px !important;
+            margin: 0px !important;
+            padding: 0px !important;
+            pointer-events: none !important;
+            z-index: -1 !important;
         }
 
         [data-testid="stToolbar"] {
@@ -78,7 +101,16 @@ def apply_custom_css(theme: str = "dark_futuristic", *args, **kwargs):
             background: #FFFFFF !important;
             border-right: 1px solid #E2E8F0 !important;
             box-shadow: 4px 0 20px rgba(0, 0, 0, 0.03) !important;
-            padding-top: 0.5rem;
+            top: 64px !important;
+            height: calc(100vh - 64px) !important;
+            z-index: 99990 !important;
+            padding-top: 0.5rem !important;
+        }
+
+        button[data-testid="stSidebarCollapseButton"],
+        [data-testid="stSidebarCollapseButton"] {
+            top: 72px !important;
+            z-index: 999999 !important;
         }
         
         section[data-testid="stSidebar"] {
@@ -318,34 +350,119 @@ def apply_custom_css(theme: str = "dark_futuristic", *args, **kwargs):
         [style*="color: #F1F5F9"] {
             color: #1E293B !important;
         }
-        [style*="color: #CBD5E1"] {
-            color: #475569 !important;
+        /* Constant Fixed Full-Width Header Container - Merged across sidebar and workspace (Light) */
+        div[data-testid="stLayoutWrapper"]:has(.quantum-sticky-navbar-anchor) {
+            position: fixed !important;
+            top: 0px !important;
+            left: 0px !important;
+            right: 0px !important;
+            width: 100vw !important;
+            height: 64px !important;
+            z-index: 999999 !important;
+            background: #FFFFFF !important;
+            border-bottom: 1px solid #CBD5E1 !important;
+            padding-top: 0px !important;
+            padding-bottom: 0px !important;
+            padding-left: 20px !important;
+            padding-right: 20px !important;
+            margin: 0px !important;
+            box-sizing: border-box !important;
+            display: flex !important;
+            align-items: center !important;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06) !important;
+            transition: none !important;
+            transform: none !important;
+        }
+
+        div[data-testid="stLayoutWrapper"]:has(.quantum-sticky-navbar-anchor) div[data-testid="stVerticalBlock"] {
+            width: 100% !important;
+            height: 100% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        div[data-testid="stLayoutWrapper"]:has(.quantum-sticky-navbar-anchor) [data-testid="stHorizontal"] {
+            width: 100% !important;
+            align-items: center !important;
+            margin: 0 !important;
+        }
+
+        div[data-testid="stLayoutWrapper"]:has(.quantum-sticky-navbar-anchor) [data-testid="column"] {
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+        }
+
+        div[data-testid="stLayoutWrapper"]:has(.quantum-sticky-navbar-anchor) .stButton > button,
+        div[data-testid="stLayoutWrapper"]:has(.quantum-sticky-navbar-anchor) div[data-testid="stPopover"] > button {
+            height: 38px !important;
+            min-height: 38px !important;
+            padding: 0 12px !important;
+            font-size: 0.82rem !important;
+            border-radius: 999px !important;
+            white-space: nowrap !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.quantum-sticky-navbar-anchor) {
+            display: none !important;
+            position: absolute !important;
+            height: 0px !important;
+            width: 0px !important;
+            margin: 0px !important;
+            padding: 0px !important;
         }
         </style>
         """, unsafe_allow_html=True)
     else:
-        st.markdown("""
+        st.markdown("""<div class="quantum-css-root"></div>
         <style>
         /* Zero-Latency Native Font Stack */
 
         /* Full-Screen Edge-to-Edge Responsive Layout */
-        .block-container {
+        .block-container,
+        div[data-testid="stMainBlockContainer"] {
             max-width: 100% !important;
             width: 100% !important;
-            padding-left: 2.5rem !important;
-            padding-right: 2.5rem !important;
-            padding-top: 3.5rem !important;
+            padding-left: 2rem !important;
+            padding-right: 2rem !important;
+            padding-top: 78px !important;
             padding-bottom: 2rem !important;
         }
 
-        /* Streamlit Header & Deployment Toolbar - Native & Non-Overlapping */
+        /* Hide the style container completely so navbar starts at Y = 0 */
+        div[data-testid="stElementContainer"]:has(.quantum-css-root),
+        div[data-testid="stElementContainer"]:has(style) {
+            display: none !important;
+            position: absolute !important;
+            height: 0px !important;
+            width: 0px !important;
+            margin: 0px !important;
+            padding: 0px !important;
+        }
+
+        div[data-testid="stVerticalBlock"] {
+            padding-top: 0px !important;
+            position: static !important;
+        }
+
+        /* Streamlit Header & Deployment Toolbar - Hidden for clean edge-to-edge navbar */
         header[data-testid="stHeader"],
         [data-testid="stHeader"] {
-            display: flex !important;
-            visibility: visible !important;
+            display: none !important;
+            visibility: hidden !important;
             background: transparent !important;
-            height: 2.875rem !important;
-            z-index: 99990 !important;
+            height: 0px !important;
+            min-height: 0px !important;
+            margin: 0px !important;
+            padding: 0px !important;
+            pointer-events: none !important;
+            z-index: -1 !important;
         }
 
         [data-testid="stToolbar"] {
@@ -397,7 +514,16 @@ def apply_custom_css(theme: str = "dark_futuristic", *args, **kwargs):
             background: #0B0F1C !important;
             border-right: 1px solid rgba(255, 255, 255, 0.07) !important;
             box-shadow: 6px 0 28px rgba(0, 0, 0, 0.4);
-            padding-top: 0.5rem;
+            top: 64px !important;
+            height: calc(100vh - 64px) !important;
+            z-index: 99990 !important;
+            padding-top: 0.5rem !important;
+        }
+
+        button[data-testid="stSidebarCollapseButton"],
+        [data-testid="stSidebarCollapseButton"] {
+            top: 72px !important;
+            z-index: 999999 !important;
         }
         
         section[data-testid="stSidebar"] {
@@ -791,197 +917,290 @@ def apply_custom_css(theme: str = "dark_futuristic", *args, **kwargs):
             line-height: 1.3 !important;
             word-break: break-word !important;
         }
+
+        /* Constant Fixed Full-Width Header Container - Merged across sidebar and workspace (Executive Dark) */
+        div[data-testid="stLayoutWrapper"]:has(.quantum-sticky-navbar-anchor) {
+            position: fixed !important;
+            top: 0px !important;
+            left: 0px !important;
+            right: 0px !important;
+            width: 100vw !important;
+            height: 64px !important;
+            z-index: 999999 !important;
+            background: rgba(8, 12, 22, 0.94) !important;
+            backdrop-filter: blur(20px) !important;
+            -webkit-backdrop-filter: blur(20px) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+            padding-top: 0px !important;
+            padding-bottom: 0px !important;
+            padding-left: 20px !important;
+            padding-right: 20px !important;
+            margin: 0px !important;
+            box-sizing: border-box !important;
+            display: flex !important;
+            align-items: center !important;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.55), 0 1px 0 rgba(0, 240, 255, 0.12) !important;
+            transition: none !important;
+            transform: none !important;
+        }
+
+        /* Sidebar positioning aligned with 64px header */
+        section[data-testid="stSidebar"] {
+            top: 64px !important;
+            height: calc(100vh - 64px) !important;
+        }
+
+        button[data-testid="stSidebarCollapseButton"],
+        [data-testid="stSidebarCollapseButton"] {
+            top: 72px !important;
+            z-index: 999999 !important;
+        }
+
+        div[data-testid="stLayoutWrapper"]:has(.quantum-sticky-navbar-anchor) div[data-testid="stVerticalBlock"] {
+            width: 100% !important;
+            height: 100% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        div[data-testid="stLayoutWrapper"]:has(.quantum-sticky-navbar-anchor) [data-testid="stHorizontal"] {
+            width: 100% !important;
+            align-items: center !important;
+            margin: 0 !important;
+        }
+
+        div[data-testid="stLayoutWrapper"]:has(.quantum-sticky-navbar-anchor) [data-testid="column"] {
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+        }
+
+        div[data-testid="stLayoutWrapper"]:has(.quantum-sticky-navbar-anchor) .stButton > button,
+        div[data-testid="stLayoutWrapper"]:has(.quantum-sticky-navbar-anchor) div[data-testid="stPopover"] > button {
+            height: 36px !important;
+            min-height: 36px !important;
+            padding: 0 12px !important;
+            font-size: 0.80rem !important;
+            font-weight: 600 !important;
+            border-radius: 8px !important;
+            white-space: nowrap !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            transition: all 0.18s ease-in-out !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.quantum-sticky-navbar-anchor) {
+            display: none !important;
+            position: absolute !important;
+            height: 0px !important;
+            width: 0px !important;
+            margin: 0px !important;
+            padding: 0px !important;
+        }
         </style>
         """, unsafe_allow_html=True)
 
+@st.cache_data
+def get_logo_b64() -> str:
+    """Returns the base64 Data URI for the Quantum Analyst logo icon."""
+    logo_path = Path(__file__).resolve().parent.parent / "assets" / "quantum_logo_icon.png"
+    if logo_path.exists():
+        with open(logo_path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode("utf-8")
+        return f"data:image/png;base64,{encoded}"
+    return ""
+
 def render_top_navbar(breadcrumb: str = "Workspace / Dashboard", active_dataset: Optional[str] = None):
-    """Renders the clean, fully functional SaaS top navigation bar."""
+    """Renders the executive-grade, edge-to-edge top navigation bar merged across sidebar and workspace."""
     curr_theme = st.session_state.get("theme", "dark_futuristic")
     is_dark = (curr_theme == "dark_futuristic")
     user = st.session_state.get("user") or {}
     is_auth = bool(st.session_state.get("authenticated", False))
 
-    col_left, col_search, col_right = st.columns([2.5, 4.0, 3.5])
+    navbar_container = st.container(key="top_navbar")
+    with navbar_container:
+        st.markdown('<div class="quantum-sticky-navbar-anchor"></div>', unsafe_allow_html=True)
+        col_brand, col_center, col_actions = st.columns([3.8, 2.4, 3.8])
 
-    with col_left:
-        dataset_label = f"<span style='color: {'#00F0FF' if is_dark else '#0284C7'}; font-weight: 600;'>{active_dataset}</span>" if active_dataset else "<span style='color: #94A3B8;'>Ready for ingestion</span>"
-        st.markdown(f"""
-        <div style="display: flex; align-items: center; gap: 8px; padding-top: 7px;">
-            <span style="color: {'#64748B' if is_dark else '#475569'}; font-size: 0.84rem; font-weight: 500;">{breadcrumb}</span>
-            <span style="color: {'#475569' if is_dark else '#94A3B8'};">•</span>
-            <span style="font-size: 0.84rem;">{dataset_label}</span>
-        </div>
-        """, unsafe_allow_html=True)
+        with col_brand:
+            badge_bg = 'linear-gradient(135deg, #00F0FF 0%, #0284C7 100%)' if is_dark else 'linear-gradient(135deg, #0284C7 0%, #0EA5E9 100%)'
+            badge_shadow = '0 0 14px rgba(0, 240, 255, 0.45)' if is_dark else '0 2px 8px rgba(2, 132, 199, 0.25)'
+            title_color = '#FFFFFF' if is_dark else '#0F172A'
+            subtitle1_color = '#00F0FF' if is_dark else '#0284C7'
+            subtitle2_color = '#94A3B8' if is_dark else '#64748B'
 
-    with col_search:
-        # Sleek command query bar
-        query = st.text_input(
-            "AI Command Query",
-            placeholder="🔍 Ask anything about your data... (Ctrl + K)",
-            label_visibility="collapsed",
-            key="global_top_ai_search_input"
-        )
-        if query:
-            st.session_state["active_nav"] = "AI Chat"
-            st.session_state["pending_chat_prompt"] = query
+            logo_src = get_logo_b64()
+            logo_img_tag = (
+                f'<img src="{logo_src}" style="width: 38px; height: 38px; border-radius: 9px; object-fit: cover; box-shadow: {badge_shadow}; border: 1px solid rgba(0, 240, 255, 0.35); flex-shrink: 0;" />'
+                if logo_src else
+                f'<div style="width: 38px; height: 38px; border-radius: 10px; background: {badge_bg}; display: flex; align-items: center; justify-content: center; box-shadow: {badge_shadow}; font-size: 1.2rem; flex-shrink: 0;">⚡</div>'
+            )
 
-    with col_right:
-        c_copilot, c_theme, c_notif, c_prof = st.columns([1.3, 1.0, 1.0, 1.8], gap="small")
+            brand_html = (
+                f'<div style="display: flex; align-items: center; gap: 12px; height: 42px;">'
+                f'{logo_img_tag}'
+                f'<div style="line-height: 1.15; flex-shrink: 0;">'
+                f'<div style="font-size: 1.05rem; font-weight: 800; color: {title_color}; letter-spacing: -0.01em; white-space: nowrap;">QUANTUM ANALYST</div>'
+                f'<div style="font-size: 0.65rem; color: {subtitle1_color}; font-weight: 700; letter-spacing: 0.05em; white-space: nowrap;">ANALYZE • PREDICT • EMPOWER</div>'
+                f'<div style="font-size: 0.58rem; color: {subtitle2_color}; font-weight: 500; letter-spacing: 0.02em; white-space: nowrap;">AI Powered Data Analytics Platform</div>'
+                f'</div>'
+                f'</div>'
+            )
+            st.markdown(brand_html, unsafe_allow_html=True)
 
-        # 0. AI MODEL COPILOT & VOICE SHORTCUT
-        with c_copilot:
-            if st.button(
-                "🤖 Copilot",
-                key="top_ai_copilot_quick_btn",
-                use_container_width=True,
-                help="Open AI Model Copilot & Voice Assistant"
-            ):
-                st.session_state["copilot_open"] = True
-                st.session_state["active_nav"] = "AI Model Copilot"
-                st.rerun()
-
-        # 1. THEME TOGGLE (Dark / Light)
-        with c_theme:
-            theme_icon = "🌙" if is_dark else "☀️"
-            theme_btn_label = f"{theme_icon} {'Dark' if is_dark else 'Light'}"
-            if st.button(
-                theme_btn_label,
-                key="top_theme_toggle_btn",
-                use_container_width=True,
-                help=f"Currently {theme_btn_label}. Click to toggle {'Light' if is_dark else 'Dark'} Mode"
-            ):
-                st.session_state["theme"] = "light_classic" if is_dark else "dark_futuristic"
-                st.rerun()
-
-        # 2. NOTIFICATIONS (Live Alerts, Badge & Popover)
-        with c_notif:
-            from core.models.notification_model import NotificationModel
-            u_id = user.get("id") if is_auth else None
-            unread_cnt = NotificationModel.get_unread_count(user_id=u_id)
-            notif_btn_label = f"🔔 {unread_cnt}" if unread_cnt > 0 else "🔔"
-
-            with st.popover(notif_btn_label, use_container_width=True):
+        with col_center:
+            # Active Dataset / DuckDB Engine Status Pill
+            if active_dataset:
                 st.markdown(f"""
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-weight: 700; font-size: 0.92rem; color: {'#F8FAFC' if is_dark else '#0F172A'};">
-                        🔔 System & Alerts
-                    </span>
-                    <span style="background: {'rgba(0, 240, 255, 0.18)' if is_dark else 'rgba(2, 132, 199, 0.15)'}; 
-                                 color: {'#00F0FF' if is_dark else '#0284C7'}; 
-                                 font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 10px;">
-                        {unread_cnt} New
-                    </span>
+                <div style="display: flex; align-items: center; justify-content: center; height: 34px; background: rgba(0, 240, 255, 0.08); border: 1px solid rgba(0, 240, 255, 0.32); border-radius: 8px; padding: 0 12px; font-size: 0.78rem; font-weight: 600; color: #00F0FF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Active Dataset: {active_dataset}">
+                    <span style="width: 6px; height: 6px; border-radius: 50%; background: #10B981; box-shadow: 0 0 6px #10B981; margin-right: 7px; flex-shrink: 0;"></span>
+                    <span style="overflow: hidden; text-overflow: ellipsis;">📊 {active_dataset}</span>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style="display: flex; align-items: center; justify-content: center; height: 34px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 0 12px; font-size: 0.76rem; font-weight: 500; color: #94A3B8; white-space: nowrap;" title="DuckDB In-Memory Fast-Path Kernel Ready">
+                    <span style="width: 6px; height: 6px; border-radius: 50%; background: #00F0FF; box-shadow: 0 0 6px #00F0FF; margin-right: 7px; flex-shrink: 0;"></span>
+                    <span>⚡ DuckDB Vector Engine Ready</span>
                 </div>
                 """, unsafe_allow_html=True)
 
-                c_a1, c_a2 = st.columns(2)
-                with c_a1:
-                    if st.button("✓ Mark Read", key="top_notif_mark_read_btn", use_container_width=True):
-                        NotificationModel.mark_all_as_read(user_id=u_id)
-                        st.rerun()
-                with c_a2:
-                    if st.button("🗑️ Clear All", key="top_notif_clear_all_btn", use_container_width=True):
-                        NotificationModel.clear_all(user_id=u_id)
-                        st.rerun()
+        with col_actions:
+            c_action, c_theme, c_notif, c_prof = st.columns([1.1, 0.9, 0.55, 1.45], gap="small")
 
-                st.markdown(f"<hr style='margin: 8px 0; border-color: {'rgba(255, 255, 255, 0.08)' if is_dark else '#E2E8F0'};'>", unsafe_allow_html=True)
-
-                notifs = NotificationModel.get_notifications(user_id=u_id, limit=6)
-                if not notifs:
-                    st.caption("✨ All caught up! No active notifications.")
+            # 1. PRIMARY ACTION BUTTON (Copilot or Export)
+            with c_action:
+                if active_dataset:
+                    if st.button("📥 Export", key="top_export_active_csv_btn", width="stretch", type="primary"):
+                        st.session_state["active_nav"] = "Downloads"
+                        st.rerun()
                 else:
-                    for n in notifs:
-                        is_unread = (n.get("is_read", 0) == 0)
-                        dot = "● " if is_unread else ""
-                        dot_color = "#00F0FF" if is_dark else "#0284C7"
-                        unread_bg = ("rgba(0, 240, 255, 0.06)" if is_dark else "rgba(2, 132, 199, 0.06)") if is_unread else "transparent"
-                        border_c = ("rgba(0, 240, 255, 0.2)" if is_dark else "rgba(2, 132, 199, 0.3)") if is_unread else ("rgba(255, 255, 255, 0.06)" if is_dark else "#E2E8F0")
+                    if st.button("✨ Copilot", key="top_ai_copilot_quick_btn", width="stretch", type="primary"):
+                        st.session_state["copilot_open"] = True
+                        st.session_state["active_nav"] = "AI Model Copilot"
+                        st.rerun()
 
-                        st.markdown(f"""
-                        <div style="background: {unread_bg}; border: 1px solid {border_c}; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                                <span style="font-size: 0.82rem; font-weight: 600; color: {'#FFFFFF' if is_dark else '#0F172A'};">
+            # 2. SEAMLESS THEME TOGGLE (Single Click Day/Night Switch)
+            with c_theme:
+                theme_icon_label = "☀️ Light" if is_dark else "🌙 Dark"
+                if st.button(theme_icon_label, key="top_theme_toggle_btn", width="stretch", type="secondary"):
+                    st.session_state["theme"] = "light_classic" if is_dark else "dark_futuristic"
+                    st.rerun()
+
+            # 3. NOTIFICATIONS POPOVER
+            with c_notif:
+                from core.models.notification_model import NotificationModel
+                u_id = user.get("id") if is_auth else None
+                unread_cnt = NotificationModel.get_unread_count(user_id=u_id)
+                notif_btn_label = f"🔔 {unread_cnt}" if unread_cnt > 0 else "🔔"
+                with st.popover(notif_btn_label, width="stretch"):
+                    st.markdown(f"""
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-weight: 700; font-size: 0.90rem; color: {'#F8FAFC' if is_dark else '#0F172A'};">
+                            🔔 System & Alerts
+                        </span>
+                        <span style="background: {'rgba(0, 240, 255, 0.18)' if is_dark else 'rgba(2, 132, 199, 0.15)'}; 
+                                     color: {'#00F0FF' if is_dark else '#0284C7'}; 
+                                     font-size: 0.70rem; font-weight: 700; padding: 2px 7px; border-radius: 8px;">
+                            {unread_cnt} New
+                        </span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    c_a1, c_a2 = st.columns(2)
+                    with c_a1:
+                        if st.button("✓ Mark Read", key="top_notif_mark_read_btn", width="stretch"):
+                            NotificationModel.mark_all_as_read(user_id=u_id)
+                            st.rerun()
+                    with c_a2:
+                        if st.button("🗑️ Clear", key="top_notif_clear_all_btn", width="stretch"):
+                            NotificationModel.clear_all(user_id=u_id)
+                            st.rerun()
+
+                    st.markdown(f"<hr style='margin: 8px 0; border-color: {'rgba(255, 255, 255, 0.08)' if is_dark else '#E2E8F0'};'>", unsafe_allow_html=True)
+
+                    notifs = NotificationModel.get_notifications(user_id=u_id, limit=6)
+                    if not notifs:
+                        st.caption("✨ All caught up! No active notifications.")
+                    else:
+                        for n in notifs:
+                            is_unread = (n.get("is_read", 0) == 0)
+                            dot = "● " if is_unread else ""
+                            dot_color = "#00F0FF" if is_dark else "#0284C7"
+                            unread_bg = ("rgba(0, 240, 255, 0.06)" if is_dark else "rgba(2, 132, 199, 0.06)") if is_unread else "transparent"
+                            border_c = ("rgba(0, 240, 255, 0.2)" if is_dark else "rgba(2, 132, 199, 0.3)") if is_unread else ("rgba(255, 255, 255, 0.06)" if is_dark else "#E2E8F0")
+
+                            st.markdown(f"""
+                            <div style="background: {unread_bg}; border: 1px solid {border_c}; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                    <span style="font-size: 0.80rem; font-weight: 600; color: {'#FFFFFF' if is_dark else '#0F172A'};">
                                         {n.get('icon', '🔔')} <span style="color: {dot_color};">{dot}</span>{n.get('title', '')}
-                                </span>
-                                <span style="font-size: 0.68rem; color: #64748B;">{n.get('created_at', '')[:10]}</span>
+                                    </span>
+                                    <span style="font-size: 0.65rem; color: #64748B;">{n.get('created_at', '')[:10]}</span>
+                                </div>
+                                <div style="font-size: 0.75rem; color: {'#94A3B8' if is_dark else '#475569'}; line-height: 1.35;">
+                                    {n.get('message', '')}
+                                </div>
                             </div>
-                            <div style="font-size: 0.77rem; color: {'#94A3B8' if is_dark else '#475569'}; line-height: 1.35;">
-                                {n.get('message', '')}
+                            """, unsafe_allow_html=True)
+
+            # 4. PROFILE SECTION
+            with c_prof:
+                if is_auth:
+                    raw_name = user.get("full_name") or user.get("username") or "Analyst"
+                    disp_name = raw_name.replace("_", " ").title().split()[0]
+                    role = user.get("role") or "Lead Analyst"
+                    email = user.get("email") or "analyst@quantum.ai"
+                    initials = "".join([p[0].upper() for p in raw_name.replace("_", " ").split()[:2]]) or "QA"
+                    prof_btn_label = f"👤 {disp_name}"
+
+                    with st.popover(prof_btn_label, width="stretch"):
+                        st.markdown(f"""
+                        <div style="display: flex; align-items: center; gap: 12px; padding: 4px 2px 10px 2px; border-bottom: 1px solid {'rgba(255, 255, 255, 0.08)' if is_dark else '#E2E8F0'}; margin-bottom: 10px;">
+                            <div style="width: 36px; height: 36px; border-radius: 50%; 
+                                        background: linear-gradient(135deg, #00F0FF, #8B5CF6); 
+                                        display: flex; align-items: center; justify-content: center; 
+                                        font-size: 0.88rem; font-weight: 800; color: #050811; box-shadow: 0 0 10px rgba(0, 240, 255, 0.3); flex-shrink: 0;">
+                                {initials}
+                            </div>
+                            <div style="overflow: hidden;">
+                                <div style="font-weight: 700; font-size: 0.90rem; color: {'#FFFFFF' if is_dark else '#0F172A'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    {raw_name.replace('_', ' ').title()}
+                                </div>
+                                <div style="font-size: 0.70rem; color: #94A3B8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{email}</div>
+                                <div style="display: inline-block; background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 4px; padding: 1px 6px; font-size: 0.62rem; font-weight: 600; margin-top: 3px;">
+                                    ● {role}
+                                </div>
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
 
-                        route = n.get("link_route")
-                        if route:
-                            if st.button(f"Go to {route} →", key=f"notif_route_{n['id']}", use_container_width=True):
-                                NotificationModel.mark_as_read(n["id"])
-                                st.session_state["active_nav"] = route
+                        cp_1, cp_2 = st.columns(2)
+                        with cp_1:
+                            if st.button("⚙️ Settings", key="top_prof_settings_btn", width="stretch"):
+                                st.session_state["active_nav"] = "Settings"
+                                st.rerun()
+                        with cp_2:
+                            if st.button("📁 Projects", key="top_prof_projects_btn", width="stretch"):
+                                st.session_state["active_nav"] = "Projects"
                                 st.rerun()
 
-        # 3. PROFILE SECTION (User Card & Popover Actions)
-        with c_prof:
-            if is_auth:
-                full_name = user.get("full_name") or user.get("username") or "Chintu Kumar"
-                role = user.get("role") or "Lead Data Analyst"
-                email = user.get("email") or "analyst@quantum.ai"
-                initials = "".join([part[0].upper() for part in full_name.split()[:2]]) or "CK"
-                first_name = full_name.split()[0]
-                prof_btn_label = f"👤 {first_name[:10]} ▾"
-
-                with st.popover(prof_btn_label, use_container_width=True):
-                    st.markdown(f"""
-                    <div style="display: flex; align-items: center; gap: 12px; padding: 4px 2px 10px 2px; border-bottom: 1px solid {'rgba(255, 255, 255, 0.08)' if is_dark else '#E2E8F0'}; margin-bottom: 10px;">
-                        <div style="width: 40px; height: 40px; border-radius: 50%; 
-                                    background: linear-gradient(135deg, #00F0FF, #8B5CF6); 
-                                    display: flex; align-items: center; justify-content: center; 
-                                    font-size: 0.95rem; font-weight: 800; color: #050811; box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);">
-                            {initials}
-                        </div>
-                        <div>
-                            <div style="font-weight: 700; font-size: 0.94rem; color: {'#FFFFFF' if is_dark else '#0F172A'};">
-                                {full_name}
-                            </div>
-                            <div style="font-size: 0.75rem; color: #94A3B8;">{email}</div>
-                            <div style="display: inline-block; background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 4px; padding: 1px 6px; font-size: 0.68rem; font-weight: 600; margin-top: 3px;">
-                                ● {role}
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    st.markdown(f"""
-                    <div style="background: {'rgba(255, 255, 255, 0.04)' if is_dark else '#F8FAFC'}; border: 1px solid {'rgba(255, 255, 255, 0.06)' if is_dark else '#E2E8F0'}; border-radius: 6px; padding: 6px 10px; font-size: 0.76rem; color: {'#CBD5E1' if is_dark else '#334155'}; margin-bottom: 10px;">
-                        🔐 <b>Session:</b> Verified Authenticated<br>
-                        🛡️ <b>Clearance:</b> Enterprise Level 3<br>
-                        ⚡ <b>Tier:</b> Enterprise Pro Analyst
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    if st.button("⚙️ Platform Settings", key="top_prof_settings_btn", use_container_width=True):
-                        st.session_state["active_nav"] = "Settings"
-                        st.rerun()
-
-                    if st.button("🛡️ Security & Login Logs", key="top_prof_security_btn", use_container_width=True):
+                        st.markdown(f"<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
+                        if st.button("🚪 Sign Out", key="top_prof_signout_btn", type="secondary", width="stretch"):
+                            st.session_state["authenticated"] = False
+                            st.session_state["user"] = None
+                            st.session_state["is_demo_session"] = False
+                            st.session_state["active_nav"] = "Auth"
+                            st.rerun()
+                else:
+                    if st.button("🔑 Sign In", key="top_quick_signin_btn", width="stretch", type="primary"):
                         st.session_state["active_nav"] = "Auth"
                         st.rerun()
-
-                    st.markdown(f"<hr style='margin: 8px 0; border-color: {'rgba(255, 255, 255, 0.08)' if is_dark else '#E2E8F0'};'>", unsafe_allow_html=True)
-
-                    if st.button("🚪 Sign Out", key="top_prof_signout_btn", use_container_width=True, type="primary"):
-                        st.session_state["authenticated"] = False
-                        st.session_state["user"] = None
-                        st.session_state["df"] = None
-                        st.session_state["raw_df"] = None
-                        st.session_state["current_project_id"] = None
-                        st.session_state["current_project_name"] = None
-                        st.session_state["active_nav"] = "Auth"
-                        st.rerun()
-            else:
-                if st.button("🔑 Sign In", key="top_prof_signin_btn", type="primary", use_container_width=True):
-                    st.session_state["active_nav"] = "Auth"
-                    st.rerun()
-
-    st.markdown(f"<hr style='border-color: {'rgba(255, 255, 255, 0.06)' if is_dark else '#E2E8F0'}; margin: 8px 0 18px 0;'>", unsafe_allow_html=True)
 
 def render_saas_hero():
     """Renders the clean welcome/AI analyst hero section (replaces old code box)."""
@@ -1101,7 +1320,9 @@ def render_dataset_header_card(df, project_name: str, quality_score: int = 94):
         grade_label = "GRADE C • ATTENTION REQUIRED"
 
     # Scale and Engine telemetry badge
-    if n_rows >= 250000:
+    if n_rows >= 2000000:
+        scale_badge = '<span style="background: rgba(16, 185, 129, 0.22); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.45); padding: 3px 9px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;">⚡ 2M+ DUCKDB OLAP</span>'
+    elif n_rows >= 250000:
         scale_badge = '<span style="background: rgba(124, 58, 237, 0.22); color: #A78BFA; border: 1px solid rgba(124, 58, 237, 0.45); padding: 3px 9px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;">⚡ 1M+ DUCKDB OLAP</span>'
     else:
         scale_badge = '<span style="background: rgba(0, 240, 255, 0.14); color: #00F0FF; border: 1px solid rgba(0, 240, 255, 0.35); padding: 3px 9px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;">⚡ VECTORIZED SIMD</span>'

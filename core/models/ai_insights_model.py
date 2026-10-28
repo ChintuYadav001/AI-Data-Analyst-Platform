@@ -31,8 +31,8 @@ class AIInsightsModel:
         goal_analysis = []
         hypothesis_evaluations = []
         targeted_metrics = []
-        goal_lower = goal.lower()
-        expl_lower = goal_explanation.lower() if goal_explanation else ""
+        goal_lower = (goal or "").lower()
+        expl_lower = (goal_explanation or "").lower()
 
         if "revenue" in goal_lower or "sales" in goal_lower:
             goal_analysis.append(f"🎯 **Target Objective: Revenue Maximization & Sales Acceleration**")

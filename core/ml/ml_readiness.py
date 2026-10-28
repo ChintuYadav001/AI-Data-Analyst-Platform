@@ -116,16 +116,18 @@ def detect_id_columns(df: pd.DataFrame) -> List[str]:
     """Detect potential identifier or index columns."""
     id_cols = []
     n = len(df)
+    work_df = df.sample(50_000, random_state=42) if n > 50_000 else df
+    w_n = len(work_df)
     for col in df.columns:
         col_lower = str(col).lower()
         # Name heuristic
         is_id_named = any(k in col_lower for k in ["_id", "id_", "uuid", "guid", "key", "index", "code"]) or col_lower in ["id", "uid"]
         
-        # Uniqueness check
-        nunique = df[col].nunique(dropna=True)
-        if n > 50 and nunique >= 0.98 * n and (is_id_named or df[col].dtype == object):
+        # Uniqueness check on sample
+        nunique = work_df[col].nunique(dropna=True)
+        if w_n > 50 and nunique >= 0.98 * w_n and (is_id_named or work_df[col].dtype == object):
             id_cols.append(col)
-        elif is_id_named and (df[col].dtype == object or nunique >= 0.5 * n):
+        elif is_id_named and (work_df[col].dtype == object or nunique >= 0.5 * w_n):
             id_cols.append(col)
     return id_cols
 
@@ -133,8 +135,9 @@ def detect_id_columns(df: pd.DataFrame) -> List[str]:
 def detect_constant_columns(df: pd.DataFrame) -> List[str]:
     """Detect zero-variance or constant columns."""
     constant_cols = []
+    work_df = df.sample(10_000, random_state=42) if len(df) > 10_000 else df
     for col in df.columns:
-        if df[col].nunique(dropna=False) <= 1:
+        if work_df[col].nunique(dropna=False) <= 1:
             constant_cols.append(col)
     return constant_cols
 
@@ -151,8 +154,10 @@ def classify_task_type(df: pd.DataFrame, target_col: str) -> str:
     if len(series) == 0:
         return "unsupported"
 
-    nunique = series.nunique()
-    is_numeric = pd.api.types.is_numeric_dtype(series)
+    # Sample for large datasets
+    sample_series = series.sample(50_000, random_state=42) if len(series) > 50_000 else series
+    nunique = sample_series.nunique()
+    is_numeric = pd.api.types.is_numeric_dtype(sample_series)
 
     # Check for boolean or 2 distinct classes
     if nunique == 2:
@@ -187,21 +192,22 @@ def detect_target_candidates(df: pd.DataFrame) -> List[TargetCandidate]:
     if n == 0:
         return candidates
 
-    id_cols = set(detect_id_columns(df))
-    constant_cols = set(detect_constant_columns(df))
+    work_df = df.sample(50_000, random_state=42) if n > 50_000 else df
+    id_cols = set(detect_id_columns(work_df))
+    constant_cols = set(detect_constant_columns(work_df))
 
     for col in df.columns:
         if col in id_cols or col in constant_cols:
             continue
 
         col_lower = str(col).lower()
-        series = df[col].dropna()
+        series = work_df[col].dropna()
         if len(series) == 0:
             continue
 
         nunique = series.nunique()
         is_numeric = pd.api.types.is_numeric_dtype(series)
-        task_type = classify_task_type(df, col)
+        task_type = classify_task_type(work_df, col)
         
         confidence = 0.20
         reason_parts = []
@@ -261,14 +267,15 @@ def detect_target_leakage(df: pd.DataFrame, target_col: str) -> List[Dict[str, A
     if target_col not in df.columns or len(df) < 5:
         return leakage_warnings
 
-    target_series = df[target_col]
+    work_df = df.sample(30_000, random_state=42) if len(df) > 30_000 else df
+    target_series = work_df[target_col]
     target_is_num = pd.api.types.is_numeric_dtype(target_series)
 
-    for col in df.columns:
+    for col in work_df.columns:
         if col == target_col:
             continue
 
-        series = df[col]
+        series = work_df[col]
         # Check duplicate
         if series.equals(target_series):
             leakage_warnings.append({
@@ -318,22 +325,24 @@ def audit_ml_readiness(df: pd.DataFrame, target_col: Optional[str] = None) -> Re
     datetime_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c])]
     categorical_cols = [c for c in df.columns if c not in numeric_cols and c not in datetime_cols]
 
-    id_cols = detect_id_columns(df)
-    constant_cols = detect_constant_columns(df)
+    # Sample for heavy cardinality and leakage scans on large datasets
+    sample_df = df.sample(50_000, random_state=42) if total_rows > 50_000 else df
+    id_cols = detect_id_columns(sample_df)
+    constant_cols = detect_constant_columns(sample_df)
 
     high_missing = []
     for col in df.columns:
-        pct = float(df[col].isna().mean())
+        pct = float(sample_df[col].isna().mean())
         if pct > 0.30:
             high_missing.append({"column": col, "missing_pct": round(pct * 100, 1)})
 
     high_cardinality = []
     for col in categorical_cols:
-        unq = df[col].nunique(dropna=True)
+        unq = sample_df[col].nunique(dropna=True)
         if unq > 50 and col not in id_cols:
             high_cardinality.append({"column": col, "unique_count": unq})
 
-    target_candidates = detect_target_candidates(df)
+    target_candidates = detect_target_candidates(sample_df)
 
     # Determine selected target
     selected_target = target_col

@@ -122,7 +122,7 @@ def render_cleaning_view():
             if st.button(
                 f"⚡ RUN 1-CLICK AI AUTO-CLEAN ({safe_fixes} Safe Fixes)",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
                 help="Automatically applies all high-confidence (>95%), non-destructive fixes."
             ):
                 with st.spinner("Executing high-confidence AI cleaning operations..."):
@@ -135,11 +135,11 @@ def render_cleaning_view():
                     st.toast(f"AI Auto-Clean applied {len(new_logs)} safe transformations!", icon="✨")
                     st.rerun()
         else:
-            st.button("✨ All Auto-Fix Items Resolved", disabled=True, use_container_width=True)
+            st.button("✨ All Auto-Fix Items Resolved", disabled=True, width="stretch")
 
     with tb_c2:
         revert_disabled = (len(df) == len(raw_df) and int(df.isna().sum().sum()) == int(raw_df.isna().sum().sum()) and len(cleaning_log) == 0)
-        if st.button("🔄 Rollback to Raw", type="secondary", use_container_width=True, disabled=revert_disabled, help="Rolls back all modifications and restores original uploaded dataset."):
+        if st.button("🔄 Rollback to Raw", type="secondary", width="stretch", disabled=revert_disabled, help="Rolls back all modifications and restores original uploaded dataset."):
             st.session_state["df"] = raw_df.copy()
             st.session_state["cleaning_log"] = []
             if project_id and is_auth:
@@ -156,7 +156,7 @@ def render_cleaning_view():
             data=csv_buffer.getvalue(),
             file_name=f"{project_name.lower().replace(' ', '_')}_cleaned.csv",
             mime="text/csv",
-            use_container_width=True
+            width="stretch"
         )
 
     st.markdown("<hr style='border-color: rgba(255, 255, 255, 0.08); margin: 18px 0;'>", unsafe_allow_html=True)
@@ -295,7 +295,7 @@ def render_cleaning_view():
                 if st.button(
                     f"🚀 Apply {len(items_to_apply)} Selected AI Actions",
                     type="primary",
-                    use_container_width=True,
+                    width="stretch",
                     disabled=(len(items_to_apply) == 0)
                 ):
                     with st.spinner("Applying selected AI cleaning operations..."):
@@ -351,16 +351,16 @@ def render_cleaning_view():
                     })
 
             diff_df = pd.DataFrame(diff_records)
-            st.dataframe(diff_df, use_container_width=True)
+            st.dataframe(diff_df, width="stretch")
 
             st.markdown("#### 📊 Side-by-Side Dataset Comparison")
             side_c1, side_c2 = st.columns(2)
             with side_c1:
                 st.markdown("<div style='font-size: 0.85rem; font-weight: 700; color: #EF4444; margin-bottom: 6px;'>RAW ORIGINAL DATASET (First 5 Rows)</div>", unsafe_allow_html=True)
-                st.dataframe(raw_df.head(5), use_container_width=True)
+                st.dataframe(raw_df.head(5), width="stretch")
             with side_c2:
                 st.markdown("<div style='font-size: 0.85rem; font-weight: 700; color: #10B981; margin-bottom: 6px;'>CURRENT CLEANED DATASET (First 5 Rows)</div>", unsafe_allow_html=True)
-                st.dataframe(df.head(5), use_container_width=True)
+                st.dataframe(df.head(5), width="stretch")
 
     # =========================================================================
     # TAB 3: VALIDATION REPORT
@@ -423,7 +423,7 @@ def render_cleaning_view():
         validations = val_report.get("validations", [])
         if validations:
             v_df = pd.DataFrame(validations)
-            st.dataframe(v_df, use_container_width=True)
+            st.dataframe(v_df, width="stretch")
 
         remaining = val_report.get("remaining_issues", [])
         if remaining:
@@ -450,7 +450,7 @@ def render_cleaning_view():
                     "Status": entry.get("status", "COMPLETED"),
                     "Reason": entry.get("reason", "-")
                 })
-            st.dataframe(pd.DataFrame(log_display), use_container_width=True)
+            st.dataframe(pd.DataFrame(log_display), width="stretch")
         else:
             st.info("No cleaning operations executed yet in this session.")
 
@@ -460,7 +460,7 @@ def render_cleaning_view():
 
         roll_c1, roll_c2 = st.columns(2)
         with roll_c1:
-            if st.button("⚠️ Rollback to Raw Dataset", type="secondary", use_container_width=True):
+            if st.button("⚠️ Rollback to Raw Dataset", type="secondary", width="stretch"):
                 st.session_state["df"] = raw_df.copy()
                 st.session_state["cleaning_log"] = []
                 if project_id and is_auth:
@@ -474,5 +474,5 @@ def render_cleaning_view():
                 data=csv_buffer.getvalue(),
                 file_name=f"{project_name.lower().replace(' ', '_')}_cleaned.csv",
                 mime="text/csv",
-                use_container_width=True
+                width="stretch"
             )

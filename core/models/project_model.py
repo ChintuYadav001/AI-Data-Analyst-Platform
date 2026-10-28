@@ -3,7 +3,7 @@ import numpy as np
 import json
 import uuid
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from core.config import PROJECTS_DIR
 
 class ProjectModel:
@@ -56,22 +56,16 @@ class ProjectModel:
     @staticmethod
     def _prepare_df_for_parquet(df: pd.DataFrame) -> pd.DataFrame:
         """Ensures DataFrame columns are strictly typed and free of mixed object types that cause PyArrow ArrowInvalid."""
-        df_out = df.copy(deep=False)
-        for col in df_out.columns:
-            if df_out[col].dtype == object:
-                try:
-                    import pyarrow as pa
-                    pa.Array.from_pandas(df_out[col])
-                except Exception:
-                    df_out[col] = df_out[col].astype(str)
-        return df_out
+        from core.parquet_manager import ParquetManager
+        return ParquetManager.sanitize_dataframe(df)
 
     def save_raw_dataset(self, df: pd.DataFrame) -> None:
         clean_df = self._prepare_df_for_parquet(df)
         clean_df.to_parquet(self.raw_df_path, index=False)
         try:
             from core.db import sync_dataframe_to_sql
-            sync_dataframe_to_sql(f"proj_{self.project_id[:8]}", clean_df, project_name=self.name)
+            sync_df = clean_df.head(10000) if len(clean_df) > 10000 else clean_df
+            sync_dataframe_to_sql(f"proj_{self.project_id[:8]}", sync_df, project_name=self.name)
         except Exception:
             pass
 
@@ -84,7 +78,8 @@ class ProjectModel:
         self._save_metadata(meta)
         try:
             from core.db import sync_dataframe_to_sql
-            sync_dataframe_to_sql(f"proj_{self.project_id[:8]}_cleaned", clean_df, project_name=f"{self.name} (Cleaned)")
+            sync_df = clean_df.head(10000) if len(clean_df) > 10000 else clean_df
+            sync_dataframe_to_sql(f"proj_{self.project_id[:8]}_cleaned", sync_df, project_name=f"{self.name} (Cleaned)")
         except Exception:
             pass
 
@@ -156,9 +151,14 @@ class ProjectModel:
         return None
 
     @classmethod
-    def create_project(cls, name: str, df: pd.DataFrame, goal: str = "General Business Intelligence", goal_explanation: str = "") -> "ProjectModel":
+    def create_project(cls, name: str, df: pd.DataFrame, goal: str = "General Business Intelligence", goal_explanation: str = "", parquet_source: Optional[Union[str, Path]] = None) -> "ProjectModel":
         p_id = str(uuid.uuid4())[:8]
         proj = cls(p_id, name, goal, goal_explanation)
-        proj.save_raw_dataset(df)
-        proj.save_cleaned_dataset(df, [])
+        if parquet_source and Path(parquet_source).exists():
+            import shutil
+            shutil.copyfile(str(parquet_source), str(proj.raw_df_path))
+            shutil.copyfile(str(parquet_source), str(proj.cleaned_df_path))
+        else:
+            proj.save_raw_dataset(df)
+            proj.save_cleaned_dataset(df, [])
         return proj

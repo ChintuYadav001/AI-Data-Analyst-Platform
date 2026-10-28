@@ -26,7 +26,7 @@ def render_bi_hub_view():
         st.warning("⚠️ No active dataset found. Please upload a dataset or select a sample dataset first.")
         c1, _ = st.columns([1, 4])
         with c1:
-            if st.button("📂 Go to Upload Dataset", type="primary", use_container_width=True):
+            if st.button("📂 Go to Upload Dataset", type="primary", width="stretch"):
                 st.session_state["active_nav"] = "Upload Dataset"
                 st.rerun()
         return
@@ -143,7 +143,7 @@ def render_bi_hub_view():
                 height=240,
                 margin=dict(l=0, r=0, t=10, b=0),
             )
-            st.plotly_chart(fig_health, use_container_width=True)
+            st.plotly_chart(fig_health, width="stretch")
 
         st.markdown("---")
         st.markdown("#### ⚡ Insight → Action Execution Workflow")
@@ -162,7 +162,7 @@ def render_bi_hub_view():
         st.markdown("#### 📑 Executive Business Report Export (16 Sections)")
         c_rep1, c_rep2, c_rep3 = st.columns(3)
         with c_rep1:
-            if st.button("📑 Generate & Download PDF Dossier", type="primary", use_container_width=True):
+            if st.button("📑 Generate & Download PDF Dossier", type="primary", width="stretch"):
                 with st.spinner("Rendering institutional 16-section Executive Business Report..."):
                     # Assemble full BI data package
                     recs = bi.generate_business_recommendations(df, dataset_name=proj_name)
@@ -184,7 +184,7 @@ def render_bi_hub_view():
                         key="btn_dl_bi_pdf",
                     )
         with c_rep2:
-            if st.button("🌐 Export Responsive HTML Report", use_container_width=True):
+            if st.button("🌐 Export Responsive HTML Report", width="stretch"):
                 recs = bi.generate_business_recommendations(df, dataset_name=proj_name)
                 alerts = bi.generate_business_alerts(df)
                 bi_pkg = {
@@ -204,7 +204,7 @@ def render_bi_hub_view():
                     key="btn_dl_bi_html",
                 )
         with c_rep3:
-            if st.button("📊 Export Tabular Findings (CSV)", use_container_width=True):
+            if st.button("📊 Export Tabular Findings (CSV)", width="stretch"):
                 recs = bi.generate_business_recommendations(df, dataset_name=proj_name)
                 alerts = bi.generate_business_alerts(df)
                 bi_pkg = {
@@ -350,7 +350,7 @@ def render_bi_hub_view():
             # Comparison Table
             st.markdown("###### Detailed Scenario vs Baseline Delta Table")
             df_comp = pd.DataFrame(sim_res["comparison_table"])
-            st.dataframe(df_comp, use_container_width=True)
+            st.dataframe(df_comp, width="stretch")
 
             # AI Strategic Interpretation
             st.markdown(f"""
@@ -378,9 +378,9 @@ def render_bi_hub_view():
                 color_discrete_sequence=px.colors.qualitative.Prism,
             )
             fig_sc.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
-            st.plotly_chart(fig_sc, use_container_width=True)
+            st.plotly_chart(fig_sc, width="stretch")
 
-            st.dataframe(df_multi[["Scenario", "Revenue", "Profit", "Margin %", "Customers", "Volume"]], use_container_width=True)
+            st.dataframe(df_multi[["Scenario", "Revenue", "Profit", "Margin %", "Customers", "Volume"]], width="stretch")
             st.success(f"💡 Recommendation: {multi_comp['optimal_scenario_recommendation']}")
 
     # =========================================================================
@@ -466,7 +466,7 @@ def render_bi_hub_view():
         with c_memo2:
             st.markdown("##### ❓ Preset Inquiries for This Role")
             for q in dep_data.get("preset_questions", []):
-                if st.button(f"👉 {q}", key=f"btn_q_{hash(q)}_{selected_dep}", use_container_width=True):
+                if st.button(f"👉 {q}", key=f"btn_q_{hash(q)}_{selected_dep}", width="stretch"):
                     st.session_state["copilot_open"] = True
                     st.session_state["copilot_input"] = q
                     st.rerun()

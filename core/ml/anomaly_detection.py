@@ -67,8 +67,11 @@ def run_anomaly_detection(
     if len(df) < 10:
         raise ValueError("Anomaly detection requires at least 10 observations.")
 
-    # Impute and Standardize
-    X_raw = df[feature_cols].copy()
+    # Impute and Standardize (sampled for large datasets to prevent OOM/slowdown)
+    work_df = df
+    if len(df) > 30_000:
+        work_df = df.sample(30_000, random_state=random_state)
+    X_raw = work_df[feature_cols].copy()
     imputer = SimpleImputer(strategy="median")
     X_imp = imputer.fit_transform(X_raw)
 

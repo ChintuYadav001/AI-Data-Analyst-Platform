@@ -23,9 +23,14 @@ class DuckDBEngine:
         if cls._con is None:
             # Shared in-memory engine connection optimized for multithreaded analytical queries
             cls._con = duckdb.connect(database=":memory:")
-            # Configure threads based on available CPU
+            # Configure for high-performance on large datasets
             try:
-                cls._con.execute("PRAGMA threads=4;")
+                import os
+                cpu_count = os.cpu_count() or 4
+                threads = min(cpu_count, 8)
+                cls._con.execute(f"PRAGMA threads={threads};")
+                cls._con.execute("PRAGMA memory_limit='2GB';")
+                cls._con.execute("PRAGMA enable_object_cache;")
             except Exception:
                 pass
         return cls._con

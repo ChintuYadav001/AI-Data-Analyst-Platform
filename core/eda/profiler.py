@@ -189,7 +189,17 @@ class EDAProfiler:
 
                 if not is_date_candidate:
                     if n_unique > 0:
-                        sample_for_len = series.dropna().head(1000).astype(str)
+                        try:
+                            sample_for_len = series.dropna().head(1000).astype(str)
+                        except (UnicodeDecodeError, Exception):
+                            def _safe_str(v):
+                                if isinstance(v, bytes):
+                                    try:
+                                        return v.decode("utf-8")
+                                    except Exception:
+                                        return v.decode("latin-1", errors="replace")
+                                return str(v)
+                            sample_for_len = series.dropna().head(1000).map(_safe_str)
                         avg_len = float(sample_for_len.str.len().mean()) if not sample_for_len.empty else 0.0
                     else:
                         avg_len = 0.0

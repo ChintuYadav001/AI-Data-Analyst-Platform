@@ -75,7 +75,7 @@ def render_builder_view():
         col = c1 if i % 2 == 0 else c2
         with col:
             fig = ChartModel.create_plotly_figure(filtered_df, rec)
-            st.plotly_chart(fig, use_container_width=True, key=f"builder_chart_{i}_{rec.get('id', i)}")
+            st.plotly_chart(fig, width="stretch", key=f"builder_chart_{i}_{rec.get('id', i)}")
             with st.expander(f"ℹ️ Metric Lineage: {rec['title']}"):
                 st.write(f"**Business Goal:** {rec.get('business_question', 'Analyze category performance')}")
                 st.write(f"**Analytical Rule:** {rec.get('requirement_rationale', 'Type-mapped chart')}")

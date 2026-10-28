@@ -66,8 +66,8 @@ def render_upload_view():
         else:
             uploaded_file = st.file_uploader(
                 "Select file to ingest",
-                type=["csv", "xlsx", "xls"],
-                help="Supported: CSV, XLSX, XLS. Ingestion limit: 100MB."
+                type=["csv", "xlsx", "xls", "parquet"],
+                help="Supported formats: CSV, XLSX, XLS, PARQUET. Enterprise scale: supports datasets up to 2,000,000+ records (up to 4 GB)."
             )
 
         if uploaded_file is not None and is_auth:
@@ -77,7 +77,6 @@ def render_upload_view():
             st.markdown(f"""
             <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; border-radius: 8px; padding: 12px; margin: 12px 0;">
                 <span style="color: #00F0FF; font-family: monospace; font-weight: 700;">[INGESTION BUFFER READY]</span><br>
-
                 <b>File:</b> <code>{file_name}</code> | <b>Payload Size:</b> {file_size_mb:.2f} MB
             </div>
             """, unsafe_allow_html=True)
@@ -89,7 +88,16 @@ def render_upload_view():
                 parquet_path = ingest_res["parquet_path"]
                 ds_hash = ingest_res["dataset_hash"]
 
-                if p_rows >= 250000:
+                if p_rows >= 2000000:
+                    st.markdown(f"""
+                    <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid #10B981; border-radius: 10px; padding: 14px 18px; margin: 12px 0;">
+                        <span style="font-family: monospace; font-size: 0.82rem; color: #10B981; font-weight: 700;">⚡ 2M+ ULTRA SCALE ENGINE ACTIVATED &bull; {p_rows:,} ROWS DETECTED</span>
+                        <div style="font-size: 0.88rem; color: #E2E8F0; margin-top: 4px;">
+                            ✓ Vectorized DuckDB OLAP Pipeline &bull; ✓ Snappy Parquet Zero-Copy Storage &bull; ✓ Progressive Analytics &bull; ✓ WebGL Adaptive Sampling
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif p_rows >= 250000:
                     st.markdown(f"""
                     <div style="background: rgba(0, 240, 255, 0.12); border: 1px solid #00F0FF; border-radius: 10px; padding: 14px 18px; margin: 12px 0;">
                         <span style="font-family: monospace; font-size: 0.82rem; color: #00F0FF; font-weight: 700;">⚡ LARGE DATASET MODE ACTIVATED &bull; {p_rows:,} ROWS DETECTED</span>
@@ -160,7 +168,7 @@ def render_upload_view():
                         # Load full dataset so all records (e.g. 250,000+ rows) are fully preserved
                         active_df = pd.read_parquet(parquet_path)
 
-                        project = ProjectModel.create_project(project_name, active_df, goal=final_goal, goal_explanation=goal_explanation)
+                        project = ProjectModel.create_project(project_name, active_df, goal=final_goal, goal_explanation=goal_explanation, parquet_source=parquet_path)
                         
                         st.session_state["current_project_id"] = project.project_id
                         st.session_state["current_project_name"] = project.name
@@ -180,7 +188,7 @@ def render_upload_view():
 
                 preview_df = ParquetManager.read_sample(parquet_path, n=5)
                 with st.expander("👁️ Telemetry Buffer Preview (First 5 Rows)", expanded=True):
-                    st.dataframe(preview_df, use_container_width=True)
+                    st.dataframe(preview_df, width="stretch")
 
             except Exception as e:
                 st.error(f"Ingestion parsing failure: {str(e)}")

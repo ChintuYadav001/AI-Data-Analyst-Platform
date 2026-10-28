@@ -60,10 +60,14 @@ class QualityEngine:
             con = DuckDBEngine.get_connection()
             try:
                 # Count distinct rows over subset of columns
-                test_cols = [c for c in profile.get("column_names", []) if c not in id_cols][:10]
+                test_cols = [c for c in profile.get("column_names", []) if c not in id_cols][:8]
                 if test_cols:
                     safe_cols = ", ".join([f'"{c}"' for c in test_cols])
-                    sql = f"SELECT COUNT(DISTINCT ({safe_cols})) AS distinct_rows FROM read_parquet('{clean_p}');"
+                    if total_rows > 100000:
+                        # Use sampling for large datasets - much faster
+                        sql = f"SELECT APPROX_COUNT_DISTINCT(({safe_cols})) AS distinct_rows FROM read_parquet('{clean_p}');"
+                    else:
+                        sql = f"SELECT COUNT(DISTINCT ({safe_cols})) AS distinct_rows FROM read_parquet('{clean_p}');"
                     d_rows = int(con.execute(sql).df().iloc[0]["distinct_rows"])
                     dup_rows = max(0, total_rows - d_rows)
                     uniqueness_pct = round(max(0.0, 100.0 - (dup_rows / total_rows * 100)), 2)

@@ -43,7 +43,7 @@ class AuthModel:
     def __init__(self) -> None:
         init_db()
 
-    def generate_otp(self, target: str, target_type: str = "email", expiry_minutes: int = 10) -> str:
+    def generate_otp(self, target: str, target_type: str = "email", expiry_minutes: int = 10, purpose: str = "verification") -> str:
         """Generate a 6-digit numeric OTP for email or phone number and record in SQLite."""
         target = target.strip().lower()
         if not target:
@@ -85,7 +85,7 @@ class AuthModel:
 
         # Dispatch OTP and verification link directly to recipient email or phone
         try:
-            self.last_dispatch_info = NotificationService.dispatch_otp(target=target, target_type=target_type, otp_code=otp_code)
+            self.last_dispatch_info = NotificationService.dispatch_otp(target=target, target_type=target_type, otp_code=otp_code, purpose=purpose)
         except Exception as e:
             self.last_dispatch_info = {"success": False, "dispatched_live": False, "error": str(e), "otp_code": otp_code, "target": target}
 
@@ -422,3 +422,117 @@ class AuthModel:
                     return res.get('cnt') or list(res.values())[0]
                 return res[0]
             return 0
+
+    def find_user_by_identifier(self, identifier: str) -> Optional[Dict[str, Any]]:
+        """Look up user by email, username, or phone number."""
+        target = identifier.strip().lower()
+        if not target:
+            return None
+        with _get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, username, email, phone, full_name, role, created_at, is_active
+                FROM users
+                WHERE username = ? OR email = ? OR phone = ?
+                LIMIT 1
+                """,
+                (target, target, target)
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def initiate_password_reset(self, identifier: str, channel: str = "email") -> Dict[str, Any]:
+        """
+        Initiate password recovery by verifying user exists and dispatching a 6-digit OTP.
+        Supports delivery via email or phone/SMS.
+        """
+        user = self.find_user_by_identifier(identifier)
+        if not user:
+            raise ValueError(f"No account found matching '{identifier}'. Please check your spelling or register.")
+
+        if not user.get("is_active", True):
+            raise ValueError("This account has been disabled. Please contact your administrator.")
+
+        target_type = "phone" if (channel == "phone" and user.get("phone")) else "email"
+        target_dest = (user.get("phone") if target_type == "phone" else user.get("email") or "").strip()
+
+        if not target_dest:
+            raise ValueError(f"No valid {target_type} destination found on record for this account.")
+
+        # Generate OTP with purpose='password_reset'
+        otp_code = self.generate_otp(target=target_dest, target_type=target_type, purpose="password_reset")
+        dispatch_info = self.get_last_dispatch_info() or {}
+
+        return {
+            "success": True,
+            "user_id": user["id"],
+            "username": user["username"],
+            "email": user.get("email"),
+            "phone": user.get("phone"),
+            "target": target_dest,
+            "target_type": target_type,
+            "masked_target": mask_destination(target_dest, target_type),
+            "otp_code": otp_code,
+            "dispatched_live": dispatch_info.get("dispatched_live", False),
+            "dispatch_info": dispatch_info,
+        }
+
+    def reset_password_with_otp(self, identifier: str, otp_code: str, new_password: str) -> bool:
+        """
+        Verify the OTP and securely update the user's password with PBKDF2 hashing.
+        Consumes the OTP so it cannot be reused.
+        """
+        user = self.find_user_by_identifier(identifier)
+        if not user:
+            raise ValueError("No account found matching this identifier.")
+
+        if not user.get("is_active", True):
+            raise ValueError("This account has been disabled. Please contact your administrator.")
+
+        if not new_password or len(new_password) < 4:
+            raise ValueError("New password must be at least 4 characters long.")
+
+        clean_otp = str(otp_code).strip()
+        if not clean_otp:
+            raise ValueError("One-Time Password (OTP) verification code is required.")
+
+        user_email = (user.get("email") or "").strip().lower()
+        user_phone = (user.get("phone") or "").strip()
+        user_ident = identifier.strip().lower()
+
+        # Verify and consume OTP against email, phone, or raw identifier
+        verified = (
+            (bool(user_email) and self.verify_and_consume_otp(user_email, clean_otp))
+            or (bool(user_phone) and self.verify_and_consume_otp(user_phone, clean_otp))
+            or self.verify_and_consume_otp(user_ident, clean_otp)
+        )
+
+        if not verified:
+            raise ValueError("Invalid or expired One-Time Password (OTP). Please check the code or request a new one.")
+
+        pwd_hash, salt = hash_password(new_password)
+        now = datetime.now(timezone.utc).isoformat()
+        log_id = str(uuid.uuid4())
+
+        with _get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE users
+                SET password_hash = ?, salt = ?
+                WHERE id = ?
+                """,
+                (pwd_hash, salt, user["id"])
+            )
+            cursor.execute(
+                """
+                INSERT INTO login_logs (id, user_id, username, timestamp, ip_address, user_agent, status, failure_reason)
+                VALUES (?, ?, ?, ?, ?, ?, 'PASSWORD_RESET', 'User reset password via verified OTP')
+                """,
+                (log_id, user["id"], user["username"], now, "127.0.0.1", "Web-Password-Recovery")
+            )
+            conn.commit()
+
+        return True
+

@@ -51,9 +51,9 @@ def render_chat_view():
             if "sql" in msg:
                 st.code(msg["sql"], language="sql")
             if "table" in msg and msg["table"] is not None:
-                st.dataframe(msg["table"], use_container_width=True)
+                st.dataframe(msg["table"], width="stretch")
             if "chart" in msg and msg["chart"] is not None:
-                st.plotly_chart(msg["chart"], use_container_width=True, key=f"chat_chart_hist_{i}")
+                st.plotly_chart(msg["chart"], width="stretch", key=f"chat_chart_hist_{i}")
 
     # Input handling
     user_prompt = st.chat_input("Ask a question about your dataset...") or quick_query
@@ -81,11 +81,11 @@ def render_chat_view():
                     msg_entry["sql"] = res["sql"]
 
                 if "data" in res and res["data"] is not None:
-                    st.dataframe(res["data"], use_container_width=True)
+                    st.dataframe(res["data"], width="stretch")
                     msg_entry["table"] = res["data"]
 
                 if "chart_figure" in res and res["chart_figure"] is not None:
-                    st.plotly_chart(res["chart_figure"], use_container_width=True, key=f"chat_live_chart_{len(st.session_state['chat_messages'])}")
+                    st.plotly_chart(res["chart_figure"], width="stretch", key=f"chat_live_chart_{len(st.session_state['chat_messages'])}")
                     msg_entry["chart"] = res["chart_figure"]
 
                 st.session_state["chat_messages"].append(msg_entry)

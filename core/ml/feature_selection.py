@@ -50,6 +50,9 @@ def select_best_features(
 
     # Clean target missingness
     clean_df = df.dropna(subset=[target_col]).copy()
+    # Sample for large datasets — feature selection is O(n*p)
+    if len(clean_df) > 30_000:
+        clean_df = clean_df.sample(30_000, random_state=42)
     candidate_features = [c for c in clean_df.columns if c != target_col and pd.api.types.is_numeric_dtype(clean_df[c])]
 
     if len(candidate_features) < 2:

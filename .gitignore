@@ -1,4 +1,4 @@
-﻿# Python & Bytecode
+# Python & Bytecode
 __pycache__/
 *.py[cod]
 *$py.class
@@ -30,11 +30,14 @@ htmlcov/
 # Temporary Files, Databases & Logs
 *.log
 *.db
+*.joblib
+*.pkl
 data/cache/
 data/temp/
 data/staging/
 data/parquet/
 data/uploads/
 data/projects/
+data/experiments/exp_*/
 data/analytics_results/
 data/exports/*.csv

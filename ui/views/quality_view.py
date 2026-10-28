@@ -46,7 +46,7 @@ def render_quality_view():
             plot_bgcolor="#0A0E1A",
             font=dict(color="#00F0FF", family="JetBrains Mono, monospace")
         )
-        st.plotly_chart(fig, use_container_width=True, key="quality_gauge_chart")
+        st.plotly_chart(fig, width="stretch", key="quality_gauge_chart")
 
     with col2:
         st.markdown("### 📋 Deductions Breakdown")

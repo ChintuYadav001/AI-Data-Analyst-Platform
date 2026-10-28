@@ -6,7 +6,7 @@ from ui.components import apply_custom_css, render_top_navbar
 # Page Config
 st.set_page_config(
     page_title="AI Data Analyst Platform",
-    page_icon="⚡",
+    page_icon="assets/quantum_logo_icon.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -154,24 +154,22 @@ def render_sidebar_demo_countdown():
 
 # Sidebar
 with st.sidebar:
-    st.markdown("""
-    <div style="padding: 10px 4px 14px 4px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <div style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #00F0FF 0%, #8B5CF6 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 14px rgba(0, 240, 255, 0.4); font-size: 1.1rem;">
-                ⚡
-            </div>
-            <div>
-                <div style="font-size: 1.05rem; font-weight: 800; color: #FFFFFF; letter-spacing: -0.02em; line-height: 1.15;">
-                    QUANTUM ANALYST
-                </div>
-                <div style="font-size: 0.72rem; color: #38BDF8; font-weight: 600; letter-spacing: 0.02em;">
-                    AI Powered Data Analytics
-                </div>
-            </div>
+    if not is_auth:
+        st.markdown("""
+        <div style="padding: 4px 4px 8px 4px;">
+            <div style="font-size: 0.74rem; font-weight: 800; color: #38BDF8; letter-spacing: 0.06em;">🔒 ACCESS RESTRICTED</div>
+            <div style="font-size: 0.72rem; color: #94A3B8; margin-top: 2px;">Sign in or use 1-Click Demo Pass to access analytics.</div>
         </div>
-    </div>
-    <hr style='border-color: rgba(255, 255, 255, 0.08); margin: 6px 0 12px 0;'>
-    """, unsafe_allow_html=True)
+        <hr style='border-color: rgba(255, 255, 255, 0.08); margin: 4px 0 10px 0;'>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style="padding: 4px 4px 8px 4px; display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-size: 0.74rem; font-weight: 800; color: #38BDF8; letter-spacing: 0.06em;">⚡ NAVIGATION</span>
+            <span style="font-size: 0.62rem; color: #10B981; font-weight: 700; background: rgba(16, 185, 129, 0.12); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.3);">ONLINE</span>
+        </div>
+        <hr style='border-color: rgba(255, 255, 255, 0.06); margin: 2px 0 10px 0;'>
+        """, unsafe_allow_html=True)
 
     # Reverse Countdown Timer on side of page (live 1s auto-updating fragment)
     if is_auth and st.session_state.get("is_demo_session", False):
@@ -389,21 +387,22 @@ def dispatch_active_view(route: str):
         render_auth_view()
 
 # View Dispatcher: Strict Auth Gate
-# If not authenticated, ALWAYS render only the Auth view regardless of any other parameter
-if not is_auth:
-    from ui.views.auth_view import render_auth_view
-    render_auth_view()
-else:
-    active = st.session_state.get("active_nav", "Dashboard")
-    curr_proj = st.session_state.get("current_project_name")
-    df = st.session_state.get("df")
+# Render continuous edge-to-edge navbar across sidebar and workspace ONLY in workspace
+active = st.session_state.get("active_nav", "Dashboard")
+curr_proj = st.session_state.get("current_project_name")
+df = st.session_state.get("df")
 
-    # Clean SaaS top navbar with interactive Dark/Light toggle, Notifications & Profile
+if is_auth and active != "Auth":
     render_top_navbar(
         breadcrumb=f"Workspace / {active}",
         active_dataset=curr_proj if df is not None else None
     )
 
+# View Dispatcher: Strict Auth Gate
+if not is_auth:
+    from ui.views.auth_view import render_auth_view
+    render_auth_view()
+else:
     dispatch_active_view(active)
 
 # Always render Persistent Floating Round AI Assistant & Voice Copilot on bottom right

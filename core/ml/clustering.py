@@ -64,7 +64,11 @@ def run_clustering(
         raise ValueError("Clustering requires at least 6 observations.")
 
     # Impute missing values and standardize features
-    X_raw = df[feature_cols].copy()
+    # Sample for large datasets — clustering is O(n²) for DBSCAN/Agglomerative
+    work_df = df
+    if len(df) > 30_000:
+        work_df = df.sample(30_000, random_state=random_state)
+    X_raw = work_df[feature_cols].copy()
     imputer = SimpleImputer(strategy="median")
     X_imp = imputer.fit_transform(X_raw)
 

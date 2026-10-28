@@ -18,7 +18,7 @@ class ParquetManager:
 
     @classmethod
     def sanitize_dataframe(cls, df: pd.DataFrame) -> pd.DataFrame:
-        """Sanitizes DataFrame columns for seamless PyArrow serialization without ArrowInvalid exceptions."""
+        """Sanitizes DataFrame columns for seamless PyArrow serialization without ArrowInvalid or UnicodeDecodeError exceptions."""
         df_out = df.copy(deep=False)
         for col in df_out.columns:
             # Normalize column names to string
@@ -27,10 +27,33 @@ class ParquetManager:
             col_str = str(col)
             s = df_out[col_str]
             if s.dtype == object:
-                try:
-                    pa.Array.from_pandas(s)
-                except Exception:
-                    df_out[col_str] = s.astype(str)
+                def _safe_str_val(v):
+                    if v is None or pd.isna(v):
+                        return None
+                    if isinstance(v, bytes):
+                        try:
+                            return v.decode("utf-8")
+                        except UnicodeDecodeError:
+                            return v.decode("latin-1", errors="replace")
+                    try:
+                        return str(v)
+                    except Exception:
+                        return repr(v)
+                
+                # Check if series contains bytes or fails PyArrow serialization
+                needs_conversion = False
+                non_null = s.dropna()
+                if len(non_null) > 0:
+                    if isinstance(non_null.iloc[0], bytes) or any(isinstance(x, bytes) for x in non_null.head(20)):
+                        needs_conversion = True
+                    else:
+                        try:
+                            pa.Array.from_pandas(non_null.head(100))
+                        except Exception:
+                            needs_conversion = True
+                
+                if needs_conversion:
+                    df_out[col_str] = s.map(_safe_str_val)
         return df_out
 
     @classmethod
@@ -59,20 +82,34 @@ class ParquetManager:
         if isinstance(source, (str, Path)):
             src_path = str(source)
             hint = src_path.lower()
-            if hint.endswith(".csv"):
+            if hint.endswith(".parquet"):
+                import shutil
+                shutil.copyfile(src_path, output_path)
+                return output_path
+            elif hint.endswith(".csv"):
                 try:
                     # Attempt fast C-level PyArrow CSV streaming conversion
                     table = pacsv.read_csv(src_path)
                     pq.write_table(table, output_path, compression=compression)
                     return output_path
                 except Exception:
-                    # Fallback to chunked pandas
-                    chunks = []
-                    for chunk in pd.read_csv(src_path, chunksize=100000, low_memory=False):
-                        chunks.append(cls.sanitize_dataframe(chunk))
-                    full_df = pd.concat(chunks, ignore_index=True)
-                    full_df.to_parquet(output_path, compression=compression, index=False)
-                    return output_path
+                    # Fallback to chunked streaming with ParquetWriter (avoids OOM on 2M+ rows)
+                    try:
+                        writer = None
+                        for chunk in pd.read_csv(src_path, chunksize=100_000, low_memory=False, encoding_errors="replace"):
+                            clean_chunk = cls.sanitize_dataframe(chunk)
+                            table = pa.Table.from_pandas(clean_chunk)
+                            if writer is None:
+                                writer = pq.ParquetWriter(output_path, table.schema, compression=compression)
+                            writer.write_table(table)
+                        if writer is not None:
+                            writer.close()
+                        return output_path
+                    except Exception:
+                        df = pd.read_csv(src_path, low_memory=False, encoding="latin-1")
+                        clean_df = cls.sanitize_dataframe(df)
+                        clean_df.to_parquet(output_path, compression=compression, index=False)
+                        return output_path
             elif hint.endswith((".xlsx", ".xls")):
                 df = pd.read_excel(src_path)
                 clean_df = cls.sanitize_dataframe(df)
@@ -86,7 +123,17 @@ class ParquetManager:
             if hasattr(source, "seek"):
                 source.seek(0)
 
-            if hint.endswith(".csv"):
+            if hint.endswith(".parquet"):
+                if hasattr(source, "seek"):
+                    source.seek(0)
+                with open(output_path, "wb") as f_out:
+                    if hasattr(source, "read"):
+                        while chunk := source.read(65536):
+                            f_out.write(chunk)
+                    else:
+                        f_out.write(source)
+                return output_path
+            elif hint.endswith(".csv"):
                 try:
                     table = pacsv.read_csv(source)
                     pq.write_table(table, output_path, compression=compression)
@@ -94,10 +141,30 @@ class ParquetManager:
                 except Exception:
                     if hasattr(source, "seek"):
                         source.seek(0)
-                    df = pd.read_csv(source, low_memory=False)
-                    clean_df = cls.sanitize_dataframe(df)
-                    clean_df.to_parquet(output_path, compression=compression, index=False)
-                    return output_path
+                    try:
+                        # Chunked streaming to Parquet prevents memory exhaustion on 2M+ rows
+                        writer = None
+                        for chunk in pd.read_csv(source, chunksize=100_000, low_memory=False, encoding_errors="replace"):
+                            clean_chunk = cls.sanitize_dataframe(chunk)
+                            table = pa.Table.from_pandas(clean_chunk)
+                            if writer is None:
+                                writer = pq.ParquetWriter(output_path, table.schema, compression=compression)
+                            writer.write_table(table)
+                        if writer is not None:
+                            writer.close()
+                        return output_path
+                    except Exception:
+                        if hasattr(source, "seek"):
+                            source.seek(0)
+                        try:
+                            df = pd.read_csv(source, low_memory=False, encoding="latin-1")
+                        except Exception:
+                            if hasattr(source, "seek"):
+                                source.seek(0)
+                            df = pd.read_csv(source, low_memory=False, encoding_errors="replace")
+                        clean_df = cls.sanitize_dataframe(df)
+                        clean_df.to_parquet(output_path, compression=compression, index=False)
+                        return output_path
             elif hint.endswith((".xlsx", ".xls")):
                 if hasattr(source, "seek"):
                     source.seek(0)

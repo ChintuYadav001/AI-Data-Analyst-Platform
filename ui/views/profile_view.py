@@ -49,7 +49,7 @@ def render_profile_view():
         if ne in col_df.columns:
             display_cols.append(ne)
 
-    st.dataframe(col_df[display_cols], use_container_width=True)
+    st.dataframe(col_df[display_cols], width="stretch")
 
     with st.expander("🔎 Deep Inspect Individual Column"):
         chosen_col = st.selectbox("Select column to inspect:", options=list(df.columns))

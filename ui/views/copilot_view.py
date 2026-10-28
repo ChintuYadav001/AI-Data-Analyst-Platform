@@ -76,17 +76,17 @@ def render_copilot_full_view():
         st.markdown("<div style='font-size: 0.76rem; font-weight: 700; color: #94A3B8; margin-bottom: 6px;'>POPULAR INQUIRIES (CLICK TO ASK):</div>", unsafe_allow_html=True)
         q1, q2 = st.columns(2)
         with q1:
-            if st.button("💡 Explain all models simply", key="fp_chip_1", use_container_width=True):
+            if st.button("💡 Explain all models simply", key="fp_chip_1", width="stretch"):
                 st.session_state["copilot_pending_query"] = "Explain all models in simple words"
                 st.rerun()
-            if st.button("🌲 Random Forest vs XGBoost", key="fp_chip_2", use_container_width=True):
+            if st.button("🌲 Random Forest vs XGBoost", key="fp_chip_2", width="stretch"):
                 st.session_state["copilot_pending_query"] = "Compare Random Forest vs XGBoost in simple language"
                 st.rerun()
         with q2:
-            if st.button("📷 Explain PCA in 1 minute", key="fp_chip_3", use_container_width=True):
+            if st.button("📷 Explain PCA in 1 minute", key="fp_chip_3", width="stretch"):
                 st.session_state["copilot_pending_query"] = "Explain PCA simply with analogy"
                 st.rerun()
-            if st.button("🚨 What is Anomaly Detection?", key="fp_chip_4", use_container_width=True):
+            if st.button("🚨 What is Anomaly Detection?", key="fp_chip_4", width="stretch"):
                 st.session_state["copilot_pending_query"] = "How does anomaly detection work in business?"
                 st.rerun()
 
@@ -132,7 +132,7 @@ def render_copilot_full_view():
                 key="fp_copilot_text_input",
             )
         with cin_btn:
-            if st.button("⚡ Ask AI", type="primary", use_container_width=True, key="fp_copilot_send_btn"):
+            if st.button("⚡ Ask AI", type="primary", width="stretch", key="fp_copilot_send_btn"):
                 if user_msg.strip():
                     _process_copilot_question(user_msg, copilot_engine, df, champ_info, bench_res)
                     st.rerun()
@@ -176,7 +176,7 @@ def render_copilot_full_view():
         </div>
         """, unsafe_allow_html=True)
 
-        if st.button(f"🔊 Listen to {m_info['name']} Breakdown", key=f"speak_encyc_{selected_m}", use_container_width=True):
+        if st.button(f"🔊 Listen to {m_info['name']} Breakdown", key=f"speak_encyc_{selected_m}", width="stretch"):
             speech_script = (
                 f"{m_info['name']}. In simple terms: {m_info['analogy']} "
                 f"{m_info['simple_explanation']} "

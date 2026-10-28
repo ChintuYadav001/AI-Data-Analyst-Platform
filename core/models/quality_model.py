@@ -101,10 +101,13 @@ class DataQualityModel:
         cat_issues = 0
         cat_cols = df.select_dtypes(include=["object", "string", "category"]).columns
         for col in cat_cols:
+            raw_s = df[col].dropna()
             if n_rows > 10000:
-                sample_series = df[col].dropna().head(5000).astype(str)
-            else:
-                sample_series = df[col].dropna().astype(str)
+                raw_s = raw_s.head(5000)
+            try:
+                sample_series = raw_s.astype(str)
+            except Exception:
+                sample_series = raw_s.map(lambda x: x.decode("latin-1", errors="replace") if isinstance(x, bytes) else str(x))
             raw_unique = sample_series.nunique()
             if raw_unique <= 1 or raw_unique > 200:
                 continue
@@ -126,7 +129,11 @@ class DataQualityModel:
         # 6. Type mismatch / numeric columns stored as strings (Sampled to max 100 for instant evaluation)
         type_issues = []
         for col in cat_cols:
-            sample_series = df[col].dropna().astype(str).head(100)
+            raw_s = df[col].dropna().head(100)
+            try:
+                sample_series = raw_s.astype(str)
+            except Exception:
+                sample_series = raw_s.map(lambda x: x.decode("latin-1", errors="replace") if isinstance(x, bytes) else str(x))
             if not sample_series.empty:
                 numeric_matches = sample_series.str.replace(r"[\$,%]", "", regex=True).str.strip().str.match(r"^-?\d+(\.\d+)?$").sum()
                 if (numeric_matches / len(sample_series)) > 0.85:

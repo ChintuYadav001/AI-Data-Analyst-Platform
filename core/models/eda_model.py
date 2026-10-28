@@ -77,7 +77,10 @@ class EDAModel:
         total_rows = len(df)
         
         for col in cat_cols:
-            series = df[col].dropna().astype(str)
+            try:
+                series = df[col].dropna().astype(str)
+            except Exception:
+                series = df[col].dropna().map(lambda x: x.decode("latin-1", errors="replace") if isinstance(x, bytes) else str(x))
             if series.empty or series.nunique() > 200:
                 continue
             

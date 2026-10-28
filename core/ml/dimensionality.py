@@ -94,8 +94,11 @@ def run_dimensionality_reduction(
     max_k = min(len(feature_cols), len(df) - 1, 10)
     n_comp = max(2, min(n_components, max_k))
 
-    # Extract and impute data
-    X_raw = df[feature_cols].copy()
+    # Extract and impute data (sampled for large datasets to prevent OOM/slowdown)
+    work_df = df
+    if len(df) > 30_000:
+        work_df = df.sample(30_000, random_state=random_state)
+    X_raw = work_df[feature_cols].copy()
     imputer = SimpleImputer(strategy="median")
     X_imputed = imputer.fit_transform(X_raw)
 

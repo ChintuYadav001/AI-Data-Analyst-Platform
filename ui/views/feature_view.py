@@ -46,4 +46,4 @@ def render_feature_view():
     with st.expander("👁️ Inspect Current Features / Columns"):
         st.write(f"Total columns currently: **{len(df.columns)}**")
         st.write(list(df.columns))
-        st.dataframe(df.head(5), use_container_width=True)
+        st.dataframe(df.head(5), width="stretch")

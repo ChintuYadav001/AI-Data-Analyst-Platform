@@ -15,7 +15,7 @@ When opened, presents an institutional-grade AI Data Assistant equipped with:
 import json
 from typing import Optional, Dict, Any, List
 import streamlit as st
-import streamlit.components.v1 as components
+# st.html replaces deprecated streamlit.components.v1.html
 import pandas as pd
 
 from core.ai.quantum_ai_engine import QuantumAIEngine
@@ -422,17 +422,17 @@ def render_floating_ai_copilot():
 
             q_c1, q_c2 = st.columns(2)
             with q_c1:
-                if st.button(suggestions[0], key="sugg_chip_0", use_container_width=True):
+                if st.button(suggestions[0], key="sugg_chip_0", width="stretch"):
                     st.session_state["copilot_pending_query"] = suggestions[0].split(" ", 1)[-1]
                     st.rerun()
-                if st.button(suggestions[1], key="sugg_chip_1", use_container_width=True):
+                if st.button(suggestions[1], key="sugg_chip_1", width="stretch"):
                     st.session_state["copilot_pending_query"] = suggestions[1].split(" ", 1)[-1]
                     st.rerun()
             with q_c2:
-                if st.button(suggestions[2], key="sugg_chip_2", use_container_width=True):
+                if st.button(suggestions[2], key="sugg_chip_2", width="stretch"):
                     st.session_state["copilot_pending_query"] = suggestions[2].split(" ", 1)[-1]
                     st.rerun()
-                if st.button(suggestions[3], key="sugg_chip_3", use_container_width=True):
+                if st.button(suggestions[3], key="sugg_chip_3", width="stretch"):
                     st.session_state["copilot_pending_query"] = suggestions[3].split(" ", 1)[-1]
                     st.rerun()
 
@@ -466,7 +466,7 @@ def render_floating_ai_copilot():
                         # Display tabular data if attached
                         if msg.get("data") is not None:
                             try:
-                                st.dataframe(msg["data"], use_container_width=True)
+                                st.dataframe(msg["data"], width="stretch")
                             except Exception:
                                 pass
 
@@ -478,7 +478,7 @@ def render_floating_ai_copilot():
                                 act_cols = st.columns(min(3, len(actions)))
                                 for a_idx, act_label in enumerate(actions[:3]):
                                     with act_cols[a_idx]:
-                                        if st.button(f"👉 {act_label}", key=f"act_btn_{idx}_{a_idx}", use_container_width=True):
+                                        if st.button(f"👉 {act_label}", key=f"act_btn_{idx}_{a_idx}", width="stretch"):
                                             st.session_state["copilot_pending_query"] = act_label.replace("👉", "").strip()
                                             st.rerun()
 
@@ -486,7 +486,7 @@ def render_floating_ai_copilot():
                             if msg.get("voice_text"):
                                 v_b1, v_b2 = st.columns([1.2, 1])
                                 with v_b1:
-                                    if st.button("🔊 Listen", key=f"voice_play_{idx}", use_container_width=True):
+                                    if st.button("🔊 Listen", key=f"voice_play_{idx}", width="stretch"):
                                         st.session_state["copilot_voice_to_play"] = msg["voice_text"]
                                         st.rerun()
                                 with v_b2:
@@ -508,13 +508,13 @@ def render_floating_ai_copilot():
                     key="quantum_ai_text_input_main",
                 )
             with c_btn:
-                if st.button("➤ Send", type="primary", use_container_width=True, key="quantum_ai_send_btn"):
+                if st.button("➤ Send", type="primary", width="stretch", key="quantum_ai_send_btn"):
                     if user_text and user_text.strip():
                         _process_question(user_text.strip(), ai_engine, df, current_page, champ_info, dataset_name, target_col)
                         st.rerun()
 
             # Dedicated full-page view switch
-            if st.button("↗️ Open Dedicated Full-Page Workspace", key="copilot_full_view_link_btn", use_container_width=True):
+            if st.button("↗️ Open Dedicated Full-Page Workspace", key="copilot_full_view_link_btn", width="stretch"):
                 st.session_state["copilot_open"] = False
                 st.session_state["active_nav"] = "AI Model Copilot"
                 st.rerun()
@@ -613,7 +613,7 @@ def _render_speech_synthesis(text: str):
     }})();
     </script>
     """
-    components.html(script_html, height=0, width=0)
+    st.html(script_html)
 
 
 def _render_stop_speech():
@@ -630,12 +630,12 @@ def _render_stop_speech():
     })();
     </script>
     """
-    components.html(script_html, height=0, width=0)
+    st.html(script_html)
 
 
 def _render_voice_input_button():
     """Renders interactive Web Speech Recognition microphone trigger in browser with active status states."""
-    components.html(
+    st.html(
         """
         <!DOCTYPE html>
         <html>
@@ -731,8 +731,6 @@ def _render_voice_input_button():
         </body>
         </html>
         """,
-        height=40,
-        width=45,
     )
 
 
@@ -876,4 +874,4 @@ def _render_dom_floating_round_btn(is_open: bool):
     })();
     </script>
     """
-    components.html(script, height=0, width=0)
+    st.html(script)

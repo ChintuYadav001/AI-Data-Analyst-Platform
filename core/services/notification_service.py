@@ -53,17 +53,33 @@ def mask_destination(target: str, target_type: str = "email") -> str:
 
 class NotificationService:
     @staticmethod
-    def build_verification_link(target: str, otp_code: str) -> str:
+    def build_verification_link(target: str, otp_code: str, mode: str = "verify") -> str:
         """Constructs a direct 1-click authentication verification link."""
         encoded_target = urllib.parse.quote(target.strip())
-        return f"{APP_BASE_URL}/?verify_target={encoded_target}&verify_code={otp_code}"
+        mode_param = f"&mode={mode}" if mode != "verify" else ""
+        return f"{APP_BASE_URL}/?verify_target={encoded_target}&verify_code={otp_code}{mode_param}"
 
     @classmethod
-    def send_email_otp(cls, to_email: str, otp_code: str) -> Dict[str, Any]:
+    def send_email_otp(cls, to_email: str, otp_code: str, purpose: str = "verification") -> Dict[str, Any]:
         """Dispatches an email containing the 6-digit OTP and 1-click verification link."""
         to_email = to_email.strip().lower()
-        verification_link = cls.build_verification_link(to_email, otp_code)
-        subject = f"Your Security Verification Code: {otp_code} | Quantum Analyst Platform"
+        is_reset = (purpose == "password_reset")
+        verification_link = cls.build_verification_link(to_email, otp_code, mode="reset" if is_reset else "verify")
+        
+        if is_reset:
+            subject = f"Password Reset Verification Code: {otp_code} | Quantum Analyst Platform"
+            badge_text = "// PASSWORD RECOVERY CLEARANCE"
+            action_title = "Password Reset Verification"
+            action_desc = "We received a request to reset your password. Use the following 6-digit code to complete verification and set your new password:"
+            button_label = "🔗 Click to Verify & Reset Password"
+            footer_note = f"This password recovery request was initiated for <b>{to_email}</b>. If you did not initiate this, please secure your account immediately."
+        else:
+            subject = f"Your Security Verification Code: {otp_code} | Quantum Analyst Platform"
+            badge_text = "// INSTITUTIONAL CLEARANCE SYSTEM"
+            action_title = "One-Time Password (OTP) Verification"
+            action_desc = "Use the following 6-digit code to complete your user account registration:"
+            button_label = "🔗 Click to Verify & Complete Registration"
+            footer_note = f"This message was sent directly to <b>{to_email}</b>. If you did not initiate this request, no action is needed."
 
         text_content = (
             f"Institutional Security Clearance & Verification\n\n"
@@ -93,9 +109,9 @@ class NotificationService:
         </head>
         <body>
           <div class="container">
-            <span class="badge">// INSTITUTIONAL CLEARANCE SYSTEM</span>
-            <h1>One-Time Password (OTP) Verification</h1>
-            <p>Use the following 6-digit code to complete your user account registration:</p>
+            <span class="badge">{badge_text}</span>
+            <h1>{action_title}</h1>
+            <p>{action_desc}</p>
             
             <div class="code-box">
               <div class="otp-code">{otp_code}</div>
@@ -103,10 +119,10 @@ class NotificationService:
             </div>
 
             <p>Or click the button below to verify your destination directly:</p>
-            <a href="{verification_link}" class="btn" target="_blank">🔗 Click to Verify & Complete Registration</a>
+            <a href="{verification_link}" class="btn" target="_blank">{button_label}</a>
 
             <div class="footer">
-              This message was sent directly to <b>{to_email}</b>. If you did not initiate this request, no action is needed.
+              {footer_note}
             </div>
           </div>
         </body>
@@ -167,11 +183,15 @@ class NotificationService:
         }
 
     @classmethod
-    def send_sms_otp(cls, to_phone: str, otp_code: str) -> Dict[str, Any]:
+    def send_sms_otp(cls, to_phone: str, otp_code: str, purpose: str = "verification") -> Dict[str, Any]:
         """Dispatches an SMS containing the 6-digit OTP and 1-click verification link."""
         to_phone = to_phone.strip()
-        verification_link = cls.build_verification_link(to_phone, otp_code)
-        sms_text = f"Your Quantum Analyst verification code is: {otp_code}. Valid for 10 min. Verify link: {verification_link}"
+        is_reset = (purpose == "password_reset")
+        verification_link = cls.build_verification_link(to_phone, otp_code, mode="reset" if is_reset else "verify")
+        if is_reset:
+            sms_text = f"Quantum Security: Your password reset verification code is: {otp_code}. Valid for 10 min. Reset link: {verification_link}"
+        else:
+            sms_text = f"Your Quantum Analyst verification code is: {otp_code}. Valid for 10 min. Verify link: {verification_link}"
 
         dispatched_live = False
         dispatch_error = None
@@ -225,11 +245,11 @@ class NotificationService:
         }
 
     @classmethod
-    def dispatch_otp(cls, target: str, target_type: str, otp_code: str) -> Dict[str, Any]:
+    def dispatch_otp(cls, target: str, target_type: str, otp_code: str, purpose: str = "verification") -> Dict[str, Any]:
         """Unified entry point to dispatch OTP directly to phone or email."""
         if target_type == "phone" or (target.startswith("+") or target.replace("-", "").isdigit()):
-            return cls.send_sms_otp(target, otp_code)
-        return cls.send_email_otp(target, otp_code)
+            return cls.send_sms_otp(target, otp_code, purpose=purpose)
+        return cls.send_email_otp(target, otp_code, purpose=purpose)
 
     @classmethod
     def is_smtp_configured(cls) -> bool:

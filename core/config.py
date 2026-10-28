@@ -19,7 +19,7 @@ for directory in [DATA_DIR, EXPORTS_DIR, UPLOADS_DIR, PROJECTS_DIR, PARQUET_DIR,
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "heuristic-offline")
-MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "100"))
+MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "4096"))
 DUCKDB_PATH = str(DATA_DIR / "analytics.duckdb")
 AUTH_DB_PATH = DATA_DIR / "auth.db"
 

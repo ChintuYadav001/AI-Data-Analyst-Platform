@@ -65,7 +65,7 @@ def render_reports_view():
                 </div>
             </div>
             """, unsafe_allow_html=True)
-            if st.button("🔑 Sign In / Sign Up to Unlock 30+ Page PDF", type="secondary", use_container_width=True):
+            if st.button("🔑 Sign In / Sign Up to Unlock 30+ Page PDF", type="secondary", width="stretch"):
                 st.session_state["active_nav"] = "Auth"
                 st.rerun()
         else:

@@ -159,7 +159,10 @@ class EDAStatisticalEngine:
         for col in cat_cols:
             if col not in df.columns:
                 continue
-            series = df[col].dropna().astype(str)
+            try:
+                series = df[col].dropna().astype(str)
+            except Exception:
+                series = df[col].dropna().map(lambda x: x.decode("latin-1", errors="replace") if isinstance(x, bytes) else str(x))
             n_valid = len(series)
             if n_valid == 0:
                 continue

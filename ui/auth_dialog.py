@@ -29,14 +29,14 @@ def render_auth_modal(title: str = "Identity & Access Clearance Required", key_p
     </div>
     """, unsafe_allow_html=True)
 
-    tab_signin, tab_signup = st.tabs(["🔑 Sign In", "📝 Sign Up with OTP Verification"])
+    tab_signin, tab_signup, tab_reset = st.tabs(["🔑 Sign In", "📝 Sign Up with OTP Verification", "🔄 Reset Password"])
 
     # 1. Sign In Tab
     with tab_signin:
         with st.form(f"{key_prefix}_signin_form", clear_on_submit=False):
             username_or_email = st.text_input("Username or Email", placeholder="e.g. analyst or analyst@company.com", key=f"{key_prefix}_login_id")
             password = st.text_input("Password", type="password", placeholder="Enter your password", key=f"{key_prefix}_login_pwd")
-            login_btn = st.form_submit_button("🔓 Authenticate & Access Platform", type="primary", use_container_width=True)
+            login_btn = st.form_submit_button("🔓 Authenticate & Access Platform", type="primary", width="stretch")
 
             if login_btn:
                 if not username_or_email or not password:
@@ -82,7 +82,7 @@ def render_auth_modal(title: str = "Identity & Access Clearance Required", key_p
 
         col_otp_btn, col_otp_inp = st.columns([1, 1])
         with col_otp_btn:
-            if st.button("📲 Send OTP / Verification Link", key=f"{key_prefix}_btn_send_otp", use_container_width=True):
+            if st.button("📲 Send OTP / Verification Link", key=f"{key_prefix}_btn_send_otp", width="stretch"):
                 if not reg_email:
                     st.error("Please provide an institutional email address first.")
                 elif "@" not in reg_email or "." not in reg_email:
@@ -128,7 +128,7 @@ def render_auth_modal(title: str = "Identity & Access Clearance Required", key_p
 
         user_entered_otp = st.text_input("Enter 6-Digit Verification OTP (from Email)", placeholder="e.g. 847291", max_chars=6, key=f"{key_prefix}_input_otp")
 
-        if st.button("🛡️ Verify OTP & Complete Registration", type="primary", use_container_width=True, key=f"{key_prefix}_btn_register"):
+        if st.button("🛡️ Verify OTP & Complete Registration", type="primary", width="stretch", key=f"{key_prefix}_btn_register"):
             if not reg_username or not reg_email or not reg_password:
                 st.error("Username, Email, and Password are required.")
             elif reg_password != reg_password_confirm:
@@ -159,3 +159,9 @@ def render_auth_modal(title: str = "Identity & Access Clearance Required", key_p
                     st.error(str(ve))
                 except Exception as e:
                     st.error(f"Registration error: {str(e)}")
+
+    # 3. Reset Password Tab with OTP Verification
+    with tab_reset:
+        from ui.views.auth_view import render_password_reset_form
+        render_password_reset_form(auth_model, key_prefix=f"{key_prefix}_reset", show_back_btn=False)
+

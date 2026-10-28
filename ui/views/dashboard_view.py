@@ -50,7 +50,7 @@ def render_dashboard_view():
                 </p>
             </div>
             """, unsafe_allow_html=True)
-            if st.button("🔑 Proceed to Sign In / Register", key="dash_lock_login_btn", type="primary", use_container_width=True):
+            if st.button("🔑 Proceed to Sign In / Register", key="dash_lock_login_btn", type="primary", width="stretch"):
                 st.session_state["active_nav"] = "Auth"
                 st.rerun()
             return
@@ -121,7 +121,7 @@ def render_dashboard_view():
         s1, s2, s3, s4, s5, s6 = st.columns(6)
         
         with s1:
-            if st.button("🛒 Sales", use_container_width=True, key="btn_sample_sales"):
+            if st.button("🛒 Sales", width="stretch", key="btn_sample_sales"):
                 with st.spinner("Synthesizing Sales dataset..."):
                     df_sample = generate_sales_dataset(800)
                     p = ProjectModel.create_project("Sales Analysis", df_sample, goal="Revenue Maximization & Growth")
@@ -132,7 +132,7 @@ def render_dashboard_view():
                     st.rerun()
 
         with s2:
-            if st.button("👥 Customer", use_container_width=True, key="btn_sample_customer"):
+            if st.button("👥 Customer", width="stretch", key="btn_sample_customer"):
                 with st.spinner("Synthesizing Customer dataset..."):
                     df_sample = generate_customer_churn_dataset(400)
                     p = ProjectModel.create_project("Customer Churn", df_sample, goal="Customer Churn Prevention & Retention")
@@ -143,7 +143,7 @@ def render_dashboard_view():
                     st.rerun()
 
         with s3:
-            if st.button("📦 E-commerce", use_container_width=True, key="btn_sample_ecom"):
+            if st.button("📦 E-commerce", width="stretch", key="btn_sample_ecom"):
                 with st.spinner("Synthesizing E-commerce dataset..."):
                     df_sample = generate_ecommerce_dataset(500)
                     p = ProjectModel.create_project("E-Commerce Orders", df_sample, goal="Revenue Maximization & Growth")
@@ -154,7 +154,7 @@ def render_dashboard_view():
                     st.rerun()
 
         with s4:
-            if st.button("💰 Finance", use_container_width=True, key="btn_sample_fin"):
+            if st.button("💰 Finance", width="stretch", key="btn_sample_fin"):
                 with st.spinner("Synthesizing Finance dataset..."):
                     df_sample = generate_finance_dataset(600)
                     p = ProjectModel.create_project("Financial Risk Portfolio", df_sample, goal="Cost Reduction & Margin Optimization")
@@ -165,7 +165,7 @@ def render_dashboard_view():
                     st.rerun()
 
         with s5:
-            if st.button("📣 Marketing", use_container_width=True, key="btn_sample_mkt"):
+            if st.button("📣 Marketing", width="stretch", key="btn_sample_mkt"):
                 with st.spinner("Synthesizing Marketing dataset..."):
                     df_sample = generate_marketing_dataset(500)
                     p = ProjectModel.create_project("Marketing Campaigns", df_sample, goal="Conversion Velocity & Efficiency")
@@ -176,7 +176,7 @@ def render_dashboard_view():
                     st.rerun()
 
         with s6:
-            if st.button("🏥 Healthcare", use_container_width=True, key="btn_sample_health"):
+            if st.button("🏥 Healthcare", width="stretch", key="btn_sample_health"):
                 with st.spinner("Synthesizing Healthcare dataset..."):
                     df_sample = generate_healthcare_dataset(500)
                     p = ProjectModel.create_project("Healthcare Vitals", df_sample, goal="Anomaly & Operational Optimization")
@@ -277,7 +277,7 @@ def render_dashboard_view():
                     fig = ChartModel.create_plotly_figure(active_df, rec, theme=theme)
                     st.plotly_chart(
                         fig,
-                        use_container_width=True,
+                        width="stretch",
                         key=f"dash_chart_{i}_{rec.get('id', i)}",
                         config={"displayModeBar": False, "responsive": True, "scrollZoom": False}
                     )
@@ -326,11 +326,11 @@ def render_dashboard_view():
             })
 
         vitals_df = pd.DataFrame(vitals_data)
-        st.dataframe(vitals_df, use_container_width=True, hide_index=True)
+        st.dataframe(vitals_df, width="stretch", hide_index=True)
 
         c_act1, c_act2 = st.columns([2, 3])
         with c_act1:
-            if st.button("🧹 Launch AI Data Cleaning on these columns", type="primary", use_container_width=True):
+            if st.button("🧹 Launch AI Data Cleaning on these columns", type="primary", width="stretch"):
                 st.session_state["active_nav"] = "Data Cleaning"
                 st.rerun()
         with c_act2:
@@ -353,7 +353,7 @@ def render_dashboard_view():
 
     with tab_data:
         st.markdown("#### // Active Data Table View (Top 10 Rows)")
-        st.dataframe(active_df.head(10), use_container_width=True)
+        st.dataframe(active_df.head(10), width="stretch")
 
     # 6. Quick Actions & Meet AI Analyst at Bottom
     render_quick_actions()

@@ -9,10 +9,34 @@ class DataProfilerModel:
     """Profiles datasets and individual columns, detecting statistical attributes,
 
     semantic data types, and suspicious columns with sub-millisecond caching.
+
+    Optimized for large datasets (250K+ rows):
+    - Sampling-based duplicate detection
+    - Batch DuckDB-style vectorized column statistics
+    - Capped mode/unique computation on samples for speed
     """
 
+    # ── Sampling threshold: above this, we sample for expensive ops ──
+    LARGE_DATASET_THRESHOLD = 50_000
+    SAMPLE_SIZE_FOR_DUPS = 30_000
+    SAMPLE_SIZE_FOR_MODE = 10_000
+
     @staticmethod
-    def classify_column(series: pd.Series, col_name: str, total_rows: int, unique_count: Optional[int] = None) -> str:
+    def _safe_to_str(s: pd.Series) -> pd.Series:
+        try:
+            return s.astype(str)
+        except (UnicodeDecodeError, Exception):
+            def _decode(val):
+                if isinstance(val, bytes):
+                    try:
+                        return val.decode("utf-8")
+                    except Exception:
+                        return val.decode("latin-1", errors="replace")
+                return str(val)
+            return s.map(_decode)
+
+    @classmethod
+    def classify_column(cls, series: pd.Series, col_name: str, total_rows: int, unique_count: Optional[int] = None) -> str:
         name_lower = col_name.lower().strip()
         non_null_count = series.dropna().count()
         if non_null_count == 0:
@@ -42,7 +66,7 @@ class DataProfilerModel:
             return "Date/time"
         if any(k in name_lower for k in ["date", "time", "timestamp", "year", "created_at", "updated_at", "dob"]):
             try:
-                sample = series.dropna().head(30).astype(str)
+                sample = cls._safe_to_str(series.dropna().head(30))
                 pd.to_datetime(sample, errors="raise")
                 return "Date/time"
             except Exception:
@@ -54,7 +78,7 @@ class DataProfilerModel:
         else:
             # Try converting sample to numeric
             try:
-                sample = series.dropna().head(30).astype(str).str.replace(",", "").str.replace("$", "").str.replace("%", "")
+                sample = cls._safe_to_str(series.dropna().head(30)).str.replace(",", "").str.replace("$", "").str.replace("%", "")
                 pd.to_numeric(sample, errors="raise")
                 return "Numerical"
             except Exception:
@@ -64,12 +88,35 @@ class DataProfilerModel:
         if unique_count <= 50 or (unique_ratio < 0.2 and unique_count < 200):
             return "Categorical"
 
-        sample_for_len = series.dropna().head(1000).astype(str)
+        sample_for_len = cls._safe_to_str(series.dropna().head(1000))
         avg_str_len = float(sample_for_len.str.len().mean()) if not sample_for_len.empty else 0.0
         if avg_str_len > 30:
             return "Text"
 
         return "Categorical"
+
+    @classmethod
+    def _fast_unique_counts(cls, df: pd.DataFrame) -> Dict[str, int]:
+        """Compute unique counts efficiently — use approx for large datasets."""
+        n_rows = len(df)
+        result = {}
+        if n_rows > cls.LARGE_DATASET_THRESHOLD:
+            # Sample-based approximate unique counts for non-numeric columns
+            sample = df.sample(min(cls.SAMPLE_SIZE_FOR_MODE, n_rows), random_state=42)
+            ratio = n_rows / len(sample)
+            for col in df.columns:
+                if pd.api.types.is_numeric_dtype(df[col]) or df[col].nunique() < 100:
+                    # Fast for numeric or low-cardinality
+                    result[col] = int(df[col].nunique())
+                else:
+                    # Approximate from sample
+                    sample_uniq = int(sample[col].nunique())
+                    # Cap at total non-null
+                    result[col] = min(int(sample_uniq * min(ratio, 3)), int(df[col].notna().sum()))
+        else:
+            for col in df.columns:
+                result[col] = int(df[col].nunique())
+        return result
 
     @classmethod
     def profile_dataset(cls, df: pd.DataFrame) -> Dict[str, Any]:
@@ -78,6 +125,9 @@ class DataProfilerModel:
             return cached
 
         n_rows, n_cols = df.shape
+        is_large = n_rows > cls.LARGE_DATASET_THRESHOLD
+
+        # ── Memory estimation (always sampled for large) ──
         if n_rows > 5000:
             sample_n = 1000
             sample_mem = int(df.sample(sample_n, random_state=42).memory_usage(deep=True).sum())
@@ -85,36 +135,80 @@ class DataProfilerModel:
         else:
             mem_bytes = int(df.memory_usage(deep=True).sum())
         mem_mb = round(mem_bytes / (1024 * 1024), 2)
-        
+
+        # ── Duplicate detection (sampled for large datasets) ──
         cached_dups = AnalyticsCache.get(df, "duplicate_rows")
         if cached_dups is not None:
             dup_rows = cached_dups
         else:
-            dup_rows = int(df.duplicated().sum())
+            if is_large:
+                # Sample-based duplicate estimation — much faster than full scan
+                dup_sample_size = min(cls.SAMPLE_SIZE_FOR_DUPS, n_rows)
+                sample_df = df.sample(dup_sample_size, random_state=42)
+                sample_dups = int(sample_df.duplicated().sum())
+                dup_rows = int(sample_dups * (n_rows / dup_sample_size))
+            else:
+                dup_rows = int(df.duplicated().sum())
             AnalyticsCache.set(df, "duplicate_rows", dup_rows)
         dup_pct = round((dup_rows / n_rows) * 100, 2) if n_rows > 0 else 0.0
-        
+
+        # ── Missing values (vectorized — fast even for large) ──
+        null_counts_series = df.isna().sum()
         total_cells = n_rows * n_cols
-        total_missing = int(df.isna().sum().sum())
+        total_missing = int(null_counts_series.sum())
         missing_pct = round((total_missing / total_cells) * 100, 2) if total_cells > 0 else 0.0
-        
+
+        # ── Batch unique counts ──
+        unique_counts = cls._fast_unique_counts(df)
+
+        # ── Batch numeric statistics (vectorized) ──
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        numeric_stats = {}
+        if numeric_cols:
+            desc = df[numeric_cols].describe(percentiles=[0.25, 0.5, 0.75])
+            for col in numeric_cols:
+                if col in desc.columns:
+                    q25 = float(desc.loc["25%", col]) if pd.notna(desc.loc["25%", col]) else 0.0
+                    q75 = float(desc.loc["75%", col]) if pd.notna(desc.loc["75%", col]) else 0.0
+                    numeric_stats[col] = {
+                        "min": float(desc.loc["min", col]) if pd.notna(desc.loc["min", col]) else 0.0,
+                        "max": float(desc.loc["max", col]) if pd.notna(desc.loc["max", col]) else 0.0,
+                        "mean": round(float(desc.loc["mean", col]), 4) if pd.notna(desc.loc["mean", col]) else 0.0,
+                        "median": round(float(desc.loc["50%", col]), 4) if pd.notna(desc.loc["50%", col]) else 0.0,
+                        "std": round(float(desc.loc["std", col]), 4) if pd.notna(desc.loc["std", col]) else 0.0,
+                        "q25": round(q25, 4),
+                        "q50": round(float(desc.loc["50%", col]), 4) if pd.notna(desc.loc["50%", col]) else 0.0,
+                        "q75": round(q75, 4),
+                        "iqr": round(q75 - q25, 4),
+                    }
+
+        # ── Per-column profiling ──
         columns_profile = []
         suspicious_columns = []
-        
+
+        # Pre-compute mode for all columns using sample
+        if is_large:
+            mode_sample = df.sample(min(cls.SAMPLE_SIZE_FOR_MODE, n_rows), random_state=42)
+        else:
+            mode_sample = df
+
         for col in df.columns:
             series = df[col]
-            unique_count = int(series.nunique())
-            semantic_type = cls.classify_column(series, str(col), n_rows, unique_count=unique_count)
-            null_count = int(series.isna().sum())
+            unique_count = unique_counts.get(col, 0)
+            null_count = int(null_counts_series[col])
             col_null_pct = round((null_count / n_rows) * 100, 2) if n_rows > 0 else 0.0
-            
-            # Most frequent value (optimized for large datasets)
+
+            # Classification uses sample for large datasets
+            if is_large:
+                classify_series = series.head(min(50_000, n_rows))
+            else:
+                classify_series = series
+            semantic_type = cls.classify_column(classify_series, str(col), n_rows, unique_count=unique_count)
+
+            # Mode from sample
             mode_val = None
             try:
-                if n_rows > 10000:
-                    mode_series = series.head(5000).mode()
-                else:
-                    mode_series = series.mode()
+                mode_series = mode_sample[col].mode()
                 if not mode_series.empty:
                     mode_val = str(mode_series.iloc[0])
             except Exception:
@@ -129,28 +223,11 @@ class DataProfilerModel:
                 "unique_count": unique_count,
                 "mode": mode_val
             }
-            
-            # Numerical calculations with single-pass batch quantiles
-            if pd.api.types.is_numeric_dtype(series):
-                cleaned_series = series.dropna()
-                if not cleaned_series.empty:
-                    q_v = cleaned_series.quantile([0.25, 0.50, 0.75])
-                    q25 = float(q_v.loc[0.25])
-                    q50 = float(q_v.loc[0.50])
-                    q75 = float(q_v.loc[0.75])
-                    iqr = q75 - q25
-                    col_info.update({
-                        "min": float(cleaned_series.min()),
-                        "max": float(cleaned_series.max()),
-                        "mean": round(float(cleaned_series.mean()), 4),
-                        "median": round(float(cleaned_series.median()), 4),
-                        "std": round(float(cleaned_series.std()), 4) if len(cleaned_series) > 1 else 0.0,
-                        "q25": round(q25, 4),
-                        "q50": round(q50, 4),
-                        "q75": round(q75, 4),
-                        "iqr": round(iqr, 4)
-                    })
-            
+
+            # Numerical stats from pre-computed batch describe
+            if col in numeric_stats:
+                col_info.update(numeric_stats[col])
+
             # Suspicious column rules
             if unique_count == 1:
                 suspicious_columns.append({
@@ -167,9 +244,9 @@ class DataProfilerModel:
                     "column": str(col),
                     "reason": "Probable identifier column: High cardinality unique key with little aggregate value."
                 })
-                
+
             columns_profile.append(col_info)
-            
+
         res = {
             "dataset_info": {
                 "rows": n_rows,

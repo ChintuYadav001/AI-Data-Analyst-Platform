@@ -1,67 +1,304 @@
 import time
 """
-Authentication View: Sign In, Sign Up, and Security Audit Logs.
+Authentication View: High-Performance, Professional Enterprise Login & Registration.
 """
 from datetime import datetime
 import streamlit as st
 import pandas as pd
 from core.models.auth_model import AuthModel
 from core.services.notification_service import mask_destination
+from ui.components import get_logo_b64
 
 auth_model = AuthModel()
+
+
+def render_password_reset_form(auth_model_instance: AuthModel, key_prefix: str = "reset", show_back_btn: bool = True):
+    """
+    Renders the Password Recovery and OTP Verification interface.
+    Validates identity via 6-digit OTP delivered through SMTP/SMS before updating password.
+    """
+    st.markdown("""
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+        <div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF; letter-spacing: -0.01em;">
+                🔐 Password Recovery & Clearance
+            </div>
+            <div style="font-size: 0.76rem; color: #94A3B8; margin-top: 2px;">
+                Verify your identity with a 6-digit OTP sent to your registered address, then choose a new password.
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 0.70rem; color: #00F0FF; font-weight: 700; background: rgba(0, 240, 255, 0.1); border: 1px solid rgba(0, 240, 255, 0.25); border-radius: 20px; padding: 3px 10px;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #00F0FF; box-shadow: 0 0 6px #00F0FF;"></span>
+            OTP VERIFIED GATE
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    url_target = st.query_params.get("verify_target", "")
+    url_code = st.query_params.get("verify_code", "")
+    url_mode = st.query_params.get("mode", "")
+
+    sent_target_key = f"{key_prefix}_reset_otp_sent_to"
+    sent_masked_key = f"{key_prefix}_reset_masked_target"
+    sent_type_key = f"{key_prefix}_reset_target_type"
+    sent_ident_key = f"{key_prefix}_reset_ident_val"
+
+    # Preload from query params if arriving via email 1-click reset link
+    default_ident = st.session_state.get(sent_ident_key, "")
+    if not default_ident and url_mode == "reset" and url_target:
+        default_ident = url_target
+
+    # -------------------------------------------------------------
+    # STEP 1: Enter Registered Identifier & Dispatch OTP
+    # -------------------------------------------------------------
+    st.markdown("<div style='font-size: 0.82rem; font-weight: 600; color: #00F0FF; margin-bottom: 4px;'>STEP 1: Identify Account & Dispatch Recovery Code</div>", unsafe_allow_html=True)
+    col_id1, col_id2 = st.columns([1.5, 1.1])
+    with col_id1:
+        ident_input = st.text_input(
+            "Registered Email or Username",
+            value=default_ident,
+            placeholder="e.g. analyst@quantum.ai or username",
+            key=f"{key_prefix}_input_ident"
+        )
+    with col_id2:
+        reset_channel = st.selectbox(
+            "OTP Dispatch Channel",
+            ["📧 Email (Active via Gmail SMTP)", "📱 Mobile / Phone (SMS)"],
+            key=f"{key_prefix}_select_channel"
+        )
+
+    channel_type = "phone" if ("Phone" in reset_channel or "Mobile" in reset_channel) else "email"
+
+    if st.button("📲 Send Password Recovery OTP", key=f"{key_prefix}_btn_send_otp", use_container_width=True, type="secondary"):
+        clean_ident = ident_input.strip()
+        if not clean_ident:
+            st.error("Please enter your registered email address or username.")
+        else:
+            try:
+                res = auth_model_instance.initiate_password_reset(clean_ident, channel=channel_type)
+                st.session_state[sent_target_key] = res["target"]
+                st.session_state[sent_masked_key] = res["masked_target"]
+                st.session_state[sent_type_key] = res["target_type"]
+                st.session_state[sent_ident_key] = clean_ident
+                st.toast(f"Security recovery OTP dispatched to {res['masked_target']}!", icon="📬")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Cannot dispatch recovery OTP: {str(e)}")
+
+    active_sent_target = st.session_state.get(sent_target_key)
+    active_masked = st.session_state.get(sent_masked_key) or active_sent_target
+
+    # -------------------------------------------------------------
+    # STEP 2: Enter Verification OTP & Set New Password
+    # -------------------------------------------------------------
+    if active_sent_target or (url_mode == "reset" and url_code):
+        if active_sent_target:
+            last_dispatch = auth_model_instance.get_last_dispatch_info() or {}
+            dispatched_live = last_dispatch.get("dispatched_live", False)
+            if dispatched_live:
+                st.markdown(f"""
+                <div style="background: rgba(0, 255, 157, 0.1); border: 1px solid #00FF9D; box-shadow: 0 0 15px rgba(0, 255, 157, 0.2); border-radius: 8px; padding: 12px 16px; margin: 12px 0;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00FF9D; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00FF9D; box-shadow: 0 0 8px #00FF9D;"></span>
+                        ✓ RECOVERY OTP DELIVERED TO YOUR INBOX: {active_sent_target}
+                    </div>
+                    <div style="font-size: 0.82rem; color: #FFFFFF; margin-top: 4px; line-height: 1.5;">
+                        A 6-digit recovery OTP code has been dispatched via Gmail SMTP. Please check your inbox or spam folder, then enter the code below to set your new password.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; border-radius: 8px; padding: 12px 16px; margin: 12px 0;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00F0FF; font-weight: 700;">
+                        [OTP RECOVERY CODE DISPATCHED]
+                    </div>
+                    <div style="font-size: 0.82rem; color: #CBD5E1; margin-top: 4px;">
+                        Recovery code generated for <b>{active_masked}</b>. Enter the 6-digit OTP code below to finalize password reset.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown("<hr style='border-color: rgba(255, 255, 255, 0.08); margin: 16px 0 14px 0;'>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size: 0.82rem; font-weight: 600; color: #00F0FF; margin-bottom: 4px;'>STEP 2: Enter Verification OTP & Set New Password</div>", unsafe_allow_html=True)
+
+        default_otp = url_code if (url_mode == "reset" and url_code) else ""
+        entered_otp = st.text_input(
+            "Enter 6-Digit Verification OTP (from Email or Phone)",
+            value=default_otp,
+            max_chars=6,
+            placeholder="e.g. 592814",
+            key=f"{key_prefix}_input_otp_code"
+        )
+
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            new_pwd = st.text_input(
+                "New Password",
+                type="password",
+                placeholder="Minimum 4 characters",
+                key=f"{key_prefix}_new_pwd"
+            )
+        with col_p2:
+            new_pwd2 = st.text_input(
+                "Confirm New Password",
+                type="password",
+                placeholder="Re-enter new password",
+                key=f"{key_prefix}_new_pwd2"
+            )
+
+        if st.button("🛡️ Verify OTP & Update Password", key=f"{key_prefix}_btn_submit_reset", type="primary", use_container_width=True):
+            target_user_ident = st.session_state.get(sent_ident_key) or ident_input.strip()
+            if not target_user_ident:
+                st.error("Please enter your registered email or username.")
+            elif not entered_otp or len(entered_otp.strip()) != 6:
+                st.error("Please enter the complete 6-digit One-Time Password (OTP).")
+            elif not new_pwd:
+                st.error("Please enter your desired new password.")
+            elif len(new_pwd) < 4:
+                st.error("Password must be at least 4 characters long.")
+            elif new_pwd != new_pwd2:
+                st.error("Passwords do not match. Please re-enter carefully.")
+            else:
+                try:
+                    auth_model_instance.reset_password_with_otp(
+                        identifier=target_user_ident,
+                        otp_code=entered_otp.strip(),
+                        new_password=new_pwd
+                    )
+                    # Clean up reset session state
+                    for k in [sent_target_key, sent_masked_key, sent_type_key, sent_ident_key]:
+                        if k in st.session_state:
+                            del st.session_state[k]
+                    st.session_state["show_forgot_password"] = False
+                    st.toast("✨ Password reset successfully! Please sign in with your new password.", icon="✅")
+                    st.success("✓ Password successfully updated! Redirecting to sign in...")
+                    time.sleep(1.0)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Password reset failed: {str(e)}")
+
+    if show_back_btn:
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+        if st.button("← Back to Sign In", key=f"{key_prefix}_btn_back_signin", type="secondary", use_container_width=True):
+            st.session_state["show_forgot_password"] = False
+            st.rerun()
+
 
 def render_auth_view():
     st.markdown("""
 <style>
+/* Clean Seamless Viewport - No Global Headers */
+section[data-testid="stSidebar"] {
+    top: 0px !important;
+    height: 100vh !important;
+}
+button[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapseButton"] {
+    top: 14px !important;
+}
 .block-container {
-    max-width: 1320px !important;
+    max-width: 1280px !important;
     margin: 0 auto !important;
-    padding-top: 3.5rem !important;
+    padding-top: 1.5rem !important;
     padding-left: 2rem !important;
     padding-right: 2rem !important;
-    padding-bottom: 1.2rem !important;
+    padding-bottom: 2rem !important;
 }
 header[data-testid="stHeader"],
 [data-testid="stHeader"] {
-    display: flex !important;
-    visibility: visible !important;
-    background: transparent !important;
-    height: 2.875rem !important;
-    z-index: 99990 !important;
+    display: none !important;
+    visibility: hidden !important;
+    height: 0px !important;
+    min-height: 0px !important;
+    margin: 0px !important;
+    padding: 0px !important;
 }
 [data-testid="stToolbar"] {
-    display: flex !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
+    display: none !important;
+    visibility: hidden !important;
 }
 footer {
     display: none !important;
     visibility: hidden !important;
     height: 0 !important;
 }
+
+/* Centered Full-Width Segmented Control for Tabs */
+div[data-testid="stTabs"] {
+    width: 100% !important;
+}
+div[data-testid="stTabs"] [data-baseweb="tab-list"],
+.stTabs [data-baseweb="tab-list"] {
+    width: 100% !important;
+    display: flex !important;
+    background: rgba(14, 20, 36, 0.85) !important;
+    border: 1px solid rgba(0, 240, 255, 0.18) !important;
+    border-radius: 12px !important;
+    padding: 5px !important;
+    gap: 6px !important;
+    margin-bottom: 16px !important;
+    box-sizing: border-box !important;
+}
+div[data-testid="stTabs"] [data-baseweb="tab-list"] button,
+div[data-testid="stTabs"] [data-baseweb="tab"],
+.stTabs [data-baseweb="tab"] {
+    flex: 1 1 0% !important;
+    width: 33.33% !important;
+    text-align: center !important;
+    justify-content: center !important;
+    padding: 9px 12px !important;
+    border-radius: 8px !important;
+    font-size: 0.84rem !important;
+    font-weight: 600 !important;
+    color: #94A3B8 !important;
+    border: 1px solid transparent !important;
+    transition: all 0.2s ease !important;
+    white-space: nowrap !important;
+}
+div[data-testid="stTabs"] [data-baseweb="tab"]:hover,
+.stTabs [data-baseweb="tab"]:hover {
+    color: #F8FAFC !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+div[data-testid="stTabs"] [aria-selected="true"],
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(135deg, rgba(0, 240, 255, 0.16) 0%, rgba(2, 132, 199, 0.25) 100%) !important;
+    border: 1px solid rgba(0, 240, 255, 0.45) !important;
+    color: #00F0FF !important;
+    font-weight: 700 !important;
+    box-shadow: 0 0 14px rgba(0, 240, 255, 0.18) !important;
+}
+div[data-baseweb="tab-highlight"], div[data-baseweb="tab-border"] {
+    display: none !important;
+}
+
+/* Polished Dark Cyber Glass Container */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    background: linear-gradient(180deg, rgba(14, 20, 38, 0.92) 0%, rgba(9, 13, 26, 0.96) 100%) !important;
+    border: 1px solid rgba(0, 240, 255, 0.2) !important;
+    border-radius: 16px !important;
+    padding: 24px 26px !important;
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.55), 0 0 25px rgba(0, 240, 255, 0.05) !important;
+    margin-bottom: 12px !important;
+}
+
+/* Polished Popover Button */
+div[data-testid="stPopover"] > button {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #94A3B8 !important;
+    font-size: 0.82rem !important;
+    border-radius: 8px !important;
+    height: 38px !important;
+    transition: all 0.2s ease !important;
+}
+div[data-testid="stPopover"] > button:hover {
+    background: rgba(0, 240, 255, 0.08) !important;
+    border-color: rgba(0, 240, 255, 0.35) !important;
+    color: #00F0FF !important;
+}
 </style>
-<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
-    <div style="display: flex; align-items: center; gap: 10px;">
-        <div style="width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, #0284C7, #00F0FF); display: flex; align-items: center; justify-content: center; font-size: 1.15rem; box-shadow: 0 0 12px rgba(0, 240, 255, 0.4);">
-            ⚡
-        </div>
-        <div>
-            <h1 style="font-family: 'Inter', -apple-system, sans-serif; font-size: 1.35rem; font-weight: 800; color: #FFFFFF; margin: 0; line-height: 1.2; letter-spacing: -0.02em;">
-                Authentication & Access Control
-            </h1>
-            <div style="font-size: 0.76rem; color: #94A3B8; margin-top: 1px;">
-                Institutional Clearance Gate • DuckDB High-Throughput Analytics • MySQL Ledger Sync
-            </div>
-        </div>
-    </div>
-    <div style="display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #94A3B8; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 20px; padding: 4px 12px;">
-        <span style="width: 7px; height: 7px; border-radius: 50%; background: #10B981; box-shadow: 0 0 6px #10B981; display: inline-block;"></span>
-        <span style="color: #10B981; font-weight: 700;">DEPLOYED & OPERATIONAL</span>
-        <span>•</span>
-        <span style="color: #00F0FF;">FAST-PATH ACTIVE</span>
-    </div>
-</div>
 """, unsafe_allow_html=True)
 
     is_auth = st.session_state.get("authenticated", False)
@@ -105,44 +342,61 @@ footer {
             if st.button("📊 Go to Dashboard", type="primary", use_container_width=True):
                 st.session_state["active_nav"] = "Dashboard"
                 st.rerun()
+        return
 
-    tab_signin, tab_signup, tab_logs = st.tabs(["🔑 Sign In", "📝 Sign Up / Register", "🛡️ Security Audit Logs"])
+    # -------------------------------------------------------------------------
+    # CENTERED PROFESSIONAL AUTHENTICATION EXPERIENCE (UNAUTHENTICATED)
+    # -------------------------------------------------------------------------
+    col_pad1, col_center, col_pad2 = st.columns([1.0, 2.0, 1.0])
 
-    with tab_signin:
-        if is_auth:
-            st.markdown("""
-            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 20px 24px; margin: 12px 0;">
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; font-weight: 700; color: #10B981; letter-spacing: 0.08em;">// ACTIVE AUTHENTICATED SESSION</div>
-                <div style="font-size: 1.15rem; font-weight: 700; color: #FFFFFF; margin: 4px 0;">You are currently signed in with full institutional clearance.</div>
-                <div style="font-size: 0.84rem; color: #94A3B8;">All analytical pipelines, DuckDB SQL kernels, and dossiers are active.</div>
+    with col_center:
+        # Centered Platform Brand Header
+        logo_b64 = get_logo_b64()
+        logo_tag = (
+            f'<img src="{logo_b64}" style="width: 72px; height: 72px; border-radius: 18px; object-fit: cover; box-shadow: 0 0 28px rgba(0, 240, 255, 0.45); border: 1px solid rgba(0, 240, 255, 0.35); margin-bottom: 12px;" />'
+            if logo_b64 else
+            f'<div style="display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 12px; background: linear-gradient(135deg, #00F0FF 0%, #0284C7 100%); box-shadow: 0 0 20px rgba(0, 240, 255, 0.4); font-size: 1.45rem; margin-bottom: 10px;">⚡</div>'
+        )
+
+        st.markdown(f"""
+        <div style="text-align: center; margin-bottom: 22px; padding-top: 8px;">
+            {logo_tag}
+            <div style="font-size: 1.45rem; font-weight: 800; color: #FFFFFF; letter-spacing: -0.025em; line-height: 1.2;">
+                QUANTUM ANALYST
             </div>
-            """, unsafe_allow_html=True)
-        else:
-            if "login_preview_query" not in st.session_state:
-                st.session_state["login_preview_query"] = "revenue"
+            <div style="font-size: 0.80rem; color: #94A3B8; margin-top: 4px;">
+                Enterprise AI-Powered Analytics & Institutional Clearance Gate
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-            col_login_card, col_interactive_space = st.columns([0.92, 1.28], gap="large")
+        url_mode = st.query_params.get("mode", "")
+        if url_mode == "reset":
+            st.session_state["show_forgot_password"] = True
 
-            # -----------------------------------------------------------------
-            # 1. SMALL & COMPACT PROFESSIONAL LOGIN CARD (LEFT)
-            # -----------------------------------------------------------------
-            with col_login_card:
-                with st.container(border=True):
+        tab_signin, tab_signup, tab_reset, tab_logs = st.tabs(["🔑 Sign In", "📝 Create Account", "🔄 Reset Password", "🛡️ Security Logs"])
+
+        # ---------------------------------------------------------------------
+        # TAB 1: SIGN IN
+        # ---------------------------------------------------------------------
+        with tab_signin:
+            with st.container(border=True):
+                if st.session_state.get("show_forgot_password", False):
+                    render_password_reset_form(auth_model, key_prefix="signin_reset", show_back_btn=True)
+                else:
                     st.markdown("""
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
-                        <div style="width: 38px; height: 38px; border-radius: 10px; 
-                                    background: linear-gradient(135deg, #0284C7 0%, #00F0FF 50%, #8B5CF6 100%); 
-                                    display: flex; align-items: center; justify-content: center; font-size: 1.25rem; 
-                                    box-shadow: 0 0 14px rgba(0, 240, 255, 0.45); flex-shrink: 0;">
-                            ⚡
-                        </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
                         <div>
-                            <div style="font-size: 1.1rem; font-weight: 800; color: #FFFFFF; letter-spacing: -0.01em; line-height: 1.2;">
+                            <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF; letter-spacing: -0.01em;">
                                 Analyst Sign In
                             </div>
-                            <div style="font-size: 0.74rem; color: #38BDF8; font-weight: 600;">
+                            <div style="font-size: 0.76rem; color: #94A3B8; margin-top: 2px;">
                                 Institutional Clearance Gate
                             </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px; font-size: 0.70rem; color: #10B981; font-weight: 700; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 20px; padding: 3px 10px;">
+                            <span style="width: 6px; height: 6px; border-radius: 50%; background: #10B981; box-shadow: 0 0 6px #10B981;"></span>
+                            OPERATIONAL
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -150,33 +404,27 @@ footer {
                     username_or_email = st.text_input(
                         "Email or Username",
                         placeholder="analyst@quantum.ai",
-                        key="compact_signin_identifier"
+                        key="pro_signin_identifier"
                     )
 
                     password = st.text_input(
                         "Password",
                         type="password",
                         placeholder="••••••••••••",
-                        key="compact_signin_password"
+                        key="pro_signin_password"
                     )
 
                     col_rem, col_fog = st.columns([1.1, 0.9])
                     with col_rem:
-                        remember = st.checkbox("Remember me", value=True, key="compact_signin_remember")
+                        remember = st.checkbox("Remember me", value=True, key="pro_signin_remember")
                     with col_fog:
-                        with st.popover("Forgot?", use_container_width=True):
-                            st.markdown("<b style='color: #00F0FF; font-size: 0.85rem;'>Password Recovery</b>", unsafe_allow_html=True)
-                            st.caption("Enter registered email to dispatch recovery link.")
-                            rec_dest = st.text_input("Work Email", placeholder="analyst@quantum.ai", key="compact_rec_dest")
-                            if st.button("Send Link", key="compact_btn_rec", type="primary"):
-                                if rec_dest:
-                                    st.success("Verification dispatched.")
-                                else:
-                                    st.error("Email required.")
+                        if st.button("Forgot Password?", key="pro_btn_forgot_pwd_toggle", type="secondary", use_container_width=True):
+                            st.session_state["show_forgot_password"] = True
+                            st.rerun()
 
                     st.markdown("<div style='margin-top: 6px;'></div>", unsafe_allow_html=True)
 
-                    if st.button("⚡ Sign In to Platform →", key="compact_btn_signin_submit", type="primary", use_container_width=True):
+                    if st.button("⚡ Sign In to Platform →", key="pro_btn_signin_submit", type="primary", use_container_width=True):
                         if not username_or_email or not password:
                             st.error("Please provide both identifier and password.")
                         else:
@@ -194,11 +442,19 @@ footer {
                                 st.toast(f"Welcome back, {disp_name}!", icon="✨")
                                 st.rerun()
                             else:
-                                st.error("Invalid credentials. Try the Demo Access below.")
+                                st.error("Invalid credentials. Use the Demo Pass below for instant access.")
+
+                    # Clean Subtle Divider
+                    st.markdown("""
+                    <div style="display: flex; align-items: center; margin: 18px 0 12px 0;">
+                        <div style="flex: 1; height: 1px; background: rgba(255, 255, 255, 0.08);"></div>
+                        <span style="padding: 0 10px; font-size: 0.68rem; color: #64748B; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">or instant trial</span>
+                        <div style="flex: 1; height: 1px; background: rgba(255, 255, 255, 0.08);"></div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
                     # Quick 1-Click Demo Pass (2-Minute Trial Limit)
-                    st.markdown("<div style='margin-top: 4px;'></div>", unsafe_allow_html=True)
-                    if st.button("⚡ 1-Click Demo Pass (2-Min Trial)", key="compact_btn_demo_pass", type="secondary", use_container_width=True):
+                    if st.button("🚀 Launch 1-Click Demo Pass (2-Min Trial)", key="pro_btn_demo_pass", type="secondary", use_container_width=True):
                         demo_user = auth_model.authenticate(
                             username_or_email="analyst@quantum.ai",
                             password="QuantumPassword2026!",
@@ -225,421 +481,302 @@ footer {
                         else:
                             st.error("Could not activate demo pass.")
 
+                    # Reassurance Footer
                     st.markdown("""
-                    <div style="margin-top: 10px; padding: 7px 10px; background: rgba(0, 240, 255, 0.04); border: 1px solid rgba(0, 240, 255, 0.18); border-radius: 8px; text-align: center;">
-                        <div style="font-size: 0.72rem; color: #38BDF8; font-weight: 600;">
-                            ⏱️ 2-Min Demo Trial &nbsp;•&nbsp; 🔒 256-Bit SSL &nbsp;•&nbsp; ⚡ MySQL Sync
-                        </div>
+                    <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.06); display: flex; justify-content: center; align-items: center; gap: 12px; font-size: 0.72rem; color: #64748B; font-family: 'JetBrains Mono', monospace;">
+                        <span>🔒 TLS 1.3 / AES-256</span>
+                        <span>•</span>
+                        <span>⚡ DuckDB Fast-Path</span>
+                        <span>•</span>
+                        <span>🛡️ PBKDF2 Hashed</span>
                     </div>
                     """, unsafe_allow_html=True)
 
-            # -----------------------------------------------------------------
-            # 2. ATTRACTIVE INTERACTIVE FUNCTION IN REMAINING SPACE (RIGHT)
-            # -----------------------------------------------------------------
-            with col_interactive_space:
-                with st.container(border=True):
-                    st.markdown("""
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
-                        <div>
-                            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #00F0FF; font-weight: 700; letter-spacing: 0.08em;">
-                                // INTERACTIVE INTELLIGENCE SANDBOX
-                            </div>
-                            <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF; margin-top: 2px;">
-                                Experience Autonomous Analytics
-                            </div>
-                            <div style="font-size: 0.8rem; color: #94A3B8; margin-top: 2px;">
-                                Click a query below to test how Quantum Analyst executes vectorized SQL and neural reasoning:
-                            </div>
-                        </div>
-                        <div style="display: inline-flex; align-items: center; gap: 6px; background: rgba(16, 185, 129, 0.12); 
-                                    border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 20px; padding: 3px 9px;">
-                            <span style="width: 7px; height: 7px; border-radius: 50%; background: #10B981; box-shadow: 0 0 6px #10B981; display: inline-block;"></span>
-                            <span style="color: #10B981; font-size: 0.7rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;">LIVE ENGINE</span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    # Interactive Query Selection Buttons
-                    col_q1, col_q2, col_q3 = st.columns(3)
-                    with col_q1:
-                        is_q1 = (st.session_state["login_preview_query"] == "revenue")
-                        if st.button("📈 Revenue Forecast", key="btn_prev_rev", type="primary" if is_q1 else "secondary", use_container_width=True):
-                            st.session_state["login_preview_query"] = "revenue"
-                            st.rerun()
-                    with col_q2:
-                        is_q2 = (st.session_state["login_preview_query"] == "fraud")
-                        if st.button("⚠️ Outlier Anomaly", key="btn_prev_fraud", type="primary" if is_q2 else "secondary", use_container_width=True):
-                            st.session_state["login_preview_query"] = "fraud"
-                            st.rerun()
-                    with col_q3:
-                        is_q3 = (st.session_state["login_preview_query"] == "churn")
-                        if st.button("👥 Customer Churn", key="btn_prev_churn", type="primary" if is_q3 else "secondary", use_container_width=True):
-                            st.session_state["login_preview_query"] = "churn"
-                            st.rerun()
-
-                    # Dynamic Interactive Result Output
-                    active_mode = st.session_state.get("login_preview_query", "revenue")
-
-                    if active_mode == "revenue":
-                        metric_1 = ("$1,248,920", "+18.4% YoY", "#10B981")
-                        metric_2 = ("1,420,000", "Vector Rows", "#00F0FF")
-                        metric_3 = ("0.74 ms", "Query Latency", "#8B5CF6")
-                        insight_text = "Revenue accelerated by <b>+24.3% in Q3 enterprise cohorts</b>. Highest margin growth observed across North American SaaS subscriptions with recurring expansion."
-                        sample_sql = "SELECT cohort_quarter, SUM(revenue) as total_rev, AVG(margin_pct) FROM enterprise_pipeline GROUP BY 1 ORDER BY 1 DESC;"
-                    elif active_mode == "fraud":
-                        metric_1 = ("14 Flags", "Critical Outliers", "#EF4444")
-                        metric_2 = ("99.4%", "Model Precision", "#00F0FF")
-                        metric_3 = ("0.91 ms", "Scan Latency", "#8B5CF6")
-                        insight_text = "Detected <b>14 high-deviation transaction spikes</b> exceeding 3 standard deviations ($12,400+ threshold). Isolation forest clustering isolated automated bot retries."
-                        sample_sql = "SELECT tx_id, amount, z_score FROM transactions WHERE ABS(z_score) > 3.0 ORDER BY amount DESC LIMIT 10;"
-                    else: # churn
-                        metric_1 = ("4.2%", "-1.8% Improvement", "#10B981")
-                        metric_2 = ("8,940", "Monitored Accounts", "#00F0FF")
-                        metric_3 = ("0.82 ms", "DuckDB Kernel", "#8B5CF6")
-                        insight_text = "Identified <b>primary churn trigger</b>: accounts with under 2 team log-ins during week 3 exhibit a 73% attrition hazard. Targeted onboarding recommended."
-                        sample_sql = "SELECT account_tier, COUNT(*) as churned_users, CORR(tenure_days, weekly_logins) FROM user_churn GROUP BY 1;"
-
-                    # Dynamic Metric Cards
-                    m_c1, m_c2, m_c3 = st.columns(3)
-                    with m_c1:
-                        st.markdown(f"""
-                        <div style="background: rgba(2, 132, 199, 0.1); border: 1px solid rgba(0, 240, 255, 0.25); border-radius: 8px; padding: 8px 10px;">
-                            <div style="font-size: 0.65rem; font-weight: 700; color: #94A3B8; text-transform: uppercase;">KEY METRIC</div>
-                            <div style="font-size: 1.1rem; font-weight: 800; color: #FFFFFF;">{metric_1[0]}</div>
-                            <div style="font-size: 0.7rem; color: {metric_1[2]}; font-weight: 700;">{metric_1[1]}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    with m_c2:
-                        st.markdown(f"""
-                        <div style="background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 8px; padding: 8px 10px;">
-                            <div style="font-size: 0.65rem; font-weight: 700; color: #94A3B8; text-transform: uppercase;">DATA ENGINE</div>
-                            <div style="font-size: 1.1rem; font-weight: 800; color: #FFFFFF;">{metric_2[0]}</div>
-                            <div style="font-size: 0.7rem; color: {metric_2[2]}; font-weight: 700;">{metric_2[1]}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    with m_c3:
-                        st.markdown(f"""
-                        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 8px 10px;">
-                            <div style="font-size: 0.65rem; font-weight: 700; color: #94A3B8; text-transform: uppercase;">PERFORMANCE</div>
-                            <div style="font-size: 1.1rem; font-weight: 800; color: #FFFFFF;">{metric_3[0]}</div>
-                            <div style="font-size: 0.7rem; color: {metric_3[2]}; font-weight: 700;">{metric_3[1]}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                    # AI Narrative Synthesis
-                    st.markdown(f"""
-                    <div style="background: rgba(0, 240, 255, 0.05); border-left: 3px solid #00F0FF; 
-                                border-radius: 0 8px 8px 0; padding: 9px 12px; margin: 10px 0 8px 0;">
-                        <div style="font-size: 0.68rem; font-weight: 700; color: #00F0FF; letter-spacing: 0.06em;">✦ SYNTHESIZED NEURAL FINDING</div>
-                        <div style="font-size: 0.82rem; color: #E2E8F0; margin-top: 3px; line-height: 1.45;">
-                            {insight_text}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    # Vectorized DuckDB Query Snippet
-                    st.markdown(f"""
-                    <div style="background: #0B111E; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 8px 10px; margin-bottom: 4px;">
-                        <div style="display: flex; justify-content: space-between; font-size: 0.64rem; color: #64748B; font-family: 'JetBrains Mono', monospace; margin-bottom: 3px;">
-                            <span>// DUCKDB COMPILED SQL</span>
-                            <span style="color: #00FF9D;">FAST-PATH VECTORIZED</span>
-                        </div>
-                        <code style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #38BDF8; line-height: 1.35; word-break: break-all;">
-                            {sample_sql}
-                        </code>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-    with tab_signup:
-        st.markdown("""
-        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(0, 240, 255, 0.2); border-radius: 12px; padding: 24px; max-width: 540px; margin: 10px 0 20px 0;">
-            <div style="font-family: 'Space Grotesk', sans-serif; font-size: 1.2rem; font-weight: 700; color: #FFFFFF; margin-bottom: 6px;">
-                Create New Analyst Account
-            </div>
-            <div style="font-size: 0.85rem; color: #94A3B8; margin-bottom: 16px;">
-                Your credentials are encrypted using PBKDF2-HMAC-SHA256 with cryptographic salt and stored in local SQLite database.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Detect if user opened the page from an email or SMS verification link
-        url_code = st.query_params.get("verify_code", "")
-        url_target = st.query_params.get("verify_target", "")
-
-        if url_code and url_target:
-            st.markdown(f"""
-            <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #00F0FF; font-weight: 700;">
-                    ✓ ONE-CLICK VERIFICATION LINK ACTIVATED
-                </div>
-                <div style="font-size: 0.85rem; color: #FFFFFF; margin-top: 4px;">
-                    Verification clearance loaded from your secure link for: <b>{url_target}</b>. Complete your desired username and password below to finalize registration.
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        default_email = url_target if ("@" in url_target) else ""
-        default_phone = url_target if (url_target and "@" not in url_target) else ""
-
-        col_u1, col_u2 = st.columns(2)
-        with col_u1:
-            new_username = st.text_input("Desired Username", placeholder="e.g. quantum_analyst", key="main_reg_uname")
-            new_fullname = st.text_input("Full Name", placeholder="e.g. Dr. Alex Vance", key="main_reg_fname")
-            new_phone = st.text_input("Mobile / Phone Number", value=default_phone, placeholder="e.g. +1 555-0199 or 9876543210", key="main_reg_phone")
-        with col_u2:
-            new_email = st.text_input("Email Address", value=default_email, placeholder="e.g. alex@vance.io", key="main_reg_email")
-            new_role = st.selectbox(
-                "Role Clearance",
-                ["Lead Data Scientist", "Senior Quantitative Analyst", "Executive BI Director", "Data Engineer"],
-                key="main_reg_role"
-            )
-
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            new_password = st.text_input("Secure Password", type="password", placeholder="Choose a secure password", key="main_reg_pwd")
-        with col_p2:
-            new_password_confirm = st.text_input("Confirm Password", type="password", placeholder="Re-enter your password", key="main_reg_pwd2")
-
-        st.markdown("<div style='font-size: 0.85rem; font-weight: 600; color: #00F0FF; margin-top: 8px;'>📲 Select OTP & Verification Link Dispatch Channel:</div>", unsafe_allow_html=True)
-        otp_channel = st.radio(
-            "OTP Channel",
-            ["📧 Send OTP & Link to Institutional Email (Active via Gmail SMTP)", "📱 Send OTP & Link to Mobile / Phone Number (SMS)"],
-            label_visibility="collapsed",
-            key="main_otp_channel_choice"
-        )
-
-        col_send_btn, col_blank = st.columns([1, 1])
-        with col_send_btn:
-            if st.button("📲 Send OTP / Verification Link", key="main_reg_send_otp_btn", use_container_width=True):
-                is_phone_target = "Phone" in otp_channel or "Mobile" in otp_channel
-                target_dest = new_phone.strip() if is_phone_target else new_email.strip()
-
-                if is_phone_target and (not new_phone or len(new_phone.strip()) < 6):
-                    st.error("Please provide a valid mobile or phone number (at least 6 digits).")
-                elif not is_phone_target and (not new_email or "@" not in new_email):
-                    st.error("Please provide a valid institutional email address.")
-                else:
-                    try:
-                        target_type = "phone" if is_phone_target else "email"
-                        auth_model.generate_otp(target_dest, target_type=target_type)
-                        st.session_state["main_otp_sent_to"] = target_dest
-                        st.session_state["main_otp_type"] = target_type
-                        st.toast(f"OTP & Verification link dispatched to your {target_type}!", icon="📬")
-                    except Exception as e:
-                        st.error(f"Failed to dispatch OTP: {str(e)}")
-
-        main_sent_dest = st.session_state.get("main_otp_sent_to")
-        main_dest_type = st.session_state.get("main_otp_type", "channel")
-
-        if main_sent_dest:
-            masked_dest = mask_destination(main_sent_dest, main_dest_type)
-            last_dispatch = auth_model.get_last_dispatch_info() or {}
-            dispatched_live = last_dispatch.get("dispatched_live", False)
-            sent_code = last_dispatch.get("otp_code", "")
-            sent_link = last_dispatch.get("verification_link", "")
-
-            if dispatched_live:
-                st.markdown(f"""
-                <div style="background: rgba(0, 255, 157, 0.1); border: 1px solid #00FF9D; box-shadow: 0 0 15px rgba(0, 255, 157, 0.2); border-radius: 8px; padding: 16px; margin: 12px 0;">
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #00FF9D; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00FF9D; box-shadow: 0 0 8px #00FF9D;"></span>
-                        ✓ REAL EMAIL DELIVERED TO YOUR GMAIL INBOX: {main_sent_dest}
-                    </div>
-                    <div style="font-size: 0.88rem; color: #FFFFFF; margin-top: 6px; line-height: 1.5;">
-                        Your 6-digit OTP code and 1-click verification link have been delivered to <b>{main_sent_dest}</b> via Gmail SMTP.
-                        <br/><span style="font-size: 0.8rem; color: #94A3B8;">Please check your Gmail inbox (or spam folder) on your phone or computer to retrieve your 6-digit code, then enter it below.</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div style="background: rgba(255, 170, 0, 0.08); border: 1px solid rgba(255, 170, 0, 0.4); border-radius: 8px; padding: 14px; margin: 10px 0;">
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #FFAA00; font-weight: 700;">
-                        ⚠️ EMAIL DISPATCH: SMTP CREDENTIALS REQUIRED FOR REAL-TIME INBOX ROUTING
-                    </div>
-                    <div style="font-size: 0.82rem; color: #CBD5E1; margin-top: 6px; line-height: 1.5;">
-                        To protect your security, <b>verification codes are NEVER displayed on this signup page</b>.
-                        <br/>Because an outbound mail server (e.g. Gmail App Password) has not yet been connected to this system, emails cannot be routed over the public internet to <code>{masked_dest}</code> until you configure your sender email below.
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with st.expander("⚙️ Configure Real Email Delivery (Gmail / Outlook / SMTP)", expanded=True):
+        # ---------------------------------------------------------------------
+        # TAB 2: SIGN UP / REGISTER (Full SMTP Mail OTP Verification Preserved)
+        # ---------------------------------------------------------------------
+        with tab_signup:
+            with st.container(border=True):
                 st.markdown("""
-                **Why did "Username and Password not accepted (BadCredentials)" appear?**
-                > Google **does not allow your normal account password** for sending automated emails. You must use a dedicated **16-character Google App Password**.
+                <div style="margin-bottom: 16px;">
+                    <div style="font-size: 1.15rem; font-weight: 700; color: #FFFFFF; letter-spacing: -0.01em;">
+                        Create New Analyst Account
+                    </div>
+                    <div style="font-size: 0.78rem; color: #94A3B8; margin-top: 2px;">
+                        Institutional verification required via One-Time Password (OTP) dispatched to your email or SMS
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
-                **Step-by-Step Instructions (Takes 60 seconds):**
-                1. [👉 Click here to open your Google App Passwords page](https://myaccount.google.com/apppasswords) (log in as `shambhuray0002@gmail.com`).
-                   *(If it says "The setting that you are looking for is not available", make sure [2-Step Verification is turned on](https://myaccount.google.com/signinoptions/two-step-verification) first).*
-                2. In the **App name** box, type `Analytics Platform` and click **Create**.
-                3. A yellow popup will show a **16-character password** (e.g. `abcd efgh ijkl mnop`).
-                4. Paste that 16-character code into the box below and click **Test & Save**.
-                """)
-                col_cfg1, col_cfg2 = st.columns(2)
-                with col_cfg1:
-                    cfg_host = st.text_input("SMTP Server", value="smtp.gmail.com", key="cfg_smtp_host")
-                    cfg_port = st.number_input("SMTP Port", value=587, key="cfg_smtp_port")
-                with col_cfg2:
-                    cfg_user = st.text_input("Gmail Address", value=main_sent_dest if "@" in main_sent_dest else "shambhuray0002@gmail.com", placeholder="your.email@gmail.com", key="cfg_smtp_user")
-                    cfg_pass = st.text_input("Google App Password (16 letters)", type="password", placeholder="Paste 16-character app password here", key="cfg_smtp_pass")
+                # Detect if user opened the page from an email or SMS verification link
+                url_code = st.query_params.get("verify_code", "")
+                url_target = st.query_params.get("verify_target", "")
 
-                if st.button("💾 Test & Save Gmail SMTP to .env", key="cfg_save_btn"):
-                    from core.services.notification_service import NotificationService
-                    res = NotificationService.configure_smtp(
-                        server=cfg_host.strip(),
-                        port=int(cfg_port),
-                        username=cfg_user.strip(),
-                        password=cfg_pass.strip().replace(" ", ""),
-                        use_tls=True
+                if url_code and url_target:
+                    st.markdown(f"""
+                    <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+                        <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #00F0FF; font-weight: 700;">
+                            ✓ ONE-CLICK VERIFICATION LINK ACTIVATED
+                        </div>
+                        <div style="font-size: 0.82rem; color: #FFFFFF; margin-top: 4px;">
+                            Verification clearance loaded from your secure link for: <b>{url_target}</b>. Complete your desired username and password below to finalize registration.
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                default_email = url_target if ("@" in url_target) else ""
+                default_phone = url_target if (url_target and "@" not in url_target) else ""
+
+                col_u1, col_u2 = st.columns(2)
+                with col_u1:
+                    new_username = st.text_input("Desired Username", placeholder="quantum_analyst", key="main_reg_uname")
+                    new_fullname = st.text_input("Full Name", placeholder="Dr. Alex Vance", key="main_reg_fname")
+                    new_phone = st.text_input("Mobile / Phone Number", value=default_phone, placeholder="+1 555-0199 or 9876543210", key="main_reg_phone")
+                with col_u2:
+                    new_email = st.text_input("Email Address", value=default_email, placeholder="alex@vance.io", key="main_reg_email")
+                    new_role = st.selectbox(
+                        "Role Clearance",
+                        ["Lead Data Scientist", "Senior Quantitative Analyst", "Executive BI Director", "Data Engineer"],
+                        key="main_reg_role"
                     )
-                    if res.get("success"):
-                        st.success("✓ Gmail SMTP connected and saved! Future OTPs will arrive in your real Gmail inbox.")
-                        st.rerun()
-                    else:
-                        st.error(res.get("error"))
 
-        user_otp_input = st.text_input(
-            "Enter 6-Digit Verification OTP (from your Email or Phone SMS)",
-            value=url_code if url_code else "",
-            placeholder="e.g. 123456",
-            max_chars=6,
-            key="main_user_otp_input"
-        )
+                col_p1, col_p2 = st.columns(2)
+                with col_p1:
+                    new_password = st.text_input("Secure Password", type="password", placeholder="Choose password", key="main_reg_pwd")
+                with col_p2:
+                    new_password_confirm = st.text_input("Confirm Password", type="password", placeholder="Re-enter password", key="main_reg_pwd2")
 
-        register_btn = st.button("🛡️ Verify OTP & Register Account", type="primary", use_container_width=True, key="main_submit_reg_btn")
-
-        if register_btn:
-            if not new_username or not new_email or not new_password:
-                st.error("Username, Email, and Password are required fields.")
-            elif not new_phone or len(new_phone.strip()) < 6:
-                st.error("Please provide a valid phone number.")
-            elif new_password != new_password_confirm:
-                st.error("Passwords do not match. Please verify your password.")
-            elif len(new_password) < 4:
-                st.error("Password must be at least 4 characters in length.")
-            elif not user_otp_input:
-                st.error("Please enter the 6-digit One-Time Password (OTP) received on your email or phone.")
-            else:
-                try:
-                    registered_user = auth_model.register(
-                        username=new_username,
-                        email=new_email,
-                        password=new_password,
-                        full_name=new_fullname,
-                        phone=new_phone.strip(),
-                        role=new_role,
-                        otp_code=user_otp_input,
-                        require_otp=True
-                    )
-                    st.session_state["authenticated"] = True
-                    st.session_state["user"] = registered_user
-                    st.session_state["active_nav"] = "Dashboard"
-                    if "main_otp_sent_to" in st.session_state:
-                        del st.session_state["main_otp_sent_to"]
-                    st.success(f"Account successfully verified and created! Logged in as {registered_user['username']}.")
-                    st.rerun()
-                except ValueError as ve:
-                    st.error(str(ve))
-                except Exception as e:
-                    st.error(f"Error registering user: {str(e)}")
-
-    with tab_logs:
-        st.markdown("""
-        <div style="margin-bottom: 16px;">
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #00F0FF; letter-spacing: 0.1em;">
-                // IMMUTABLE SQL AUDIT TRAIL
-            </div>
-            <div style="font-size: 1.05rem; font-weight: 700; color: #FFFFFF;">
-                Database Security & Login Attempt Ledger
-            </div>
-            <p style="color: #94A3B8; font-size: 0.85rem; margin-top: 4px;">
-                Every authentication attempt (success or rejection) is persisted in the local SQLite table <code>login_logs</code> for regulatory compliance and audit tracking.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        with st.expander("🔍 View Database Security & Login Attempt Ledger", expanded=False):
-            logs = auth_model.list_login_logs(limit=50)
-            if logs:
-                df_logs = pd.DataFrame(logs)
-                st.dataframe(
-                    df_logs,
-                    use_container_width=True,
-                    column_config={
-                        "timestamp": st.column_config.DatetimeColumn("Timestamp", format="YYYY-MM-DD HH:mm:ss"),
-                        "status": st.column_config.TextColumn("Status"),
-                        "username": st.column_config.TextColumn("Username / Identifier"),
-                        "ip_address": st.column_config.TextColumn("IP Address"),
-                        "failure_reason": st.column_config.TextColumn("Failure Note")
-                    }
+                st.markdown("<div style='font-size: 0.82rem; font-weight: 600; color: #00F0FF; margin-top: 10px; margin-bottom: 4px;'>📲 Select OTP Dispatch Channel:</div>", unsafe_allow_html=True)
+                otp_channel = st.radio(
+                    "OTP Channel",
+                    ["📧 Send OTP & Link to Institutional Email (Active via Gmail SMTP)", "📱 Send OTP & Link to Mobile / Phone Number (SMS)"],
+                    label_visibility="collapsed",
+                    key="main_otp_channel_choice"
                 )
-                
-                # Summary Metrics
-                total_attempts = len(df_logs)
-                success_attempts = len(df_logs[df_logs["status"] == "SUCCESS"])
-                failed_attempts = len(df_logs[df_logs["status"] == "FAILED"])
 
-                m1, m2, m3 = st.columns(3)
-                with m1:
-                    st.metric("Total Recorded Attempts", total_attempts)
-                with m2:
-                    st.metric("Successful Logins", success_attempts)
-                with m3:
-                    st.metric("Failed / Blocked Attempts", failed_attempts)
-            else:
-                st.info("No authentication attempts logged yet. Sign in or register an account to populate the audit ledger.")
+                if st.button("📲 Send OTP / Verification Link", key="main_reg_send_otp_btn", use_container_width=True):
+                    is_phone_target = "Phone" in otp_channel or "Mobile" in otp_channel
+                    target_dest = new_phone.strip() if is_phone_target else new_email.strip()
 
-        # Outbound Dispatch Ledger (Admin Audit Trail)
-        st.markdown("<hr style='border-color: rgba(0, 240, 255, 0.15); margin: 16px 0 12px 0;'>", unsafe_allow_html=True)
-        st.markdown("""
-        <div style="margin-bottom: 12px;">
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #00F0FF; letter-spacing: 0.1em;">
-                // SECURE SERVER OUTBOX DISPATCH LOG
-            </div>
-            <div style="font-size: 0.95rem; font-weight: 700; color: #FFFFFF;">
-                Outbound OTP Verification Ledger (Admin View)
-            </div>
-            <p style="color: #94A3B8; font-size: 0.8rem; margin-top: 2px;">
-                Logs outbound email and SMS OTP dispatches generated by the server. Visible exclusively on this administrative audit ledger tab.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+                    if is_phone_target and (not new_phone or len(new_phone.strip()) < 6):
+                        st.error("Please provide a valid mobile or phone number (at least 6 digits).")
+                    elif not is_phone_target and (not new_email or "@" not in new_email):
+                        st.error("Please provide a valid institutional email address.")
+                    else:
+                        try:
+                            target_type = "phone" if is_phone_target else "email"
+                            auth_model.generate_otp(target_dest, target_type=target_type)
+                            st.session_state["main_otp_sent_to"] = target_dest
+                            st.session_state["main_otp_type"] = target_type
+                            st.toast(f"OTP & Verification link dispatched to your {target_type}!", icon="📬")
+                        except Exception as e:
+                            st.error(f"Failed to dispatch OTP: {str(e)}")
 
-        with st.expander("📬 View Outbound OTP Verification Dispatch Outbox", expanded=False):
-            from core.config import DATA_DIR
-            outbox_file = DATA_DIR / "outbox.log"
-            if outbox_file.exists():
-                import json
-                outbox_entries = []
-                try:
-                    with open(outbox_file, "r", encoding="utf-8") as f:
-                        for line in f:
-                            line = line.strip()
-                            if line:
-                                try:
-                                    outbox_entries.append(json.loads(line))
-                                except Exception:
-                                    pass
-                except Exception:
-                    pass
+                main_sent_dest = st.session_state.get("main_otp_sent_to")
+                main_dest_type = st.session_state.get("main_otp_type", "channel")
 
-                if outbox_entries:
-                    df_outbox = pd.DataFrame(outbox_entries[-20:])
-                    display_cols = [c for c in ["timestamp", "target", "target_type", "dispatched_live", "otp_code", "error"] if c in df_outbox.columns]
+                if main_sent_dest:
+                    masked_dest = mask_destination(main_sent_dest, main_dest_type)
+                    last_dispatch = auth_model.get_last_dispatch_info() or {}
+                    dispatched_live = last_dispatch.get("dispatched_live", False)
+
+                    if dispatched_live:
+                        st.markdown(f"""
+                        <div style="background: rgba(0, 255, 157, 0.1); border: 1px solid #00FF9D; box-shadow: 0 0 15px rgba(0, 255, 157, 0.2); border-radius: 8px; padding: 14px; margin: 12px 0;">
+                            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00FF9D; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                                <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00FF9D; box-shadow: 0 0 8px #00FF9D;"></span>
+                                ✓ REAL EMAIL DELIVERED TO YOUR GMAIL INBOX: {main_sent_dest}
+                            </div>
+                            <div style="font-size: 0.84rem; color: #FFFFFF; margin-top: 6px; line-height: 1.5;">
+                                Your 6-digit OTP code and 1-click verification link have been delivered to <b>{main_sent_dest}</b> via Gmail SMTP.
+                                <br/><span style="font-size: 0.78rem; color: #94A3B8;">Please check your inbox or spam folder, then enter the code below.</span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"""
+                        <div style="background: rgba(255, 170, 0, 0.08); border: 1px solid rgba(255, 170, 0, 0.4); border-radius: 8px; padding: 12px; margin: 10px 0;">
+                            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: #FFAA00; font-weight: 700;">
+                                ⚠️ EMAIL DISPATCH: SMTP CREDENTIALS REQUIRED FOR REAL-TIME INBOX ROUTING
+                            </div>
+                            <div style="font-size: 0.80rem; color: #CBD5E1; margin-top: 6px; line-height: 1.5;">
+                                To protect your security, <b>verification codes are NEVER displayed on this signup page</b>.
+                                Configure your sender Google App Password below to route emails to <code>{masked_dest}</code>.
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    with st.expander("⚙️ Configure Real Email Delivery (Gmail / Outlook / SMTP)", expanded=False):
+                        st.markdown("""
+                        **Step-by-Step Instructions (Takes 60 seconds):**
+                        1. [👉 Click here to open your Google App Passwords page](https://myaccount.google.com/apppasswords).
+                        2. In the **App name** box, type `Analytics Platform` and click **Create**.
+                        3. Paste the **16-character code** below and click **Test & Save**.
+                        """)
+                        col_cfg1, col_cfg2 = st.columns(2)
+                        with col_cfg1:
+                            cfg_host = st.text_input("SMTP Server", value="smtp.gmail.com", key="cfg_smtp_host")
+                            cfg_port = st.number_input("SMTP Port", value=587, key="cfg_smtp_port")
+                        with col_cfg2:
+                            cfg_user = st.text_input("Gmail Address", value=main_sent_dest if "@" in main_sent_dest else "shambhuray0002@gmail.com", placeholder="your.email@gmail.com", key="cfg_smtp_user")
+                            cfg_pass = st.text_input("Google App Password (16 letters)", type="password", placeholder="Paste 16-character app password", key="cfg_smtp_pass")
+
+                        if st.button("💾 Test & Save Gmail SMTP to .env", key="cfg_save_btn"):
+                            from core.services.notification_service import NotificationService
+                            res = NotificationService.configure_smtp(
+                                server=cfg_host.strip(),
+                                port=int(cfg_port),
+                                username=cfg_user.strip(),
+                                password=cfg_pass.strip().replace(" ", ""),
+                                use_tls=True
+                            )
+                            if res.get("success"):
+                                st.success("✓ Gmail SMTP connected and saved! Future OTPs will arrive in your real Gmail inbox.")
+                                st.rerun()
+                            else:
+                                st.error(res.get("error"))
+
+                user_otp_input = st.text_input(
+                    "Enter 6-Digit Verification OTP (from Email or Phone)",
+                    value=url_code if url_code else "",
+                    placeholder="e.g. 123456",
+                    max_chars=6,
+                    key="main_user_otp_input"
+                )
+
+                register_btn = st.button("🛡️ Verify OTP & Register Account", type="primary", use_container_width=True, key="main_submit_reg_btn")
+
+                if register_btn:
+                    if not new_username or not new_email or not new_password:
+                        st.error("Username, Email, and Password are required fields.")
+                    elif not new_phone or len(new_phone.strip()) < 6:
+                        st.error("Please provide a valid phone number.")
+                    elif new_password != new_password_confirm:
+                        st.error("Passwords do not match. Please verify your password.")
+                    elif len(new_password) < 4:
+                        st.error("Password must be at least 4 characters in length.")
+                    elif not user_otp_input:
+                        st.error("Please enter the 6-digit One-Time Password (OTP) received on your email or phone.")
+                    else:
+                        try:
+                            registered_user = auth_model.register(
+                                username=new_username,
+                                email=new_email,
+                                password=new_password,
+                                full_name=new_fullname,
+                                phone=new_phone.strip(),
+                                role=new_role,
+                                otp_code=user_otp_input,
+                                require_otp=True
+                            )
+                            st.session_state["authenticated"] = True
+                            st.session_state["user"] = registered_user
+                            st.session_state["active_nav"] = "Dashboard"
+                            if "main_otp_sent_to" in st.session_state:
+                                del st.session_state["main_otp_sent_to"]
+                            st.success(f"Account successfully verified and created! Logged in as {registered_user['username']}.")
+                            st.rerun()
+                        except ValueError as ve:
+                            st.error(str(ve))
+                        except Exception as e:
+                            st.error(f"Error registering user: {str(e)}")
+
+        # ---------------------------------------------------------------------
+        # TAB 3: RESET PASSWORD (OTP VERIFICATION)
+        # ---------------------------------------------------------------------
+        with tab_reset:
+            with st.container(border=True):
+                render_password_reset_form(auth_model, key_prefix="tab_reset", show_back_btn=False)
+
+        # ---------------------------------------------------------------------
+        # TAB 4: SECURITY AUDIT LOGS
+        # ---------------------------------------------------------------------
+        with tab_logs:
+            with st.container(border=True):
+                st.markdown("""
+                <div style="margin-bottom: 14px;">
+                    <div style="font-size: 1.15rem; font-weight: 700; color: #FFFFFF; letter-spacing: -0.01em;">
+                        Security Audit Ledger
+                    </div>
+                    <div style="font-size: 0.78rem; color: #94A3B8; margin-top: 2px;">
+                        Immutable tamper-evident log of authentication attempts and outbound security dispatches
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                logs = auth_model.list_login_logs(limit=50)
+                if logs:
+                    df_logs = pd.DataFrame(logs)
+                    
+                    # Summary Metrics
+                    total_attempts = len(df_logs)
+                    success_attempts = len(df_logs[df_logs["status"] == "SUCCESS"])
+                    failed_attempts = len(df_logs[df_logs["status"] == "FAILED"])
+
+                    m1, m2, m3 = st.columns(3)
+                    with m1:
+                        st.metric("Total Attempts", total_attempts)
+                    with m2:
+                        st.metric("Successful", success_attempts)
+                    with m3:
+                        st.metric("Failed / Blocked", failed_attempts)
+
+                    st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
                     st.dataframe(
-                        df_outbox[display_cols],
+                        df_logs,
                         use_container_width=True,
                         column_config={
-                            "timestamp": st.column_config.DatetimeColumn("Timestamp"),
-                            "target": st.column_config.TextColumn("Destination"),
-                            "target_type": st.column_config.TextColumn("Channel"),
-                            "dispatched_live": st.column_config.CheckboxColumn("Live Delivered?"),
-                            "otp_code": st.column_config.TextColumn("Dispatched OTP Code"),
-                            "error": st.column_config.TextColumn("Gateway Note")
+                            "timestamp": st.column_config.DatetimeColumn("Timestamp", format="YYYY-MM-DD HH:mm:ss"),
+                            "status": st.column_config.TextColumn("Status"),
+                            "username": st.column_config.TextColumn("Username / Identifier"),
+                            "ip_address": st.column_config.TextColumn("IP Address"),
+                            "failure_reason": st.column_config.TextColumn("Failure Note")
                         }
                     )
                 else:
-                    st.caption("Outbox is currently clear.")
-            else:
-                st.caption("No outbox log file generated yet.")
+                    st.info("No authentication attempts logged yet.")
+
+                # Outbound Dispatch Ledger
+                st.markdown("<hr style='border-color: rgba(255, 255, 255, 0.08); margin: 16px 0 12px 0;'>", unsafe_allow_html=True)
+                st.markdown("""
+                <div style="font-size: 0.92rem; font-weight: 700; color: #FFFFFF; margin-bottom: 4px;">
+                    Outbound OTP Dispatch Outbox
+                </div>
+                """, unsafe_allow_html=True)
+
+                from core.config import DATA_DIR
+                outbox_file = DATA_DIR / "outbox.log"
+                if outbox_file.exists():
+                    import json
+                    outbox_entries = []
+                    try:
+                        with open(outbox_file, "r", encoding="utf-8") as f:
+                            for line in f:
+                                line = line.strip()
+                                if line:
+                                    try:
+                                        outbox_entries.append(json.loads(line))
+                                    except Exception:
+                                        pass
+                    except Exception:
+                        pass
+
+                    if outbox_entries:
+                        df_outbox = pd.DataFrame(outbox_entries[-20:])
+                        display_cols = [c for c in ["timestamp", "target", "target_type", "dispatched_live", "otp_code", "error"] if c in df_outbox.columns]
+                        st.dataframe(
+                            df_outbox[display_cols],
+                            use_container_width=True,
+                            column_config={
+                                "timestamp": st.column_config.DatetimeColumn("Timestamp"),
+                                "target": st.column_config.TextColumn("Destination"),
+                                "target_type": st.column_config.TextColumn("Channel"),
+                                "dispatched_live": st.column_config.CheckboxColumn("Live Delivered?"),
+                                "otp_code": st.column_config.TextColumn("Dispatched OTP Code"),
+                                "error": st.column_config.TextColumn("Gateway Note")
+                            }
+                        )
+                    else:
+                        st.caption("Outbox is currently clear.")
+                else:
+                    st.caption("No outbox log file generated yet.")

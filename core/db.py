@@ -376,6 +376,10 @@ def sync_dataframe_to_sql(table_name: str, df: Any, project_name: str = "") -> b
     if df is None or getattr(df, "empty", True):
         return False
 
+    # For large datasets (e.g. 2M rows), cap SQL sync sample to 10k rows
+    if len(df) > 10_000:
+        df = df.head(10_000)
+
     clean_table = re.sub(r"\W+", "_", table_name).lower().strip("_")
     if not clean_table:
         clean_table = "dataset"

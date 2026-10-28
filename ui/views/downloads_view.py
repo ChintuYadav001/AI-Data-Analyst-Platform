@@ -4,16 +4,48 @@ import io
 import json
 
 def render_downloads_view():
+    import os
+    st.title("📥 Downloads & Artifact Exports")
+    st.markdown("Download project synopsis documents, cleaned datasets, SQL scripts, Python notebooks, and audit logs.")
+
+    # Project Synopsis Download Card
+    pdf_path = os.path.join(os.getcwd(), "PROJECT_SYNOPSIS.pdf")
+    docx_path = os.path.join(os.getcwd(), "PROJECT_SYNOPSIS.docx")
+    
+    st.markdown("### 🎓 Academic Project Synopsis (CSE-PROJECT-2026-27-04)")
+    col_syn_pdf, col_syn_docx = st.columns(2)
+    with col_syn_pdf:
+        if os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as f_pdf:
+                st.download_button(
+                    label="📄 Download Synopsis PDF (20 Pages)",
+                    data=f_pdf.read(),
+                    file_name="PROJECT_SYNOPSIS.pdf",
+                    mime="application/pdf",
+                    type="primary",
+                    width="stretch"
+                )
+    with col_syn_docx:
+        if os.path.exists(docx_path):
+            with open(docx_path, "rb") as f_docx:
+                st.download_button(
+                    label="📝 Download Synopsis Word (.docx)",
+                    data=f_docx.read(),
+                    file_name="PROJECT_SYNOPSIS.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    type="secondary",
+                    width="stretch"
+                )
+    
+    st.markdown("<hr style='border-color: rgba(255,255,255,0.1); margin: 18px 0;'>", unsafe_allow_html=True)
+
     if "df" not in st.session_state or st.session_state["df"] is None:
-        st.warning("Please upload a dataset or load a sample dataset first.")
+        st.info("ℹ️ Upload a dataset in the 'Upload Dataset' tab to unlock dataset, notebook, and script exports.")
         return
 
     df = st.session_state["df"]
     raw_df = st.session_state.get("raw_df", df)
     project_name = st.session_state.get("current_project_name", "Dataset")
-
-    st.title("📥 Downloads & Artifact Exports")
-    st.markdown("Download cleaned data files, SQL scripts, Python analysis scripts, notebooks, and configurations.")
 
     c1, c2 = st.columns(2)
 
@@ -27,7 +59,7 @@ def render_downloads_view():
             data=csv_data,
             file_name=f"{project_name}_cleaned.csv",
             mime="text/csv",
-            use_container_width=True
+            width="stretch"
         )
 
         # 2. Cleaned Excel
@@ -39,7 +71,7 @@ def render_downloads_view():
             data=excel_buf,
             file_name=f"{project_name}_cleaned.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+            width="stretch"
         )
 
         # 3. Original Dataset
@@ -49,7 +81,7 @@ def render_downloads_view():
             data=raw_csv,
             file_name=f"{project_name}_original.csv",
             mime="text/csv",
-            use_container_width=True
+            width="stretch"
         )
 
     with c2:
@@ -71,7 +103,7 @@ print("Statistical Summary:\\n", df.describe())
             data=py_script,
             file_name=f"analyze_{project_name}.py",
             mime="text/x-python",
-            use_container_width=True
+            width="stretch"
         )
 
         # 5. Jupyter Notebook (.ipynb)
@@ -103,7 +135,7 @@ print("Statistical Summary:\\n", df.describe())
             data=json.dumps(nb_json, indent=2),
             file_name=f"{project_name}_notebook.ipynb",
             mime="application/json",
-            use_container_width=True
+            width="stretch"
         )
 
         # 6. Cleaning Log History JSON
@@ -113,5 +145,5 @@ print("Statistical Summary:\\n", df.describe())
             data=log_json,
             file_name=f"{project_name}_cleaning_log.json",
             mime="application/json",
-            use_container_width=True
+            width="stretch"
         )

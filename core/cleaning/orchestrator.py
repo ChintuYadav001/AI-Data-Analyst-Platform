@@ -331,10 +331,15 @@ class AICleaningOrchestrator:
         str_cols = df.select_dtypes(include=["object", "string"]).columns
         n_rows = len(df)
         for col in str_cols:
+            raw_s = df[col].dropna()
             if n_rows > 10000:
-                sample_s = df[col].dropna().head(5000).astype(str)
-                if sample_s.empty:
-                    continue
+                raw_s = raw_s.head(5000)
+            try:
+                sample_s = raw_s.astype(str)
+            except Exception:
+                sample_s = raw_s.map(lambda x: x.decode("latin-1", errors="replace") if isinstance(x, bytes) else str(x))
+            if sample_s.empty:
+                continue
                 edge_cnt = (sample_s.str.startswith(" ") | sample_s.str.endswith(" ")).sum()
                 multi_cnt = sample_s.str.contains(r"\s{2,}", regex=True).sum()
                 sample_issues = edge_cnt + multi_cnt
@@ -542,13 +547,19 @@ class AICleaningOrchestrator:
             if pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_string_dtype(df[col]):
                 valid_raw = df[col].dropna()
                 if not valid_raw.empty:
+                    def _to_clean_str(s):
+                        try:
+                            return s.astype(str)
+                        except Exception:
+                            return s.map(lambda x: x.decode("latin-1", errors="replace") if isinstance(x, bytes) else str(x))
+
                     if n_rows > 20000:
-                        test_sample = valid_raw.head(2000).astype(str).str.strip().str.lower()
+                        test_sample = _to_clean_str(valid_raw.head(2000)).str.strip().str.lower()
                         if test_sample.isin(MISSING_TEXT_SENTINELS).sum() > 0:
-                            sample_str = valid_raw.astype(str).str.strip().str.lower()
+                            sample_str = _to_clean_str(valid_raw).str.strip().str.lower()
                             sentinel_nulls = int(sample_str.isin(MISSING_TEXT_SENTINELS).sum())
                     else:
-                        sample_str = valid_raw.astype(str).str.strip().str.lower()
+                        sample_str = _to_clean_str(valid_raw).str.strip().str.lower()
                         sentinel_nulls = int(sample_str.isin(MISSING_TEXT_SENTINELS).sum())
 
             total_missing = standard_nulls + sentinel_nulls
@@ -556,7 +567,7 @@ class AICleaningOrchestrator:
                 missing_pct = round((total_missing / n_rows) * 100, 2)
                 is_num = pd.api.types.is_numeric_dtype(df[col])
                 if not is_num and (pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_string_dtype(df[col])):
-                    sample_clean = df[col].dropna().head(1000).astype(str).str.replace(r"[\$₹€£¥,]", "", regex=True).str.strip()
+                    sample_clean = _to_clean_str(df[col].dropna().head(1000)).str.replace(r"[\$₹€£¥,]", "", regex=True).str.strip()
                     sample_clean = sample_clean[~sample_clean.str.lower().isin(MISSING_TEXT_SENTINELS)]
                     if not sample_clean.empty:
                         num_test = pd.to_numeric(sample_clean, errors="coerce")
