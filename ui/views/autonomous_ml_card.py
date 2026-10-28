@@ -408,6 +408,14 @@ def render_autonomous_1click_ml_tab(df: pd.DataFrame, proj_name: str = "Active D
                 fig_imp.update_layout(height=320, margin=dict(l=10, r=10, t=30, b=10))
                 st.plotly_chart(fig_imp, use_container_width=True)
 
+        # ---------------------------------------------------------------------
+        # 6-STEP MODEL IMPROVEMENT & HIGH-SALES UNDERESTIMATION SUITE
+        # ---------------------------------------------------------------------
+        is_classification_task = "classification" in res.get("task_type", "")
+        if not is_classification_task:
+            from ui.views.model_improvement_card import render_model_improvement_section
+            render_model_improvement_section(s8, df=df, target_col=target_col, is_autonomous=True)
+
     # STEP 9
     s9 = steps.get("step_9", {}).get("data", {})
     with st.expander(f"🔮 Step 9: Make Predictions & Real-Time Scoring — {s9.get('status', 'Completed')}", expanded=True):
