@@ -404,7 +404,8 @@ if not is_auth:
     render_auth_view()
 else:
     dispatch_active_view(active)
-    # Render Persistent Floating AI Copilot only in authenticated workspace
-    from ui.copilot_widget import render_floating_ai_copilot
-    render_floating_ai_copilot()
+
+# Always render Persistent Floating Round AI Assistant & Voice Copilot on bottom right
+from ui.copilot_widget import render_floating_ai_copilot
+render_floating_ai_copilot()
 
