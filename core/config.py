@@ -49,6 +49,11 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD") or "bcrskjjmnkgfyqol"
 SMTP_FROM = os.getenv("SMTP_FROM") or os.getenv("SMTP_USERNAME") or "chintukumaredu00@gmail.com"
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
 
+# HTTPS Transactional Email APIs (Recommended for Cloud Deployments like Render Free Tier)
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
+EMAIL_WEBHOOK_URL = os.getenv("EMAIL_WEBHOOK_URL", "")
+
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER", "")
