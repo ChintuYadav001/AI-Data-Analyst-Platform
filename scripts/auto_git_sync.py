@@ -4,6 +4,12 @@ import time
 import subprocess
 from datetime import datetime
 
+try:
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
+
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_FILE = os.path.join(REPO_DIR, "data", "git_sync.log")
 
