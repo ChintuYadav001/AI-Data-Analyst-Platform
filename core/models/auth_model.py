@@ -210,52 +210,50 @@ class AuthModel:
         so it cannot be reused. Accepts active OTPs in either is_verified = 0 (unverified)
         or is_verified = 1 (pre-verified via verify_otp endpoint).
         """
-        target = target.strip().lower()
         otp_code = str(otp_code).strip()
         if not otp_code:
             return False
-        now_str = datetime.now(timezone.utc).isoformat()
+        variations = _get_target_variations(target)
 
         with _get_connection() as conn:
             cursor = conn.cursor()
-            # 1. Check in unified otps table
-            cursor.execute(
-                """
-                SELECT id, expires_at FROM otps
-                WHERE target = ? AND otp_code = ? AND is_verified IN (0, 1)
-                ORDER BY created_at DESC LIMIT 1
-                """,
-                (target, otp_code)
-            )
-            row = cursor.fetchone()
-            if row:
-                if row["expires_at"] < now_str:
-                    return False
-                cursor.execute("UPDATE otps SET is_verified = 2 WHERE id = ?", (row["id"],))
-                # Also mark legacy if duplicate exists
-                cursor.execute("UPDATE email_otps SET is_verified = 2 WHERE email = ? AND otp_code = ?", (target, otp_code))
-                conn.commit()
-                return True
+            for t in variations:
+                # 1. Check in unified otps table
+                cursor.execute(
+                    """
+                    SELECT id, expires_at FROM otps
+                    WHERE target = ? AND otp_code = ? AND is_verified IN (0, 1)
+                    ORDER BY created_at DESC LIMIT 1
+                    """,
+                    (t, otp_code)
+                )
+                row = cursor.fetchone()
+                if row:
+                    if _is_expired(row["expires_at"]):
+                        return False
+                    cursor.execute("UPDATE otps SET is_verified = 2 WHERE id = ?", (row["id"],))
+                    # Also mark legacy if duplicate exists
+                    cursor.execute("UPDATE email_otps SET is_verified = 2 WHERE email = ? AND otp_code = ?", (t, otp_code))
+                    conn.commit()
+                    return True
 
-            # 2. Check legacy email_otps table
-            cursor.execute(
-                """
-                SELECT id, expires_at FROM email_otps
-                WHERE email = ? AND otp_code = ? AND is_verified IN (0, 1)
-                ORDER BY created_at DESC LIMIT 1
-                """,
-                (target, otp_code)
-            )
-            legacy_row = cursor.fetchone()
-            if not legacy_row:
-                return False
-
-            if legacy_row["expires_at"] < now_str:
-                return False
-
-            cursor.execute("UPDATE email_otps SET is_verified = 2 WHERE id = ?", (legacy_row["id"],))
-            conn.commit()
-            return True
+                # 2. Check legacy email_otps table
+                cursor.execute(
+                    """
+                    SELECT id, expires_at FROM email_otps
+                    WHERE email = ? AND otp_code = ? AND is_verified IN (0, 1)
+                    ORDER BY created_at DESC LIMIT 1
+                    """,
+                    (t, otp_code)
+                )
+                legacy_row = cursor.fetchone()
+                if legacy_row:
+                    if _is_expired(legacy_row["expires_at"]):
+                        return False
+                    cursor.execute("UPDATE email_otps SET is_verified = 2 WHERE id = ?", (legacy_row["id"],))
+                    conn.commit()
+                    return True
+        return False
 
     def register(
         self,
@@ -293,8 +291,17 @@ class AuthModel:
             if not otp_code or not str(otp_code).strip():
                 raise ValueError("One-Time Password (OTP) verification code is required.")
             clean_otp = str(otp_code).strip()
-            # Verify and consume the OTP directly for either target: email or phone
-            verified = self.verify_and_consume_otp(email, clean_otp) or (bool(clean_phone) and self.verify_and_consume_otp(clean_phone, clean_otp))
+            # Verify and consume the OTP directly against email, phone, or username
+            candidates = [email]
+            if clean_phone:
+                candidates.append(clean_phone)
+            if username:
+                candidates.append(username)
+            verified = False
+            for cand in candidates:
+                if self.verify_and_consume_otp(cand, clean_otp):
+                    verified = True
+                    break
             if not verified:
                 raise ValueError("Invalid or expired One-Time Password (OTP). Please request a new code.")
 
