@@ -94,7 +94,9 @@ def run_autonomous_1click_pipeline(
         raise ValueError(f"Target column '{target_col}' has too few non-null records ({len(valid_df)}).")
 
     # Determine task type
-    task_type = classify_task_type(valid_df[target_col])
+    task_type = classify_task_type(valid_df, target_col)
+    if task_type == "unsupported":
+        task_type = "binary_classification" if valid_df[target_col].nunique() == 2 else "regression"
     is_classification = "classification" in task_type
 
     notify(1, "Data Collection & Ingestion", {
