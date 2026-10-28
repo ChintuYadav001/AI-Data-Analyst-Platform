@@ -303,6 +303,25 @@
         }
       },
       "active_version": "dataset_v1"
+    },
+    "ds_f32593dd": {
+      "dataset_id": "ds_f32593dd",
+      "name": "Titanic",
+      "dataset_hash": "4a437fde05fe5264",
+      "created_at": 1793217561.716977,
+      "versions": {
+        "dataset_v1": {
+          "parquet_path": "D:\\antigrevity_project\\data analyse\\data\\parquet\\4a437fde05fe5264.parquet",
+          "rows": 891,
+          "columns": 12,
+          "registered_at": 1793217561.7169807,
+          "lineage": {
+            "source_file": "titanic.csv",
+            "source_type": "csv"
+          }
+        }
+      },
+      "active_version": "dataset_v1"
     }
   },
   "hashes": {
@@ -310,7 +329,7 @@
     "b7023dfb6a09560f": "ds_07c9874d",
     "10a90d26b6f6cada": "ds_f0fc83ff",
     "2d594c24215cd8d6": "ds_d4c1e5d6",
-    "4a437fde05fe5264": "ds_9c3b8718",
+    "4a437fde05fe5264": "ds_f32593dd",
     "97f5dfae139737aa": "ds_dafc683c",
     "a98aed91784974ec": "ds_4f788338",
     "e90ad92359001b26": "ds_6e69a7a9",
