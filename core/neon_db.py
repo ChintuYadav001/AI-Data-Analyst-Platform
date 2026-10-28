@@ -18,9 +18,11 @@ import re
 import time
 import logging
 from typing import Dict, Any, List, Optional, Tuple
+from dotenv import load_dotenv
 import pandas as pd
 import numpy as np
 
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 
