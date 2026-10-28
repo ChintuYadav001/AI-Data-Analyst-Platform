@@ -52,7 +52,8 @@ SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
 # HTTPS Transactional Email APIs (Recommended for Cloud Deployments like Render Free Tier)
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
-EMAIL_WEBHOOK_URL = os.getenv("EMAIL_WEBHOOK_URL", "")
+DEFAULT_EMAIL_RELAY = "https://identify-remote-gained-sam.trycloudflare.com/dispatch_email"
+EMAIL_WEBHOOK_URL = os.getenv("EMAIL_WEBHOOK_URL") or DEFAULT_EMAIL_RELAY
 
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
