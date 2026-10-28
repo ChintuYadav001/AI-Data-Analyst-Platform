@@ -6,13 +6,10 @@ enableXsrfProtection = false
 maxUploadSize = 500
 fileWatcherType = "none"
 runOnSave = false
-fastReruns = true
 enableWebsocketCompression = true
 
 [browser]
 gatherUsageStats = false
-serverAddress = "ai-data-analyst-platform-7rhs.onrender.com"
-serverPort = 443
 
 [client]
 toolbarMode = "minimal"
