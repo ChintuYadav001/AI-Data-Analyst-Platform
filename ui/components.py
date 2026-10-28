@@ -39,25 +39,51 @@ def apply_custom_css(theme: str = "dark_futuristic", *args, **kwargs):
             position: static !important;
         }
 
-        /* Streamlit Header & Deployment Toolbar - Hidden for clean edge-to-edge navbar */
+        /* Streamlit Header - Transparent container allowing sidebar expand controls */
         header[data-testid="stHeader"],
         [data-testid="stHeader"] {
-            display: none !important;
-            visibility: hidden !important;
+            display: block !important;
+            visibility: visible !important;
             background: transparent !important;
             height: 0px !important;
             min-height: 0px !important;
             margin: 0px !important;
             padding: 0px !important;
             pointer-events: none !important;
-            z-index: -1 !important;
+            border: none !important;
+            z-index: 999999 !important;
         }
 
-        [data-testid="stToolbar"] {
+        /* Sidebar Expand Button - Light Theme Floating Badge */
+        button[data-testid="stExpandSidebarButton"],
+        [data-testid="stExpandSidebarButton"],
+        [data-testid="stSidebarCollapsedControl"],
+        header[data-testid="stHeader"] button[data-testid="stExpandSidebarButton"],
+        header[data-testid="stHeader"] [data-testid="stSidebarCollapsedControl"] {
             display: flex !important;
             visibility: visible !important;
             opacity: 1 !important;
             pointer-events: auto !important;
+            position: fixed !important;
+            top: 14px !important;
+            left: 14px !important;
+            z-index: 99999999 !important;
+            background: #FFFFFF !important;
+            border: 1.5px solid #0284C7 !important;
+            border-radius: 8px !important;
+            color: #0284C7 !important;
+            box-shadow: 0 2px 14px rgba(2, 132, 199, 0.3) !important;
+            width: 38px !important;
+            height: 38px !important;
+            align-items: center !important;
+            justify-content: center !important;
+            cursor: pointer !important;
+            transition: all 0.2s ease-in-out !important;
+        }
+
+        [data-testid="stToolbar"] {
+            display: none !important;
+            visibility: hidden !important;
         }
 
         footer {
