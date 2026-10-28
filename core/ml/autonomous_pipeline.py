@@ -210,19 +210,27 @@ def run_autonomous_1click_pipeline(
     engineered_df = clean_df.copy()
     new_features_created = []
 
-    # Derive interaction ratio features if at least 2 numeric features exist
-    available_nums = [c for c in numeric_for_outliers if c in engineered_df.columns]
+    # 1. Apply high-impact domain sales and business feature engineering (Product Category, Region, Discount, Volume, Seasonality)
+    try:
+        engineered_df, sales_biz_feats = engineer_sales_and_business_features(engineered_df, target_col)
+        new_features_created.extend(sales_biz_feats)
+    except Exception:
+        pass
+
+    # 2. Derive interaction ratio features if at least 2 numeric features exist
+    available_nums = [c for c in numeric_for_outliers if c in engineered_df.columns and pd.api.types.is_numeric_dtype(engineered_df[c])]
     if len(available_nums) >= 2:
         col1 = available_nums[0]
         col2 = available_nums[1]
         try:
             ratio_name = f"{col1}_per_{col2}"
-            engineered_df[ratio_name] = engineered_df[col1] / (engineered_df[col2].abs() + 1e-5)
-            new_features_created.append(ratio_name)
+            if ratio_name not in engineered_df.columns:
+                engineered_df[ratio_name] = engineered_df[col1] / (engineered_df[col2].abs() + 1e-5)
+                new_features_created.append(ratio_name)
         except Exception:
             pass
 
-    # Extract date parts if datetime strings exist
+    # 3. Extract date parts if datetime strings exist
     for col in engineered_df.columns:
         if col != target_col and ("date" in col.lower() or "time" in col.lower()):
             try:
@@ -230,9 +238,10 @@ def run_autonomous_1click_pipeline(
                 if dt_series.notna().sum() > len(engineered_df) * 0.7:
                     day_col = f"{col}_dayofweek"
                     month_col = f"{col}_month"
-                    engineered_df[day_col] = dt_series.dt.dayofweek.fillna(0)
-                    engineered_df[month_col] = dt_series.dt.month.fillna(0)
-                    new_features_created.extend([day_col, month_col])
+                    if day_col not in engineered_df.columns:
+                        engineered_df[day_col] = dt_series.dt.dayofweek.fillna(0)
+                        engineered_df[month_col] = dt_series.dt.month.fillna(0)
+                        new_features_created.extend([day_col, month_col])
             except Exception:
                 pass
 
@@ -287,14 +296,30 @@ def run_autonomous_1click_pipeline(
     # =========================================================================
     # STEP 6: SELECT & TRAIN ML MODEL
     # =========================================================================
-    # Determine the model ID based on user selection or auto
-    chosen_model_id = preferred_model_id
-    if chosen_model_id == "auto" or not chosen_model_id:
+    # Map short names if passed from UI dropdown
+    if preferred_model_id == "xgboost":
+        chosen_model_id = "xgboost_classifier" if is_classification else "xgboost_regressor"
+    elif preferred_model_id == "random_forest":
+        chosen_model_id = "random_forest_classifier" if is_classification else "random_forest_regressor"
+    elif preferred_model_id == "decision_tree":
+        chosen_model_id = "decision_tree_classifier" if is_classification else "decision_tree_regressor"
+    elif preferred_model_id == "hist_gradient_boosting":
+        chosen_model_id = "hist_gradient_boosting_classifier" if is_classification else "hist_gradient_boosting_regressor"
+    elif preferred_model_id == "linear_logistic":
+        chosen_model_id = "logistic_regression" if is_classification else "linear_regression"
+    elif preferred_model_id == "extra_trees":
+        chosen_model_id = "extra_trees_classifier" if is_classification else "extra_trees_regressor"
+    elif preferred_model_id == "auto" or not preferred_model_id:
         if is_classification:
-            # Default to Random Forest (robust, high accuracy, non-linear) or HistGradientBoosting for larger data
             chosen_model_id = "hist_gradient_boosting_classifier" if len(clean_df) > 10000 else "random_forest_classifier"
         else:
             chosen_model_id = "hist_gradient_boosting_regressor" if len(clean_df) > 10000 else "random_forest_regressor"
+    else:
+        chosen_model_id = preferred_model_id
+
+    # Fallback if chosen model requires optional package not present
+    if "xgboost" in chosen_model_id and not XGB_AVAILABLE:
+        chosen_model_id = "hist_gradient_boosting_classifier" if is_classification else "hist_gradient_boosting_regressor"
 
     # Verify model exists in registry or pick fallback
     if chosen_model_id not in REGISTRY:
@@ -305,6 +330,15 @@ def run_autonomous_1click_pipeline(
 
     model_meta = REGISTRY.get(chosen_model_id)
     model_name = model_meta.name if model_meta else chosen_model_id
+
+    # Target Log-Transformation Check (np.log1p / np.expm1)
+    is_log_transformed = False
+    if not is_classification:
+        target_num = pd.to_numeric(y_train, errors="coerce").dropna()
+        target_skew = float(target_num.skew()) if len(target_num) > 2 else 0.0
+        target_non_neg = bool((target_num >= 0).all()) if len(target_num) > 0 else False
+        if target_non_neg and (use_log_transform is True or (str(use_log_transform).lower() == "auto" and target_skew > 0.85)):
+            is_log_transformed = True
 
     # Build memory-safe preprocessing pipeline
     preprocessor, col_types = build_preprocessor(
@@ -317,11 +351,14 @@ def run_autonomous_1click_pipeline(
     # Instantiate estimator
     base_estimator = create_model_instance(chosen_model_id)
 
-    # Wrap classification with LabelEncoder wrapper for string/bool class compatibility
+    # Wrap classification with LabelEncoder wrapper or regression with LogTransformedRegressor
     if is_classification:
         estimator = LabelEncodedClassifier(base_estimator=base_estimator)
     else:
-        estimator = base_estimator
+        if is_log_transformed:
+            estimator = LogTransformedRegressor(base_estimator=base_estimator)
+        else:
+            estimator = base_estimator
 
     # Fit preprocessor on training data
     fit_start = time.perf_counter()
@@ -332,12 +369,52 @@ def run_autonomous_1click_pipeline(
     estimator.fit(X_train_trans, y_train.values)
     fit_time = round(time.perf_counter() - fit_start, 3)
 
+    # Multi-Algorithm Comparison Benchmarking for Model Improvement Cockpit
+    algo_comparison = []
+    if not is_classification:
+        benchmark_candidates = [
+            ("linear_regression", "Linear Regression (OLS Baseline)"),
+            ("random_forest_regressor", "Random Forest Regressor"),
+            ("hist_gradient_boosting_regressor", "HistGradientBoosting"),
+        ]
+        if XGB_AVAILABLE:
+            benchmark_candidates.append(("xgboost_regressor", "XGBoost Regressor (Extreme Boosting)"))
+
+        for b_id, b_name in benchmark_candidates:
+            try:
+                b_est = LogTransformedRegressor(base_estimator=create_model_instance(b_id)) if is_log_transformed else create_model_instance(b_id)
+                b_t0 = time.perf_counter()
+                b_est.fit(X_train_trans, y_train.values)
+                b_elapsed = round(time.perf_counter() - b_t0, 3)
+                b_pred_test = b_est.predict(X_test_trans)
+                b_pred_train = b_est.predict(X_train_trans)
+                b_r2 = round(float(r2_score(y_test.values, b_pred_test)), 4)
+                b_mae = round(float(mean_absolute_error(y_test.values, b_pred_test)), 4)
+                b_rmse = round(float(np.sqrt(mean_squared_error(y_test.values, b_pred_test))), 4)
+                b_train_r2 = round(float(r2_score(y_train.values, b_pred_train)), 4)
+                algo_comparison.append({
+                    "model_id": b_id,
+                    "model_name": b_name,
+                    "test_r2": b_r2,
+                    "test_rmse": b_rmse,
+                    "test_mae": b_mae,
+                    "train_r2": b_train_r2,
+                    "fit_gap": round(b_train_r2 - b_r2, 4),
+                    "latency_sec": b_elapsed,
+                    "is_selected": (b_id == chosen_model_id),
+                })
+            except Exception:
+                pass
+        algo_comparison.sort(key=lambda x: x["test_r2"], reverse=True)
+
     notify(6, "Model Selection & Training", {
         "status": "Success",
         "selected_model_id": chosen_model_id,
         "selected_model_name": model_name,
         "task_family": getattr(model_meta, "family", "ensemble") if model_meta else "ensemble",
         "training_time_seconds": fit_time,
+        "is_log_transformed": is_log_transformed,
+        "algorithm_comparison": algo_comparison,
     })
 
     # =========================================================================
@@ -355,7 +432,10 @@ def run_autonomous_1click_pipeline(
                 X_tr, X_va = X_train_trans[train_idx], X_train_trans[val_idx]
                 y_tr, y_va = y_train.iloc[train_idx], y_train.iloc[val_idx]
                 
-                fold_model = LabelEncodedClassifier(base_estimator=create_model_instance(chosen_model_id)) if is_classification else create_model_instance(chosen_model_id)
+                if is_classification:
+                    fold_model = LabelEncodedClassifier(base_estimator=create_model_instance(chosen_model_id))
+                else:
+                    fold_model = LogTransformedRegressor(base_estimator=create_model_instance(chosen_model_id)) if is_log_transformed else create_model_instance(chosen_model_id)
                 fold_model.fit(X_tr, y_tr.values)
                 preds_va = fold_model.predict(X_va)
                 
@@ -380,9 +460,12 @@ def run_autonomous_1click_pipeline(
     # STEP 8: MODEL EVALUATION ON UNSEEN DATA
     # =========================================================================
     test_preds = estimator.predict(X_test_trans)
+    train_preds = estimator.predict(X_train_trans)
     metrics_report = {}
     cm_matrix = None
     classes_list = None
+    improvement_diag = None
+    eval_warnings = []
 
     if is_classification:
         y_test_str = y_test.astype(str).values
@@ -417,21 +500,29 @@ def run_autonomous_1click_pipeline(
         }
     else:
         y_test_arr = y_test.values
-        mae = float(mean_absolute_error(y_test_arr, test_preds))
-        mse = float(mean_squared_error(y_test_arr, test_preds))
-        rmse = float(math.sqrt(mse))
-        r2 = float(r2_score(y_test_arr, test_preds))
-        
-        # Mean Absolute Percentage Error
-        non_zero = y_test_arr != 0
-        mape = float(np.mean(np.abs((y_test_arr[non_zero] - test_preds[non_zero]) / y_test_arr[non_zero])) * 100) if np.sum(non_zero) > 0 else 0.0
+        y_train_arr = y_train.values
+
+        # Comprehensive evaluation with underfitting diagnosis and high-sales underestimation check
+        eval_res = evaluate_regression(
+            y_true=y_test_arr,
+            y_pred=test_preds,
+            y_train_true=y_train_arr,
+            y_train_pred=train_preds,
+        )
+        reg_metrics = eval_res["metrics"]
+        improvement_diag = eval_res["improvement_diagnostics"]
+        eval_warnings = eval_res["warnings"]
 
         metrics_report = {
-            "R2_Score": round(r2, 4),
-            "R2_Percentage": f"{round(max(0, r2) * 100, 2)}%",
-            "MAE": round(mae, 4),
-            "RMSE": round(rmse, 4),
-            "MAPE": f"{round(mape, 2)}%",
+            "R2_Score": reg_metrics["r2"],
+            "R2_Percentage": f"{round(max(0, reg_metrics['r2']) * 100, 2)}%",
+            "MAE": reg_metrics["mae"],
+            "RMSE": reg_metrics["rmse"],
+            "Train_R2": reg_metrics.get("train_r2"),
+            "Train_MAE": reg_metrics.get("train_mae"),
+            "Train_RMSE": reg_metrics.get("train_rmse"),
+            "RMSE_MAE_Ratio": reg_metrics.get("rmse_mae_ratio", 1.0),
+            "MAPE": f"{round(reg_metrics.get('mape', 0.0) * 100, 2)}%",
         }
 
     # Feature importances
@@ -449,6 +540,10 @@ def run_autonomous_1click_pipeline(
         "confusion_matrix": cm_matrix,
         "classes": classes_list,
         "top_features": feat_importance["ranked_features"][:8],
+        "improvement_diagnostics": improvement_diag,
+        "algorithm_comparison": algo_comparison,
+        "is_log_transformed": is_log_transformed,
+        "warnings": eval_warnings,
     })
 
     # =========================================================
