@@ -351,7 +351,7 @@ def run_autonomous_1click_pipeline(
                 X_tr, X_va = X_train_trans[train_idx], X_train_trans[val_idx]
                 y_tr, y_va = y_train.iloc[train_idx], y_train.iloc[val_idx]
                 
-                fold_model = LabelEncodedClassifier(base_estimator=create_model_instance(chosen_model_id, random_state=42)) if is_classification else create_model_instance(chosen_model_id, random_state=42)
+                fold_model = LabelEncodedClassifier(base_estimator=create_model_instance(chosen_model_id)) if is_classification else create_model_instance(chosen_model_id)
                 fold_model.fit(X_tr, y_tr.values)
                 preds_va = fold_model.predict(X_va)
                 
