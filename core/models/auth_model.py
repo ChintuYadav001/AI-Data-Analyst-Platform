@@ -264,7 +264,8 @@ class AuthModel:
         phone: Optional[str] = None,
         role: str = 'analyst',
         otp_code: Optional[str] = None,
-        require_otp: bool = True
+        require_otp: bool = True,
+        otp_target: Optional[str] = None
     ) -> Dict[str, Any]:
         username = username.strip().lower()
         email = email.strip().lower()
@@ -291,12 +292,14 @@ class AuthModel:
             if not otp_code or not str(otp_code).strip():
                 raise ValueError("One-Time Password (OTP) verification code is required.")
             clean_otp = str(otp_code).strip()
-            # Verify and consume the OTP directly against email, phone, or username
+            # Verify and consume the OTP directly against email, phone, username, or explicit target
             candidates = [email]
             if clean_phone:
                 candidates.append(clean_phone)
             if username:
                 candidates.append(username)
+            if otp_target and str(otp_target).strip():
+                candidates.append(str(otp_target).strip())
             verified = False
             for cand in candidates:
                 if self.verify_and_consume_otp(cand, clean_otp):
