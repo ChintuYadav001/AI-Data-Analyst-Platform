@@ -153,3 +153,92 @@ def generate_time_series_features(
             res_df[f"{target_col}_roll_std_{w}"] = s.shift(1).rolling(w).std()
 
     return res_df
+
+
+def engineer_sales_and_business_features(
+    df: pd.DataFrame,
+    target_col: Optional[str] = None,
+) -> Tuple[pd.DataFrame, List[str]]:
+    """
+    Automatically detects and constructs high-impact domain features for predictive sales,
+    revenue, and business models:
+    1. Product Category & Region domain groupings
+    2. Pricing, Discount, and Quantity volume cross-product interactions
+    3. Calendar & Seasonality indicators (month, quarter, day of week, cyclical sine/cosine)
+    """
+    res_df = df.copy()
+    new_features = []
+    cols_lower = {c: c.lower().strip() for c in res_df.columns}
+
+    # 1. Detect Pricing, Discount, and Volume/Quantity columns
+    qty_col = next((c for c, l in cols_lower.items() if l in ["quantity", "qty", "units", "units_sold", "order_quantity", "volume"] and c != target_col), None)
+    price_col = next((c for c, l in cols_lower.items() if l in ["price", "unit_price", "unitprice", "item_price", "rate"] and c != target_col), None)
+    discount_col = next((c for c, l in cols_lower.items() if l in ["discount", "discount_rate", "discount_pct", "discount_percent"] and c != target_col), None)
+    profit_col = next((c for c, l in cols_lower.items() if l in ["profit", "margin", "net_profit"] and c != target_col), None)
+
+    # Derive interaction features
+    if qty_col and price_col and pd.api.types.is_numeric_dtype(res_df[qty_col]) and pd.api.types.is_numeric_dtype(res_df[price_col]):
+        feat_name = f"{qty_col}_x_{price_col}_gross_val"
+        res_df[feat_name] = res_df[qty_col] * res_df[price_col]
+        new_features.append(feat_name)
+
+    if price_col and discount_col and pd.api.types.is_numeric_dtype(res_df[price_col]) and pd.api.types.is_numeric_dtype(res_df[discount_col]):
+        # Normalize discount if represented as percentage 0-100
+        disc_series = res_df[discount_col].astype(float)
+        if disc_series.max() > 1.0:
+            disc_series = disc_series / 100.0
+
+        feat_disc_price = f"{price_col}_net_after_discount"
+        res_df[feat_disc_price] = res_df[price_col] * (1.0 - disc_series)
+        new_features.append(feat_disc_price)
+
+        feat_disc_amt = f"{price_col}_discount_amount"
+        res_df[feat_disc_amt] = res_df[price_col] * disc_series
+        new_features.append(feat_disc_amt)
+
+    if profit_col and target_col and target_col in res_df.columns and pd.api.types.is_numeric_dtype(res_df[profit_col]) and pd.api.types.is_numeric_dtype(res_df[target_col]):
+        feat_margin = f"{profit_col}_ratio_to_target"
+        res_df[feat_margin] = res_df[profit_col] / (res_df[target_col].abs() + 1e-5)
+        new_features.append(feat_margin)
+
+    # 2. Seasonality & Calendar features from Datetime columns
+    for c, l in cols_lower.items():
+        if c == target_col:
+            continue
+        # Check if column contains date/time or is datetime dtype
+        is_dt = pd.api.types.is_datetime64_any_dtype(res_df[c])
+        if not is_dt and any(k in l for k in ["date", "time", "order_date", "timestamp", "period", "day"]):
+            try:
+                dt_parsed = pd.to_datetime(res_df[c], errors="coerce")
+                if dt_parsed.notna().sum() > len(res_df) * 0.6:
+                    is_dt = True
+                    dt_series = dt_parsed
+            except Exception:
+                pass
+        elif is_dt:
+            dt_series = res_df[c]
+
+        if is_dt and 'dt_series' in locals():
+            # Extract month, quarter, day of week, day of year, weekend
+            m_col = f"{c}_month"
+            q_col = f"{c}_quarter"
+            dow_col = f"{c}_dayofweek"
+            wknd_col = f"{c}_is_weekend"
+            doy_col = f"{c}_dayofyear"
+            
+            res_df[m_col] = dt_series.dt.month.fillna(1).astype(int)
+            res_df[q_col] = dt_series.dt.quarter.fillna(1).astype(int)
+            res_df[dow_col] = dt_series.dt.dayofweek.fillna(0).astype(int)
+            res_df[wknd_col] = (dt_series.dt.dayofweek >= 5).astype(int)
+            res_df[doy_col] = dt_series.dt.dayofyear.fillna(1).astype(int)
+
+            # Cyclical seasonality transformations (sine/cosine)
+            sin_m = f"{c}_month_sin"
+            cos_m = f"{c}_month_cos"
+            res_df[sin_m] = np.sin(2 * np.pi * res_df[m_col] / 12.0)
+            res_df[cos_m] = np.cos(2 * np.pi * res_df[m_col] / 12.0)
+
+            new_features.extend([m_col, q_col, dow_col, wknd_col, doy_col, sin_m, cos_m])
+
+    return res_df, new_features
+
