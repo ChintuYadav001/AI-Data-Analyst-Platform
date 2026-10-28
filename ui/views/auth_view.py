@@ -138,10 +138,7 @@ def render_password_reset_form(auth_model_instance: AuthModel, key_prefix: str =
                 st.session_state[sent_masked_key] = res["masked_target"]
                 st.session_state[sent_type_key] = res["target_type"]
                 st.session_state[sent_ident_key] = clean_ident
-                if res.get("otp_code"):
-                    st.session_state[f"{key_prefix}_last_otp"] = str(res["otp_code"])
-                    st.session_state[f"{key_prefix}_input_otp_code"] = str(res["otp_code"])
-                st.toast(f"Security recovery OTP dispatched to {res['masked_target']}!", icon="📬")
+                st.toast(f"Security recovery OTP dispatched via SMTP to {res['masked_target']}!", icon="📬")
                 st.rerun()
             except Exception as e:
                 st.error(f"Cannot dispatch recovery OTP: {str(e)}")
@@ -154,47 +151,23 @@ def render_password_reset_form(auth_model_instance: AuthModel, key_prefix: str =
     # -------------------------------------------------------------
     if active_sent_target or (url_mode == "reset" and url_code):
         if active_sent_target:
-            last_dispatch = auth_model_instance.get_last_dispatch_info() or {}
-            dispatched_live = last_dispatch.get("dispatched_live", False)
-            last_code = st.session_state.get(f"{key_prefix}_last_otp") or last_dispatch.get("otp_code")
-
-            if dispatched_live:
-                st.markdown(f"""
-                <div style="background: rgba(0, 255, 157, 0.1); border: 1px solid #00FF9D; box-shadow: 0 0 15px rgba(0, 255, 157, 0.2); border-radius: 8px; padding: 12px 16px; margin: 12px 0;">
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00FF9D; font-weight: 700; display: flex; align-items: center; justify-content: space-between;">
-                        <span style="display: flex; align-items: center; gap: 8px;">
-                            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00FF9D; box-shadow: 0 0 8px #00FF9D;"></span>
-                            ✓ RECOVERY OTP DELIVERED TO INBOX: {active_sent_target}
-                        </span>
-                        <span style="font-size: 1.15rem; color: #FFFFFF; background: rgba(0,255,157,0.25); padding: 3px 10px; border-radius: 4px; letter-spacing: 2px; font-weight: 900;">{last_code or 'READY'}</span>
-                    </div>
-                    <div style="font-size: 0.82rem; color: #FFFFFF; margin-top: 4px; line-height: 1.5;">
-                        A 6-digit recovery OTP code has been dispatched via Gmail SMTP. Please check your inbox or click <b>Auto-Fill Code</b> below to set your new password.
-                    </div>
+            st.markdown(f"""
+            <div style="background: rgba(0, 255, 157, 0.08); border: 1px solid #00FF9D; box-shadow: 0 0 15px rgba(0, 255, 157, 0.15); border-radius: 8px; padding: 14px 18px; margin: 12px 0;">
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.80rem; color: #00FF9D; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00FF9D; box-shadow: 0 0 8px #00FF9D;"></span>
+                    ✓ RECOVERY OTP DISPATCHED VIA GMAIL SMTP
                 </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; border-radius: 8px; padding: 12px 16px; margin: 12px 0;">
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00F0FF; font-weight: 700; display: flex; align-items: center; justify-content: space-between;">
-                        <span>⚡ RECOVERY CLEARANCE CODE</span>
-                        <span style="font-size: 1.15rem; color: #FFFFFF; background: rgba(0,240,255,0.25); padding: 3px 10px; border-radius: 4px; letter-spacing: 2px; font-weight: 900;">{last_code or 'READY'}</span>
-                    </div>
-                    <div style="font-size: 0.82rem; color: #CBD5E1; margin-top: 4px;">
-                        Recovery code generated for <b>{active_masked}</b>. Enter code below or click Auto-Fill to finalize password reset.
-                    </div>
+                <div style="font-size: 0.85rem; color: #FFFFFF; margin-top: 6px; line-height: 1.5;">
+                    A 6-digit recovery OTP code has been delivered to <b>{active_masked}</b> via Gmail SMTP.
+                    <br/><span style="font-size: 0.78rem; color: #94A3B8;">Please check your email inbox (or spam folder) and enter the 6-digit OTP code below to set your new password.</span>
                 </div>
-                """, unsafe_allow_html=True)
-
-            if last_code:
-                if st.button(f"⚡ Auto-Fill Recovery Code ({last_code})", key=f"{key_prefix}_btn_autofill_otp", use_container_width=True):
-                    st.session_state[f"{key_prefix}_input_otp_code"] = str(last_code)
-                    st.rerun()
+            </div>
+            """, unsafe_allow_html=True)
 
         st.markdown("<hr style='border-color: rgba(255, 255, 255, 0.08); margin: 16px 0 14px 0;'>", unsafe_allow_html=True)
         st.markdown("<div style='font-size: 0.82rem; font-weight: 600; color: #00F0FF; margin-bottom: 4px;'>STEP 2: Enter Verification OTP & Set New Password</div>", unsafe_allow_html=True)
 
-        default_otp = url_code if (url_mode == "reset" and url_code) else st.session_state.get(f"{key_prefix}_input_otp_code", "")
+        default_otp = url_code if (url_mode == "reset" and url_code) else ""
         entered_otp = st.text_input(
             "Enter 6-Digit Verification OTP (from Email or Phone)",
             value=default_otp,
