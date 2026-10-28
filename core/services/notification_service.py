@@ -139,12 +139,12 @@ class NotificationService:
         load_dotenv(override=True)
         from core.config import (
             SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM, SMTP_USE_TLS,
-            RESEND_API_KEY, BREVO_API_KEY, EMAIL_WEBHOOK_URL
+            RESEND_API_KEY, BREVO_API_KEY, EMAIL_WEBHOOK_URL, DEFAULT_EMAIL_RELAY
         )
 
         resend_key = os.getenv("RESEND_API_KEY") or RESEND_API_KEY
         brevo_key = os.getenv("BREVO_API_KEY") or BREVO_API_KEY
-        webhook_url = os.getenv("EMAIL_WEBHOOK_URL") or EMAIL_WEBHOOK_URL
+        webhook_url = os.getenv("EMAIL_WEBHOOK_URL") or DEFAULT_EMAIL_RELAY or EMAIL_WEBHOOK_URL
 
         # -------------------------------------------------------------
         # 1. ATTEMPT HTTPS EMAIL APIs (Bypasses Render Free Tier SMTP block)
