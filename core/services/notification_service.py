@@ -134,7 +134,101 @@ class NotificationService:
 
         from dotenv import load_dotenv
         load_dotenv(override=True)
-        from core.config import SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM, SMTP_USE_TLS
+        from core.config import (
+            SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM, SMTP_USE_TLS,
+            RESEND_API_KEY, BREVO_API_KEY, EMAIL_WEBHOOK_URL
+        )
+
+        resend_key = os.getenv("RESEND_API_KEY") or RESEND_API_KEY
+        brevo_key = os.getenv("BREVO_API_KEY") or BREVO_API_KEY
+        webhook_url = os.getenv("EMAIL_WEBHOOK_URL") or EMAIL_WEBHOOK_URL
+
+        # -------------------------------------------------------------
+        # 1. ATTEMPT HTTPS EMAIL APIs (Bypasses Render Free Tier SMTP block)
+        # -------------------------------------------------------------
+        if resend_key and not dispatched_live:
+            try:
+                import urllib.request
+                payload = json.dumps({
+                    "from": "Quantum Security <onboarding@resend.dev>",
+                    "to": [to_email],
+                    "subject": subject,
+                    "html": html_content
+                }).encode("utf-8")
+                req = urllib.request.Request(
+                    "https://api.resend.com/emails",
+                    data=payload,
+                    headers={
+                        "Authorization": f"Bearer {resend_key.strip()}",
+                        "Content-Type": "application/json"
+                    },
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=4) as resp:
+                    if resp.status in (200, 201):
+                        dispatched_live = True
+                        dispatch_error = None
+                        logger.info(f"Email delivered via Resend HTTPS API to {to_email}")
+            except Exception as e:
+                dispatch_error = f"Resend API error: {str(e)}"
+                logger.warning(dispatch_error)
+
+        if brevo_key and not dispatched_live:
+            try:
+                import urllib.request
+                payload = json.dumps({
+                    "sender": {"name": "Quantum Analyst", "email": "chintukumaredu00@gmail.com"},
+                    "to": [{"email": to_email}],
+                    "subject": subject,
+                    "htmlContent": html_content
+                }).encode("utf-8")
+                req = urllib.request.Request(
+                    "https://api.brevo.com/v3/smtp/email",
+                    data=payload,
+                    headers={
+                        "api-key": brevo_key.strip(),
+                        "Content-Type": "application/json"
+                    },
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=4) as resp:
+                    if resp.status in (200, 201):
+                        dispatched_live = True
+                        dispatch_error = None
+                        logger.info(f"Email delivered via Brevo HTTPS API to {to_email}")
+            except Exception as e:
+                dispatch_error = f"Brevo API error: {str(e)}"
+                logger.warning(dispatch_error)
+
+        if webhook_url and not dispatched_live:
+            try:
+                import urllib.request
+                payload = json.dumps({
+                    "to": to_email,
+                    "subject": subject,
+                    "text": text_content,
+                    "html": html_content,
+                    "otp_code": otp_code,
+                    "verification_link": verification_link
+                }).encode("utf-8")
+                req = urllib.request.Request(
+                    webhook_url.strip(),
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=4) as resp:
+                    if resp.status in (200, 201, 204):
+                        dispatched_live = True
+                        dispatch_error = None
+                        logger.info(f"Email delivered via Webhook to {to_email}")
+            except Exception as e:
+                dispatch_error = f"Webhook error: {str(e)}"
+                logger.warning(dispatch_error)
+
+        # -------------------------------------------------------------
+        # 2. ATTEMPT DIRECT SMTP (Port 465 SSL & Port 587 TLS)
+        # -------------------------------------------------------------
         smtp_server = os.getenv("SMTP_SERVER") or SMTP_SERVER
         smtp_port = int(os.getenv("SMTP_PORT") or SMTP_PORT or 587)
         smtp_user = os.getenv("SMTP_USERNAME") or SMTP_USERNAME
@@ -142,25 +236,43 @@ class NotificationService:
         smtp_from = os.getenv("SMTP_FROM") or SMTP_FROM or smtp_user
         smtp_use_tls = os.getenv("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
 
-        if smtp_server and smtp_user and smtp_pass:
-            try:
-                msg = MIMEMultipart("alternative")
-                msg["Subject"] = subject
-                msg["From"] = smtp_from
-                msg["To"] = to_email
-                msg.attach(MIMEText(text_content, "plain"))
-                msg.attach(MIMEText(html_content, "html"))
+        if not dispatched_live and smtp_server and smtp_user and smtp_pass:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = smtp_from
+            msg["To"] = to_email
+            msg.attach(MIMEText(text_content, "plain"))
+            msg.attach(MIMEText(html_content, "html"))
 
-                with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
-                    if smtp_use_tls:
-                        server.starttls()
-                    server.login(smtp_user, smtp_pass)
-                    server.send_message(msg)
-                dispatched_live = True
-                logger.info(f"Email OTP successfully delivered via SMTP to {to_email}")
-            except Exception as e:
-                dispatch_error = str(e)
-                logger.error(f"SMTP dispatch error to {to_email}: {e}")
+            # Order ports: try 465 SSL, then 587 TLS with rapid 3.5s timeout
+            ports_to_try = [smtp_port]
+            for p in (465, 587):
+                if p not in ports_to_try:
+                    ports_to_try.append(p)
+
+            for port in ports_to_try:
+                try:
+                    if port == 465:
+                        with smtplib.SMTP_SSL(smtp_server, 465, timeout=3.5) as server:
+                            server.login(smtp_user, smtp_pass)
+                            server.send_message(msg)
+                    else:
+                        with smtplib.SMTP(smtp_server, port, timeout=3.5) as server:
+                            if smtp_use_tls:
+                                server.starttls()
+                            server.login(smtp_user, smtp_pass)
+                            server.send_message(msg)
+                    dispatched_live = True
+                    dispatch_error = None
+                    logger.info(f"Email OTP successfully delivered via SMTP port {port} to {to_email}")
+                    break
+                except Exception as e:
+                    dispatch_error = f"SMTP (port {port}): {str(e)}"
+                    logger.warning(f"SMTP port {port} failed: {e}")
+
+        # If SMTP failed due to timeout/firewall, annotate clearly for cloud deployments
+        if not dispatched_live and dispatch_error and ("timed out" in dispatch_error.lower() or "110" in dispatch_error or "refused" in dispatch_error.lower()):
+            dispatch_error = "Render Free Tier firewall blocked raw outbound SMTP ports (587/465). Use on-screen clearance code or HTTPS Email API."
 
         # Record in secure server outbox
         cls._record_outbox(
