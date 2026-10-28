@@ -5,16 +5,25 @@ services:
     region: oregon
     plan: free
     branch: main
-    buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    healthCheckPath: /
+    buildCommand: pip install --no-cache-dir -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true --server.fileWatcherType none
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: PYTHONUNBUFFERED
+        value: "1"
       - key: STREAMLIT_SERVER_HEADLESS
         value: "true"
+      - key: STREAMLIT_SERVER_FILE_WATCHER_TYPE
+        value: "none"
+      - key: STREAMLIT_SERVER_RUN_ON_SAVE
+        value: "false"
       - key: STREAMLIT_SERVER_ENABLE_CORS
         value: "false"
       - key: STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION
+        value: "false"
+      - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
         value: "false"
       - key: NEON_DATABASE_URL
         sync: false
