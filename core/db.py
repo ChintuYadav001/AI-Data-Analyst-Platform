@@ -379,6 +379,59 @@ def init_db(target_db_type: Optional[str] = None) -> None:
                 )
             """)
 
+        _seed_default_users(conn)
+
+
+def _seed_default_users(conn: DatabaseConnectionWrapper) -> None:
+    """Seed initial platform users if not already present."""
+    import hashlib
+    import os
+    import uuid
+    from datetime import datetime, timezone
+
+    users_to_seed = [
+        {
+            "username": "analyst",
+            "email": "analyst@quantum.ai",
+            "full_name": "Quantum Lead Analyst",
+            "phone": "+1 555-0199",
+            "role": "Lead Data Scientist",
+            "password": "QuantumPassword2026!",
+        },
+        {
+            "username": "chintu",
+            "email": "chintukumaredu00@gmail.com",
+            "full_name": "Chintu Kumar",
+            "phone": "+91 9262000000",
+            "role": "Executive BI Director",
+            "password": "QuantumPassword2026!",
+        }
+    ]
+
+    cursor = conn.cursor()
+    now = datetime.now(timezone.utc).isoformat()
+    for u in users_to_seed:
+        try:
+            cursor.execute("SELECT id FROM users WHERE username = ? OR email = ?", (u["username"], u["email"]))
+            if not cursor.fetchone():
+                salt = os.urandom(16).hex()
+                p_hash = hashlib.pbkdf2_hmac(
+                    'sha256',
+                    u["password"].encode('utf-8'),
+                    bytes.fromhex(salt),
+                    100_000
+                ).hex()
+                cursor.execute(
+                    """
+                    INSERT INTO users (id, username, email, phone, password_hash, salt, full_name, role, created_at, is_active)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    """,
+                    (str(uuid.uuid4()), u["username"], u["email"], u["phone"], p_hash, salt, u["full_name"], u["role"], now)
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Error seeding user {u['username']}: {e}")
+
 
 def sync_dataframe_to_sql(table_name: str, df: Any, project_name: str = "") -> bool:
     """Automatically writes and synchronizes a Pandas DataFrame into MySQL as a real table in analytics_platform."""
