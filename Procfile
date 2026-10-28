@@ -1,1 +1,1 @@
-web: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true --server.fileWatcherType none --server.enableWebsocketCompression true --server.fastReruns true
+web: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true --server.fileWatcherType none --server.enableWebsocketCompression true --server.fastReruns true --browser.serverAddress ai-data-analyst-platform-7rhs.onrender.com --browser.serverPort 443 --client.toolbarMode minimal
