@@ -186,7 +186,7 @@ def render_password_reset_form(auth_model_instance: AuthModel, key_prefix: str =
 
 
 def render_auth_view():
-    st.markdown("""
+    st.html("""
 <style>
 /* Clean Seamless Viewport - No Global Headers */
 section[data-testid="stSidebar"] {
@@ -299,7 +299,7 @@ div[data-testid="stPopover"] > button:hover {
     color: #00F0FF !important;
 }
 </style>
-""", unsafe_allow_html=True)
+""")
 
     is_auth = st.session_state.get("authenticated", False)
     user = st.session_state.get("user")
