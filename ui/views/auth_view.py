@@ -807,7 +807,9 @@ div[data-testid="stPopover"] > button:hover {
                 </div>
                 """, unsafe_allow_html=True)
 
-                logs = auth_model.list_login_logs(limit=50)
+                show_logs = st.toggle("🔍 Load Real-Time Security Audit Ledger", value=False, key="toggle_show_audit_logs")
+                if show_logs:
+                    logs = auth_model.list_login_logs(limit=25)
                 if logs:
                     df_logs = pd.DataFrame(logs)
                     
