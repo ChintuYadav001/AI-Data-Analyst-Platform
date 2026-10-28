@@ -1103,8 +1103,38 @@ def apply_custom_css(theme: str = "dark_futuristic", *args, **kwargs):
             margin: 0px !important;
             padding: 0px !important;
         }
+        iframe[height="0"],
+        div[data-testid="stElementContainer"]:has(iframe[height="0"]) {
+            display: none !important;
+            height: 0px !important;
+            width: 0px !important;
+            margin: 0px !important;
+            padding: 0px !important;
+        }
         </style>
         """)
+
+        import streamlit.components.v1 as _components
+        _components.html("""
+        <script>
+        (function() {
+            function autoExpandSidebar() {
+                try {
+                    var doc = window.parent ? window.parent.document : document;
+                    var sb = doc.querySelector('section[data-testid="stSidebar"]');
+                    var expBtn = doc.querySelector('button[data-testid="stExpandSidebarButton"]') || 
+                                 doc.querySelector('[data-testid="stSidebarCollapsedControl"] button');
+                    if (sb && sb.getAttribute('aria-expanded') === 'false' && expBtn) {
+                        expBtn.click();
+                    }
+                } catch(e) {}
+            }
+            setTimeout(autoExpandSidebar, 100);
+            setTimeout(autoExpandSidebar, 400);
+            setTimeout(autoExpandSidebar, 1200);
+        })();
+        </script>
+        """, height=0, width=0)
 
 @st.cache_data
 def get_logo_b64() -> str:
