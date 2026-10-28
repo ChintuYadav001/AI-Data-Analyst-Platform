@@ -546,7 +546,7 @@ def run_autonomous_1click_pipeline(
             "Train_MAE": reg_metrics.get("train_mae"),
             "Train_RMSE": reg_metrics.get("train_rmse"),
             "RMSE_MAE_Ratio": reg_metrics.get("rmse_mae_ratio", 1.0),
-            "MAPE": f"{round(reg_metrics.get('mape', 0.0) * 100, 2)}%",
+            "MAPE": f"{round(reg_metrics.get('mape', 0.0), 1)}%",
         }
 
     # Feature importances
