@@ -3,7 +3,10 @@ headless = true
 address = "0.0.0.0"
 enableCORS = false
 enableXsrfProtection = false
-maxUploadSize = 4096
+maxUploadSize = 500
+fileWatcherType = "none"
+runOnSave = false
+fastReruns = true
 
 [browser]
 gatherUsageStats = false
