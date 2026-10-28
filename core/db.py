@@ -207,9 +207,14 @@ def _get_sqlite_connection() -> DatabaseConnectionWrapper:
     return DatabaseConnectionWrapper(raw_conn, "sqlite")
 
 
+_initialized_dbs = set()
+
+
 def init_db(target_db_type: Optional[str] = None) -> None:
     """Initialise database schema (users, login_logs, otps, email_otps)."""
     db_mode = (target_db_type or get_db_type()).lower()
+    if db_mode in _initialized_dbs:
+        return
 
     with get_connection(db_mode) as conn:
         cursor = conn.cursor()
