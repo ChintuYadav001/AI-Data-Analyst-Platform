@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import os
 import random
+import re
 import sqlite3
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -16,6 +17,38 @@ from typing import Any, Dict, List, Optional, Tuple
 from core.config import AUTH_DB_PATH
 from core.db import get_connection as _get_connection, init_db
 from core.services.notification_service import NotificationService, mask_destination
+
+
+def _is_expired(expires_at: Any) -> bool:
+    """Robust expiration check for timestamps across SQLite and Postgres."""
+    if not expires_at:
+        return True
+    try:
+        if isinstance(expires_at, datetime):
+            exp = expires_at
+        else:
+            exp = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        return exp < datetime.now(timezone.utc)
+    except Exception:
+        return str(expires_at) < datetime.now(timezone.utc).isoformat()
+
+
+def _get_target_variations(target: str) -> List[str]:
+    """Generate variations of email/phone so formatting differences (+91, spaces) match."""
+    raw = target.strip().lower()
+    variations = [raw]
+    digits = re.sub(r'[^0-9]', '', raw)
+    if digits and len(digits) >= 6:
+        if digits not in variations:
+            variations.append(digits)
+        if len(digits) >= 10 and digits[-10:] not in variations:
+            variations.append(digits[-10:])
+        with_plus = "+" + digits
+        if with_plus not in variations:
+            variations.append(with_plus)
+    return variations
 
 
 def hash_password(password: str, salt: Optional[str] = None) -> Tuple[str, str]:
