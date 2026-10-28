@@ -128,51 +128,50 @@ class AuthModel:
         return getattr(self, "last_dispatch_info", None)
 
     def verify_otp(self, target: str, otp_code: str) -> bool:
-        """Verify the 6-digit OTP from SQLite."""
-        target = target.strip().lower()
+        """Verify the 6-digit OTP."""
         otp_code = str(otp_code).strip()
-        now_str = datetime.now(timezone.utc).isoformat()
+        if not otp_code:
+            return False
+        variations = _get_target_variations(target)
 
         with _get_connection() as conn:
             cursor = conn.cursor()
-            # Check unified otps table first
-            cursor.execute(
-                """
-                SELECT id, expires_at, is_verified FROM otps
-                WHERE target = ? AND otp_code = ? AND is_verified = 0
-                ORDER BY created_at DESC LIMIT 1
-                """,
-                (target, otp_code)
-            )
-            row = cursor.fetchone()
-            if row:
-                if row["expires_at"] < now_str:
-                    return False
-                cursor.execute("UPDATE otps SET is_verified = 1 WHERE id = ?", (row["id"],))
-                # Also update legacy email_otps if present
-                cursor.execute("UPDATE email_otps SET is_verified = 1 WHERE email = ? AND otp_code = ?", (target, otp_code))
-                conn.commit()
-                return True
+            for t in variations:
+                # Check unified otps table first
+                cursor.execute(
+                    """
+                    SELECT id, expires_at, is_verified FROM otps
+                    WHERE target = ? AND otp_code = ? AND is_verified = 0
+                    ORDER BY created_at DESC LIMIT 1
+                    """,
+                    (t, otp_code)
+                )
+                row = cursor.fetchone()
+                if row:
+                    if _is_expired(row["expires_at"]):
+                        return False
+                    cursor.execute("UPDATE otps SET is_verified = 1 WHERE id = ?", (row["id"],))
+                    cursor.execute("UPDATE email_otps SET is_verified = 1 WHERE email = ? AND otp_code = ?", (t, otp_code))
+                    conn.commit()
+                    return True
 
-            # Fallback to legacy email_otps table
-            cursor.execute(
-                """
-                SELECT id, expires_at, is_verified FROM email_otps
-                WHERE email = ? AND otp_code = ? AND is_verified = 0
-                ORDER BY created_at DESC LIMIT 1
-                """,
-                (target, otp_code)
-            )
-            legacy_row = cursor.fetchone()
-            if not legacy_row:
-                return False
-
-            if legacy_row["expires_at"] < now_str:
-                return False
-
-            cursor.execute("UPDATE email_otps SET is_verified = 1 WHERE id = ?", (legacy_row["id"],))
-            conn.commit()
-            return True
+                # Fallback to legacy email_otps table
+                cursor.execute(
+                    """
+                    SELECT id, expires_at, is_verified FROM email_otps
+                    WHERE email = ? AND otp_code = ? AND is_verified = 0
+                    ORDER BY created_at DESC LIMIT 1
+                    """,
+                    (t, otp_code)
+                )
+                legacy_row = cursor.fetchone()
+                if legacy_row:
+                    if _is_expired(legacy_row["expires_at"]):
+                        return False
+                    cursor.execute("UPDATE email_otps SET is_verified = 1 WHERE id = ?", (legacy_row["id"],))
+                    conn.commit()
+                    return True
+        return False
 
     def is_email_verified(self, email: str) -> bool:
         return self.is_target_verified(email)
