@@ -24,16 +24,76 @@ def render_settings_view():
         help="Even without external API keys, the system operates with 100% deterministic, grounded analytical engines."
     )
 
-    if st.button("💾 Save Settings", type="primary"):
+    def _update_env_key(key: str, value: str):
+        env_file = BASE_DIR / ".env"
+        lines = []
+        if env_file.exists():
+            with open(env_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        
+        found = False
+        new_lines = []
+        for line in lines:
+            if line.strip().startswith(f"{key}="):
+                new_lines.append(f"{key}={value}\n")
+                found = True
+            else:
+                new_lines.append(line)
+        if not found:
+            new_lines.append(f"{key}={value}\n")
+            
+        with open(env_file, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+
+    if st.button("💾 Save AI Settings", type="primary"):
         os.environ["OPENAI_API_KEY"] = openai_key
         os.environ["GEMINI_API_KEY"] = gemini_key
-        # Save to .env
-        env_file = BASE_DIR / ".env"
-        with open(env_file, "w", encoding="utf-8") as f:
-            f.write(f"OPENAI_API_KEY={openai_key}\n")
-            f.write(f"GEMINI_API_KEY={gemini_key}\n")
-            f.write(f"DEFAULT_MODEL={model_choice}\n")
-        st.success("Settings saved successfully!")
+        _update_env_key("OPENAI_API_KEY", openai_key)
+        _update_env_key("GEMINI_API_KEY", gemini_key)
+        _update_env_key("DEFAULT_MODEL", model_choice)
+        st.success("AI Reasoning settings saved successfully!")
+
+    st.markdown("---")
+    st.markdown("### 🐘 Neon Serverless PostgreSQL Database")
+    st.markdown("Connect to [Neon.tech](https://neon.tech) Serverless PostgreSQL to store datasets, query historical telemetry, and synchronize workspaces across cloud environments.")
+
+    current_neon = os.getenv("NEON_DATABASE_URL", os.getenv("DATABASE_URL", ""))
+    
+    neon_input = st.text_input(
+        "Neon PostgreSQL Connection URI (with SSL)",
+        value=current_neon,
+        type="password",
+        placeholder="postgresql://user:pass@ep-xyz.us-east-2.aws.neon.tech/neondb?sslmode=require",
+        help="Paste your Neon connection URI from neon.tech dashboard. Requires SSL (sslmode=require)."
+    )
+
+    c_neon1, c_neon2 = st.columns([1, 1])
+    with c_neon1:
+        if st.button("⚡ Test Neon Ping & Connection", key="btn_settings_test_neon", use_container_width=True):
+            if not neon_input.strip():
+                st.warning("Please provide a Neon Connection URI to test.")
+            else:
+                with st.spinner("Testing handshake and latency with Neon cloud..."):
+                    try:
+                        from core.neon_db import test_neon_connection
+                        res = test_neon_connection(neon_input.strip())
+                        if res["success"]:
+                            st.success(f"✓ Connected! Ping: **{res['latency_ms']:.1f} ms** | Database: `{res['database']}` | Tables: **{res['table_count']}**")
+                        else:
+                            st.error(f"❌ Connection failed: {res.get('error')}")
+                    except Exception as err:
+                        st.error(f"Connection error: {str(err)}")
+
+    with c_neon2:
+        if st.button("💾 Save Neon URI to Environment", key="btn_settings_save_neon", type="primary", use_container_width=True):
+            if neon_input.strip():
+                os.environ["NEON_DATABASE_URL"] = neon_input.strip()
+                _update_env_key("NEON_DATABASE_URL", neon_input.strip())
+                st.session_state["neon_url"] = neon_input.strip()
+                st.toast("✓ Neon Database URI saved securely!", icon="🐘")
+                st.success("✓ Neon Connection String saved to environment and `.env`!")
+            else:
+                st.warning("Connection URI cannot be blank.")
 
     st.markdown("---")
     st.markdown("### 🐙 GitHub Repository & Automatic Sync")
@@ -86,4 +146,6 @@ def render_settings_view():
     - **DuckDB Analytical Guardrail:** All destructive SQL commands (`DROP`, `DELETE`, `UPDATE`, `INSERT`, `ALTER`, `TRUNCATE`) are strictly blocked before execution.
     - **Data Isolation:** Uploaded data is stored locally in `./data/`. Raw datasets are never overwritten.
     - **Secrets Protection:** API credentials, SMTP passwords, and `.env` files are permanently ignored and never pushed to GitHub.
+    - **Neon SSL Encryption:** All connections to Neon Serverless PostgreSQL enforce `sslmode=require` in-flight encryption.
     """)
+
