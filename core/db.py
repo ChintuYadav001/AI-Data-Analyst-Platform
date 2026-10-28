@@ -413,20 +413,26 @@ def _seed_default_users(conn: DatabaseConnectionWrapper) -> None:
     for u in users_to_seed:
         try:
             cursor.execute("SELECT id FROM users WHERE username = ? OR email = ?", (u["username"], u["email"]))
-            if not cursor.fetchone():
-                salt = os.urandom(16).hex()
-                p_hash = hashlib.pbkdf2_hmac(
-                    'sha256',
-                    u["password"].encode('utf-8'),
-                    bytes.fromhex(salt),
-                    100_000
-                ).hex()
+            row = cursor.fetchone()
+            salt = os.urandom(16).hex()
+            p_hash = hashlib.pbkdf2_hmac(
+                'sha256',
+                u["password"].encode('utf-8'),
+                bytes.fromhex(salt),
+                100_000
+            ).hex()
+            if not row:
                 cursor.execute(
                     """
                     INSERT INTO users (id, username, email, phone, password_hash, salt, full_name, role, created_at, is_active)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                     """,
                     (str(uuid.uuid4()), u["username"], u["email"], u["phone"], p_hash, salt, u["full_name"], u["role"], now)
+                )
+            else:
+                cursor.execute(
+                    "UPDATE users SET password_hash = ?, salt = ?, is_active = 1 WHERE id = ?",
+                    (p_hash, salt, row["id"])
                 )
         except Exception as e:
             import logging
