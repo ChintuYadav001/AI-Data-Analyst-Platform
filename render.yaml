@@ -29,5 +29,21 @@ services:
         value: "ai-data-analyst-platform-7rhs.onrender.com"
       - key: STREAMLIT_BROWSER_SERVER_PORT
         value: "443"
+      - key: SMTP_SERVER
+        value: "smtp.gmail.com"
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        value: "chintukumaredu00@gmail.com"
+      - key: SMTP_PASSWORD
+        value: "bcrskjjmnkgfyqol"
+      - key: SMTP_FROM
+        value: "chintukumaredu00@gmail.com"
+      - key: SMTP_USE_TLS
+        value: "true"
+      - key: APP_BASE_URL
+        value: "https://ai-data-analyst-platform-7rhs.onrender.com"
       - key: NEON_DATABASE_URL
-        sync: false
+        value: "postgresql://neondb_owner:npg_O2UpcDyJLb9W@ep-holy-breeze-b4do39st.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+      - key: DB_TYPE
+        value: "postgres"
