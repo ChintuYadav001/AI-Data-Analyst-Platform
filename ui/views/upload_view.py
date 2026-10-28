@@ -10,13 +10,14 @@ from core.quality_engine import QualityEngine
 from core.eda_planner import EDAPlanner
 from core.eda_engine import EDAEngine
 from core.duckdb_engine import DuckDBEngine
+from ui.views.neon_card import render_neon_cockpit
 
 def render_upload_view():
     st.markdown("""
     <div style="margin-bottom: 20px;">
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #00F0FF; letter-spacing: 0.1em;">// TELEMETRY INGESTION PORTAL</div>
-        <h2 style="margin: 4px 0 8px 0;">📁 DATASET UPLOAD // QUANTUM REPOSITORIES</h2>
-        <p style="color: #94A3B8; font-size: 0.95rem;">Ingest structured tabular datasets (CSV, XLSX, XLS) into the autonomous analysis pipeline.</p>
+        <h2 style="margin: 4px 0 8px 0;">📁 DATASET INGESTION & CLOUD STORAGE</h2>
+        <p style="color: #94A3B8; font-size: 0.95rem;">Ingest structured tabular datasets via local files or stream/fetch directly from Neon Serverless PostgreSQL.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -34,7 +35,7 @@ def render_upload_view():
                             // INGESTION DISABLED &bull; AUTHENTICATION REQUIRED
                         </div>
                         <div style="font-size: 1rem; font-weight: 700; color: #FFFFFF; margin-top: 2px;">
-                            You must be logged in to upload datasets or initialize telemetry pipelines.
+                            You must be logged in to upload datasets or connect to Neon cloud databases.
                         </div>
                         <div style="font-size: 0.8rem; color: #94A3B8; margin-top: 2px;">
                             Without login or sign up, dataset upload is locked. Navigate to the Account tab in the sidebar whenever you are ready to sign in.
@@ -45,7 +46,13 @@ def render_upload_view():
         </div>
         """, unsafe_allow_html=True)
 
-    col1, col2 = st.columns([3, 2])
+    tab_local, tab_neon = st.tabs([
+        "📁 Local File Stream Ingestion",
+        "🐘 Neon Serverless PostgreSQL (Store & Fetch)"
+    ])
+
+    with tab_local:
+        col1, col2 = st.columns([3, 2])
 
     with col1:
         st.markdown("### // UPLOAD LOCAL DATASTREAM")
