@@ -140,6 +140,34 @@ def render_settings_view():
         )
 
     st.markdown("---")
+    st.markdown("### 🧹 Cache & Storage Maintenance")
+    st.markdown("Purge stale parquet streams, experiment snapshots, and analytical buffers to optimize RAM and speed up boot times.")
+
+    from core.cache_cleaner import get_cache_size_mb, clean_all_cache
+    cache_sizes = get_cache_size_mb()
+
+    col_c1, col_c2, col_c3 = st.columns(3)
+    col_c1.metric("Total Cache Footprint", f"{cache_sizes.get('total', 0.0):.2f} MB")
+    col_c2.metric("Project Storage", f"{cache_sizes.get('projects', 0.0):.2f} MB")
+    col_c3.metric("Parquet & ML Cache", f"{(cache_sizes.get('parquet', 0.0) + cache_sizes.get('experiments', 0.0)):.2f} MB")
+
+    if st.button("🧹 Purge All Temporary Cache Now", key="btn_clean_cache_now", type="primary"):
+        with st.spinner("Purging stale temporary cache and optimizing workspace buffers..."):
+            active_p = st.session_state.get("current_project_id")
+            clean_res = clean_all_cache(keep_active_project_id=active_p)
+            st.toast(f"✓ Purged {clean_res['files_deleted']} files! Freed {clean_res['freed_mb']} MB", icon="🧹")
+            st.success(f"✓ Cache cleaned successfully: **{clean_res['files_deleted']} files deleted**, **{clean_res['freed_mb']} MB disk space recovered**.")
+            st.rerun()
+
+    st.markdown("""
+    <div style="background: rgba(14, 20, 36, 0.7); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 9px; padding: 12px 16px; margin-top: 12px; font-size: 0.85rem; color: #94A3B8;">
+        <b style="color: #38BDF8;">⚡ Why does Render take time to load on first click?</b><br>
+        On Render's free tier, servers <b>spin down to 0 after 15 minutes of idle time</b>. When someone visits, Render cold-boots the container (takes ~45–60s).<br>
+        To prevent cold boots and keep your Render web app <b>permanently active 24/7</b>, set up a free 10-minute HTTP ping using <a href="https://cron-job.org" target="_blank" style="color: #00F0FF;">cron-job.org</a> or <a href="https://uptimerobot.com" target="_blank" style="color: #00F0FF;">UptimeRobot</a> pointing to your Render deployment URL.
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("---")
     st.markdown("### 🔒 Security & Privacy Guarantees")
     st.markdown("""
     - **No Arbitrary Code Execution:** The AI model cannot execute arbitrary Python or shell code. It calls controlled, sandboxed backend tools.
