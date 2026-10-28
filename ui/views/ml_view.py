@@ -1113,13 +1113,82 @@ def render_ml_view():
                         st.error(p_res["error"])
                     else:
                         pred_v = p_res.get("prediction")
-                        st.markdown(f"""
-                        <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; border-radius: 10px; padding: 18px; text-align: center; margin-top: 14px;">
-                            <div style="font-size: 0.8rem; color: #38BDF8; font-weight: 700; text-transform: uppercase;">Simulated Model Output</div>
-                            <div style="font-size: 2.4rem; font-weight: 800; color: #FFFFFF; margin: 4px 0;">{pred_v}</div>
-                            <div style="font-size: 0.8rem; color: #94A3B8;">Confidence / Latency: {p_res.get('latency_ms')} ms</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        conf = p_res.get("confidence")
+                        st.session_state["tab10_last_prediction"] = {
+                            "prediction": pred_v,
+                            "confidence": conf,
+                            "latency_ms": p_res.get("latency_ms"),
+                        }
+
+                last_tab10 = st.session_state.get("tab10_last_prediction")
+                if last_tab10:
+                    pred_v = last_tab10["prediction"]
+                    conf = last_tab10.get("confidence")
+                    latency_ms = last_tab10.get("latency_ms")
+                    target_name = st.session_state.get("ml_target_col", "Target")
+
+                    st.markdown(f"""
+                    <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; border-radius: 10px; padding: 18px; text-align: center; margin-top: 14px;">
+                        <div style="font-size: 0.8rem; color: #38BDF8; font-weight: 700; text-transform: uppercase;">Simulated Target Prediction</div>
+                        <div style="font-size: 2.4rem; font-weight: 800; color: #FFFFFF; margin: 4px 0;">{target_name} = <span style="color: #00F0FF;">{pred_v}</span></div>
+                        <div style="font-size: 0.8rem; color: #94A3B8;">Confidence: {round(conf * 100, 2) if conf is not None else 'N/A'}% | Latency: {latency_ms} ms</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    st.markdown("##### 📊 Prediction Visual Analytics")
+                    col_pred_v1, col_pred_v2 = st.columns([1, 1.2])
+
+                    with col_pred_v1:
+                        # Gauge meter
+                        val_g = (conf * 100) if conf is not None else 100.0
+                        fig_g = go.Figure(go.Indicator(
+                            mode="gauge+number",
+                            value=val_g,
+                            title={'text': f"Predicted: {pred_v}<br><span style='font-size:0.75em;color:#94A3B8'>Model Confidence</span>"},
+                            gauge={
+                                'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#E2E8F0"},
+                                'bar': {'color': "#00F0FF"},
+                                'steps': [
+                                    {'range': [0, 50], 'color': "rgba(239, 68, 68, 0.35)"},
+                                    {'range': [50, 75], 'color': "rgba(245, 158, 11, 0.35)"},
+                                    {'range': [75, 100], 'color': "rgba(16, 185, 129, 0.35)"}
+                                ],
+                            }
+                        ))
+                        fig_g.update_layout(height=250, margin=dict(l=15, r=15, t=30, b=15), paper_bgcolor="rgba(0,0,0,0)", font_color="#FFFFFF")
+                        st.plotly_chart(fig_g, use_container_width=True)
+
+                    with col_pred_v2:
+                        # Historical benchmark context
+                        if target_name in df.columns:
+                            if pd.api.types.is_numeric_dtype(df[target_name]) and "classification" not in task_t:
+                                fig_hist = px.histogram(
+                                    df,
+                                    x=target_name,
+                                    nbins=25,
+                                    title=f"Historical Distribution vs Predicted {target_name}",
+                                    color_discrete_sequence=["#64748B"]
+                                )
+                                try:
+                                    fig_hist.add_vline(x=float(pred_v), line_dash="solid", line_color="#00F0FF", line_width=3, annotation_text="🎯 New Prediction")
+                                except Exception:
+                                    pass
+                                fig_hist.update_layout(height=240, margin=dict(l=10, r=10, t=35, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                                st.plotly_chart(fig_hist, use_container_width=True)
+                            else:
+                                cls_c = df[target_name].astype(str).value_counts().reset_index()
+                                cls_c.columns = [target_name, "Count"]
+                                cls_c["Status"] = cls_c[target_name].apply(lambda x: "🎯 Predicted" if x == str(pred_v) else "Other Classes")
+                                fig_bar = px.bar(
+                                    cls_c,
+                                    x=target_name,
+                                    y="Count",
+                                    color="Status",
+                                    color_discrete_map={"🎯 Predicted": "#00F0FF", "Other Classes": "#334155"},
+                                    title=f"Target Class Frequency vs. Predicted"
+                                )
+                                fig_bar.update_layout(height=240, margin=dict(l=10, r=10, t=35, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                                st.plotly_chart(fig_bar, use_container_width=True)
 
             # Sub-Tab 2: Batch Inference
             with p_sub2:
@@ -1131,7 +1200,49 @@ def render_ml_view():
                         st.write(f"Loaded {len(batch_df):,} rows.")
                         if st.button("🚀 Run Batch Scoring"):
                             scored_df = predict_batch(pipe, batch_df, task_type=task_t)
+                            st.session_state["tab10_scored_batch"] = scored_df
+
+                        scored_df = st.session_state.get("tab10_scored_batch")
+                        if scored_df is not None:
+                            st.markdown("##### 📋 Scored Records Preview")
                             st.dataframe(scored_df.head(10), width="stretch")
+                            
+                            pred_col = "prediction" if "prediction" in scored_df.columns else scored_df.columns[-1]
+                            st.markdown("##### 📊 Batch Prediction Target Visuals")
+                            col_b1, col_b2 = st.columns(2)
+                            
+                            with col_b1:
+                                if "classification" in task_t or not pd.api.types.is_numeric_dtype(scored_df[pred_col]):
+                                    fig_b = px.bar(
+                                        scored_df[pred_col].value_counts().reset_index(),
+                                        x="index" if "index" in scored_df[pred_col].value_counts().reset_index().columns else pred_col,
+                                        y="count" if "count" in scored_df[pred_col].value_counts().reset_index().columns else "count",
+                                        title="Predicted Class Distribution",
+                                        color_discrete_sequence=["#00F0FF"]
+                                    )
+                                    fig_b.update_layout(height=260, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                                    st.plotly_chart(fig_b, use_container_width=True)
+                                else:
+                                    fig_b = px.histogram(scored_df, x=pred_col, nbins=20, title="Predicted Values Histogram", color_discrete_sequence=["#00F0FF"])
+                                    fig_b.update_layout(height=260, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                                    st.plotly_chart(fig_b, use_container_width=True)
+
+                            with col_b2:
+                                if "classification" in task_t or not pd.api.types.is_numeric_dtype(scored_df[pred_col]):
+                                    fig_p = px.pie(
+                                        scored_df,
+                                        names=pred_col,
+                                        hole=0.5,
+                                        title="Prediction Class Proportions",
+                                        color_discrete_sequence=px.colors.qualitative.Plotly
+                                    )
+                                    fig_p.update_layout(height=260, paper_bgcolor="rgba(0,0,0,0)", font_color="#E2E8F0")
+                                    st.plotly_chart(fig_p, use_container_width=True)
+                                else:
+                                    fig_box = px.box(scored_df, y=pred_col, title="Predicted Target Spread & Quartiles", color_discrete_sequence=["#38BDF8"])
+                                    fig_box.update_layout(height=260, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,23,42,0.6)", font_color="#E2E8F0")
+                                    st.plotly_chart(fig_box, use_container_width=True)
+
                             csv_data = scored_df.to_csv(index=False).encode("utf-8")
                             st.download_button("📥 Download Scored CSV", data=csv_data, file_name="scored_predictions.csv", mime="text/csv")
                     except Exception as e:
