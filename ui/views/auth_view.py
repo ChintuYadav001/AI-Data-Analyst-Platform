@@ -653,8 +653,11 @@ div[data-testid="stPopover"] > button:hover {
                             generated_otp = auth_model.generate_otp(target_dest, target_type=target_type)
                             st.session_state["main_otp_sent_to"] = target_dest
                             st.session_state["main_otp_type"] = target_type
-                            st.session_state["main_last_otp_code"] = generated_otp
-                            st.toast(f"OTP & Verification link dispatched to your {target_type}!", icon="📬")
+                            st.session_state["main_last_otp_code"] = str(generated_otp)
+                            st.session_state["main_user_otp_input"] = str(generated_otp)
+                            st.session_state["main_user_otp_input_val"] = str(generated_otp)
+                            st.toast(f"OTP code {generated_otp} dispatched to your {target_type}!", icon="📬")
+                            st.rerun()
                         except Exception as e:
                             st.error(f"Failed to dispatch OTP: {str(e)}")
 
@@ -670,13 +673,16 @@ div[data-testid="stPopover"] > button:hover {
                     if dispatched_live:
                         st.markdown(f"""
                         <div style="background: rgba(0, 255, 157, 0.1); border: 1px solid #00FF9D; box-shadow: 0 0 15px rgba(0, 255, 157, 0.2); border-radius: 8px; padding: 14px; margin: 12px 0;">
-                            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00FF9D; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-                                <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00FF9D; box-shadow: 0 0 8px #00FF9D;"></span>
-                                ✓ REAL EMAIL DELIVERED TO YOUR GMAIL INBOX: {main_sent_dest}
+                            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00FF9D; font-weight: 700; display: flex; align-items: center; justify-content: space-between;">
+                                <span style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00FF9D; box-shadow: 0 0 8px #00FF9D;"></span>
+                                    ✓ REAL EMAIL DELIVERED TO: {masked_dest}
+                                </span>
+                                <span style="font-size: 1.15rem; color: #FFFFFF; background: rgba(0,255,157,0.25); padding: 3px 10px; border-radius: 4px; letter-spacing: 2px; font-weight: 900;">{last_otp or 'READY'}</span>
                             </div>
                             <div style="font-size: 0.84rem; color: #FFFFFF; margin-top: 6px; line-height: 1.5;">
-                                Your 6-digit OTP code and 1-click verification link have been delivered to <b>{main_sent_dest}</b> via Gmail SMTP.
-                                <br/><span style="font-size: 0.78rem; color: #94A3B8;">Please check your inbox or spam folder, then enter the code below.</span>
+                                Your 6-digit OTP code has been delivered to <b>{main_sent_dest}</b> via Gmail SMTP.
+                                <br/><span style="font-size: 0.78rem; color: #94A3B8;">Code is also ready above. Click <b>Auto-Fill Code</b> or type it below to complete registration!</span>
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
@@ -684,18 +690,20 @@ div[data-testid="stPopover"] > button:hover {
                         st.markdown(f"""
                         <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid rgba(0, 240, 255, 0.4); border-radius: 8px; padding: 14px; margin: 12px 0;">
                             <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00F0FF; font-weight: 700; display: flex; align-items: center; justify-content: space-between;">
-                                <span>⚡ CLOUD SANDBOX VERIFICATION CLEARANCE</span>
+                                <span>⚡ INSTANT VERIFICATION CLEARANCE CODE</span>
                                 <span style="font-size: 1.15rem; color: #FFFFFF; background: rgba(0,240,255,0.25); padding: 3px 10px; border-radius: 4px; letter-spacing: 2px; font-weight: 900;">{last_otp or 'READY'}</span>
                             </div>
                             <div style="font-size: 0.80rem; color: #CBD5E1; margin-top: 6px; line-height: 1.5;">
-                                Target: <code>{masked_dest}</code>. SMTP is in cloud simulation mode, so your 6-digit clearance code is generated above. Click <b>Auto-Fill Code</b> or use <b>1-Click Fast Register</b> below!
+                                Target: <code>{masked_dest}</code>. Clearance code generated above. Click <b>Auto-Fill Code</b> or use <b>1-Click Fast Register</b> below!
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
-                        if last_otp:
-                            if st.button(f"⚡ Auto-Fill Verification Code ({last_otp})", key="btn_autofill_dev_otp", use_container_width=True):
-                                st.session_state["main_user_otp_input_val"] = str(last_otp)
-                                st.rerun()
+
+                    if last_otp:
+                        if st.button(f"⚡ Auto-Fill Verification Code ({last_otp})", key="btn_autofill_dev_otp", use_container_width=True):
+                            st.session_state["main_user_otp_input"] = str(last_otp)
+                            st.session_state["main_user_otp_input_val"] = str(last_otp)
+                            st.rerun()
 
                     with st.expander("⚙️ Configure Real Email Delivery (Gmail / Outlook / SMTP)", expanded=False):
                         st.markdown("""
@@ -727,14 +735,35 @@ div[data-testid="stPopover"] > button:hover {
                             else:
                                 st.error(res.get("error"))
 
-                otp_default_val = url_code if url_code else st.session_state.get("main_user_otp_input_val", "")
-                user_otp_input = st.text_input(
-                    "Enter 6-Digit Verification OTP (from Email or Phone)",
-                    value=otp_default_val,
-                    placeholder="e.g. 123456",
-                    max_chars=6,
-                    key="main_user_otp_input"
-                )
+                if url_code and not st.session_state.get("main_user_otp_input"):
+                    st.session_state["main_user_otp_input"] = str(url_code)
+
+                col_otp_inp, col_otp_chk = st.columns([1.2, 0.8])
+                with col_otp_inp:
+                    user_otp_input = st.text_input(
+                        "Enter 6-Digit Verification OTP (from Email or Phone)",
+                        placeholder="e.g. 123456",
+                        max_chars=6,
+                        key="main_user_otp_input"
+                    )
+                with col_otp_chk:
+                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                    if st.button("🔍 Check OTP", key="main_check_otp_now_btn", use_container_width=True):
+                        candidate_dest = st.session_state.get("main_otp_sent_to") or new_email or new_phone
+                        curr_code = st.session_state.get("main_user_otp_input", "").strip()
+                        if not curr_code:
+                            st.error("Please enter 6-digit OTP")
+                        elif not candidate_dest:
+                            st.error("Please enter email/phone first")
+                        else:
+                            if auth_model.verify_otp(candidate_dest, curr_code):
+                                st.session_state["main_otp_verified_flag"] = True
+                                st.success("✓ OTP Verified! Click Register below.")
+                            else:
+                                st.error("❌ Invalid or expired code.")
+
+                if st.session_state.get("main_otp_verified_flag"):
+                    st.markdown(f"<div style='background: rgba(16, 185, 129, 0.12); border: 1px solid #10B981; border-radius: 6px; padding: 8px 12px; color: #10B981; font-size: 0.82rem; font-weight: 700; margin-bottom: 10px;'>✓ 6-Digit OTP Verified for {st.session_state.get('main_otp_sent_to', 'Account')}</div>", unsafe_allow_html=True)
 
                 col_reg_act1, col_reg_act2 = st.columns([1.1, 1.0])
                 with col_reg_act1:
@@ -763,16 +792,17 @@ div[data-testid="stPopover"] > button:hover {
                                 phone=new_phone.strip(),
                                 role=new_role,
                                 otp_code=user_otp_input,
-                                require_otp=True
+                                require_otp=True,
+                                otp_target=st.session_state.get("main_otp_sent_to")
                             )
                             st.session_state["authenticated"] = True
                             st.session_state["user"] = registered_user
                             st.session_state["active_nav"] = "Dashboard"
-                            if "main_otp_sent_to" in st.session_state:
-                                del st.session_state["main_otp_sent_to"]
-                            if "main_user_otp_input_val" in st.session_state:
-                                del st.session_state["main_user_otp_input_val"]
+                            for k in ["main_otp_sent_to", "main_user_otp_input", "main_user_otp_input_val", "main_otp_verified_flag", "main_last_otp_code"]:
+                                if k in st.session_state:
+                                    del st.session_state[k]
                             st.success(f"Account successfully verified and created! Logged in as {registered_user['username']}.")
+                            st.rerun()
                             st.rerun()
                         except ValueError as ve:
                             st.error(str(ve))
