@@ -385,6 +385,7 @@ def init_db(target_db_type: Optional[str] = None) -> None:
             """)
 
         _seed_default_users(conn)
+        _initialized_dbs.add(db_mode)
 
 
 def _seed_default_users(conn: DatabaseConnectionWrapper) -> None:
