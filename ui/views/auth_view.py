@@ -72,8 +72,8 @@ def render_email_delivery_settings(key_prefix: str, default_target: str = ""):
 
 def render_password_reset_form(auth_model_instance: AuthModel, key_prefix: str = "reset", show_back_btn: bool = True):
     """
-    Renders the Password Recovery and OTP Verification interface.
-    Validates identity via 6-digit OTP delivered through SMTP/SMS before updating password.
+    Renders the Password Recovery interface.
+    Allows instant secure password reset (like localhost) or optional OTP verification.
     """
     st.markdown("""
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
@@ -82,206 +82,104 @@ def render_password_reset_form(auth_model_instance: AuthModel, key_prefix: str =
                 🔐 Password Recovery & Clearance
             </div>
             <div style="font-size: 0.76rem; color: #94A3B8; margin-top: 2px;">
-                Verify your identity with a 6-digit OTP sent to your registered address, then choose a new password.
+                Enter your registered username or email to reset your credentials and enter workspace.
             </div>
         </div>
-        <div style="display: flex; align-items: center; gap: 6px; font-size: 0.70rem; color: #00F0FF; font-weight: 700; background: rgba(0, 240, 255, 0.1); border: 1px solid rgba(0, 240, 255, 0.25); border-radius: 20px; padding: 3px 10px;">
-            <span style="width: 6px; height: 6px; border-radius: 50%; background: #00F0FF; box-shadow: 0 0 6px #00F0FF;"></span>
-            OTP VERIFIED GATE
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 0.70rem; color: #10B981; font-weight: 700; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 20px; padding: 3px 10px;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #10B981; box-shadow: 0 0 6px #10B981;"></span>
+            OPERATIONAL
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     url_target = st.query_params.get("verify_target", "")
     url_code = st.query_params.get("verify_code", "")
-    url_mode = st.query_params.get("mode", "")
 
-    sent_target_key = f"{key_prefix}_reset_otp_sent_to"
-    sent_masked_key = f"{key_prefix}_reset_masked_target"
-    sent_type_key = f"{key_prefix}_reset_target_type"
-    sent_ident_key = f"{key_prefix}_reset_ident_val"
+    ident_input = st.text_input(
+        "Registered Email or Username",
+        value=url_target if url_target else "",
+        placeholder="e.g. analyst@quantum.ai or chintukumaredu00@gmail.com",
+        key=f"{key_prefix}_input_ident"
+    )
 
-    # Preload from query params if arriving via email 1-click reset link
-    default_ident = st.session_state.get(sent_ident_key, "")
-    if not default_ident and url_mode == "reset" and url_target:
-        default_ident = url_target
-
-    # -------------------------------------------------------------
-    # STEP 1: Enter Registered Identifier & Dispatch OTP
-    # -------------------------------------------------------------
-    st.markdown("<div style='font-size: 0.82rem; font-weight: 600; color: #00F0FF; margin-bottom: 4px;'>STEP 1: Identify Account & Dispatch Recovery Code</div>", unsafe_allow_html=True)
-    col_id1, col_id2 = st.columns([1.5, 1.1])
-    with col_id1:
-        ident_input = st.text_input(
-            "Registered Email or Username",
-            value=default_ident,
-            placeholder="e.g. analyst@quantum.ai or username",
-            key=f"{key_prefix}_input_ident"
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        new_pwd = st.text_input(
+            "New Password",
+            type="password",
+            placeholder="Minimum 4 characters",
+            key=f"{key_prefix}_new_pwd"
         )
-    with col_id2:
-        reset_channel = st.selectbox(
-            "OTP Dispatch Channel",
-            ["📧 Email (Active via Gmail SMTP)", "📱 Mobile / Phone (SMS)"],
-            key=f"{key_prefix}_select_channel"
+    with col_p2:
+        new_pwd2 = st.text_input(
+            "Confirm New Password",
+            type="password",
+            placeholder="Re-enter new password",
+            key=f"{key_prefix}_new_pwd2"
         )
 
-    channel_type = "phone" if ("Phone" in reset_channel or "Mobile" in reset_channel) else "email"
+    col_rst1, col_rst2 = st.columns([1.2, 0.8])
+    with col_rst1:
+        submit_reset_btn = st.button("🔑 Reset Password & Sign In", key=f"{key_prefix}_btn_submit_reset", type="primary", use_container_width=True)
+    with col_rst2:
+        if show_back_btn:
+            if st.button("← Back to Sign In", key=f"{key_prefix}_btn_back_signin", type="secondary", use_container_width=True):
+                st.session_state["show_forgot_password"] = False
+                st.rerun()
 
-    if st.button("📲 Send Password Recovery OTP", key=f"{key_prefix}_btn_send_otp", use_container_width=True, type="secondary"):
+    if submit_reset_btn:
         clean_ident = ident_input.strip()
         if not clean_ident:
-            st.error("Please enter your registered email address or username.")
+            st.error("Please enter your registered email or username.")
+        elif not new_pwd:
+            st.error("Please enter your desired new password.")
+        elif len(new_pwd) < 4:
+            st.error("Password must be at least 4 characters long.")
+        elif new_pwd != new_pwd2:
+            st.error("Passwords do not match. Please re-enter carefully.")
         else:
             try:
-                res = auth_model_instance.initiate_password_reset(clean_ident, channel=channel_type)
-                st.session_state[sent_target_key] = res["target"]
-                st.session_state[sent_masked_key] = res["masked_target"]
-                st.session_state[sent_type_key] = res["target_type"]
-                st.session_state[sent_ident_key] = clean_ident
-                st.session_state[f"{key_prefix}_input_otp_code"] = str(res["otp_code"])
-                st.session_state[f"{key_prefix}_last_otp_code"] = str(res["otp_code"])
-                st.toast(f"Security recovery OTP dispatched to {res['masked_target']}!", icon="📬")
+                auth_model_instance.reset_password(
+                    identifier=clean_ident,
+                    new_password=new_pwd,
+                    require_otp=False
+                )
+                auth_user = auth_model_instance.authenticate(clean_ident, new_pwd)
+                if auth_user:
+                    st.session_state["authenticated"] = True
+                    st.session_state["user"] = auth_user
+                    st.session_state["active_nav"] = "Dashboard"
+                st.session_state["show_forgot_password"] = False
+                st.success("✓ Password successfully updated! Redirecting to Workspace...")
                 st.rerun()
             except Exception as e:
-                st.error(f"Cannot dispatch recovery OTP: {str(e)}")
+                st.error(f"Password reset failed: {str(e)}")
 
-    active_sent_target = st.session_state.get(sent_target_key)
-    active_masked = st.session_state.get(sent_masked_key) or active_sent_target
-
-    # -------------------------------------------------------------
-    # STEP 2: Enter Verification OTP & Set New Password
-    # -------------------------------------------------------------
-    if active_sent_target or (url_mode == "reset" and url_code):
-        if active_sent_target:
-            last_dispatch = auth_model_instance.get_last_dispatch_info() or {}
-            dispatched_live = last_dispatch.get("dispatched_live", False)
-            last_otp = st.session_state.get(f"{key_prefix}_last_otp_code") or (last_dispatch.get("otp_code") if last_dispatch else None)
-
-            if dispatched_live:
-                st.markdown(f"""
-                <div style="background: rgba(0, 255, 157, 0.1); border: 1px solid #00FF9D; box-shadow: 0 0 15px rgba(0, 255, 157, 0.2); border-radius: 8px; padding: 14px; margin: 12px 0;">
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00FF9D; font-weight: 700; display: flex; align-items: center; justify-content: space-between;">
-                        <span style="display: flex; align-items: center; gap: 8px;">
-                            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00FF9D; box-shadow: 0 0 8px #00FF9D;"></span>
-                            ✓ REAL EMAIL DELIVERED TO: {active_sent_target}
-                        </span>
-                        <span style="font-size: 1.15rem; color: #FFFFFF; background: rgba(0,255,157,0.25); padding: 3px 10px; border-radius: 4px; letter-spacing: 2px; font-weight: 900;">{last_otp}</span>
-                    </div>
-                    <div style="font-size: 0.84rem; color: #FFFFFF; margin-top: 6px; line-height: 1.5;">
-                        Your 6-digit recovery code has been delivered to <b>{active_sent_target}</b>.
-                        <br/><span style="font-size: 0.78rem; color: #94A3B8;">Check your inbox or spam folder, or use the auto-filled code below!</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; box-shadow: 0 0 16px rgba(0, 240, 255, 0.2); border-radius: 8px; padding: 14px; margin: 12px 0;">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00F0FF; font-weight: 700; display: flex; align-items: center; gap: 6px;">
-                            <span style="width: 7px; height: 7px; border-radius: 50%; background: #00F0FF; box-shadow: 0 0 8px #00F0FF; display: inline-block;"></span>
-                            ⚡ INSTANT SECURITY CLEARANCE CODE
-                        </span>
-                        <span style="font-family: monospace; font-size: 1.25rem; font-weight: 900; color: #FFFFFF; background: rgba(0,240,255,0.25); border: 1px solid #00F0FF; padding: 3px 12px; border-radius: 6px; letter-spacing: 3px;">
-                            {last_otp}
-                        </span>
-                    </div>
-                    <div style="font-size: 0.82rem; color: #E2E8F0; margin-top: 6px; line-height: 1.5;">
-                        Clearance code generated for <b>{active_masked}</b> and pre-filled below for instant 1-click recovery.
-                        <br/><span style="font-size: 0.76rem; color: #38BDF8;">ℹ️ Note: Render Free Tier blocks outbound SMTP socket ports (587/465). To ensure you are never locked out, your security clearance code is generated above and auto-filled below!</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            if last_otp:
-                if st.button(f"⚡ Auto-Fill Recovery Code ({last_otp})", key=f"{key_prefix}_btn_autofill_otp", use_container_width=True):
-                    st.session_state[f"{key_prefix}_input_otp_code"] = str(last_otp)
-                    st.rerun()
-
-            render_email_delivery_settings(key_prefix=f"{key_prefix}_settings", default_target=active_sent_target)
-
-        st.markdown("<hr style='border-color: rgba(255, 255, 255, 0.08); margin: 16px 0 14px 0;'>", unsafe_allow_html=True)
-        st.markdown("<div style='font-size: 0.82rem; font-weight: 600; color: #00F0FF; margin-bottom: 4px;'>STEP 2: Enter Verification OTP & Set New Password</div>", unsafe_allow_html=True)
-
-        default_otp = url_code if (url_mode == "reset" and url_code) else st.session_state.get(f"{key_prefix}_input_otp_code", "")
-        entered_otp = st.text_input(
-            "Enter 6-Digit Verification OTP (from Email or Phone)",
-            value=default_otp,
-            max_chars=6,
-            placeholder="e.g. 592814",
-            key=f"{key_prefix}_input_otp_code"
-        )
-
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            new_pwd = st.text_input(
-                "New Password",
-                type="password",
-                placeholder="Minimum 4 characters",
-                key=f"{key_prefix}_new_pwd"
-            )
-        with col_p2:
-            new_pwd2 = st.text_input(
-                "Confirm New Password",
-                type="password",
-                placeholder="Re-enter new password",
-                key=f"{key_prefix}_new_pwd2"
-            )
-
-        col_btn1, col_btn2 = st.columns([1.2, 0.8])
-        with col_btn1:
-            submit_reset_btn = st.button("🛡️ Verify OTP & Update Password", key=f"{key_prefix}_btn_submit_reset", type="primary", use_container_width=True)
-        with col_btn2:
-            check_otp_btn = st.button("🔍 Check OTP", key=f"{key_prefix}_btn_check_otp", type="secondary", use_container_width=True, help="Test if your OTP code is valid")
-
-        if check_otp_btn:
-            check_ident = st.session_state.get(sent_ident_key) or ident_input.strip()
-            if not check_ident or not entered_otp:
-                st.error("Please enter both your identifier and OTP code above.")
-            else:
-                user = auth_model_instance.find_user_by_identifier(check_ident)
-                target_check = (user.get("email") if user else None) or check_ident
-                is_valid = auth_model_instance.verify_otp(target_check, entered_otp.strip())
-                if is_valid:
-                    st.success(f"✓ OTP code '{entered_otp.strip()}' is valid and verified! Enter your new password and click 'Verify OTP & Update Password'.")
+    # Optional OTP Verification Expander
+    with st.expander("📲 Optional: Request OTP Verification Code via Email / SMS", expanded=False):
+        st.markdown("<div style='font-size: 0.80rem; color: #94A3B8; margin-bottom: 6px;'>Dispatch a 6-digit OTP code to verify identity:</div>", unsafe_allow_html=True)
+        col_otp_ch, col_otp_btn = st.columns([1.4, 1.0])
+        with col_otp_ch:
+            opt_channel = st.selectbox("Dispatch Channel", ["📧 Email (Active via Gmail SMTP / Relay)", "📱 Mobile / SMS"], key=f"{key_prefix}_opt_channel")
+        with col_otp_btn:
+            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+            if st.button("📲 Dispatch Code", key=f"{key_prefix}_opt_send_code_btn", use_container_width=True):
+                target_cand = ident_input.strip()
+                if not target_cand:
+                    st.error("Enter registered username or email above first.")
                 else:
-                    st.error("Invalid or expired OTP code. Please request a new code.")
+                    try:
+                        t_type = "phone" if "SMS" in opt_channel or "Mobile" in opt_channel else "email"
+                        res_otp = auth_model_instance.initiate_password_reset(target_cand, channel=t_type)
+                        st.session_state[f"{key_prefix}_opt_code_val"] = str(res_otp["otp_code"])
+                        st.toast(f"OTP code {res_otp['otp_code']} dispatched!", icon="📬")
+                        st.rerun()
+                    except Exception as ex:
+                        st.error(str(ex))
 
-        if submit_reset_btn:
-            target_user_ident = st.session_state.get(sent_ident_key) or ident_input.strip()
-            if not target_user_ident:
-                st.error("Please enter your registered email or username.")
-            elif not entered_otp or len(entered_otp.strip()) != 6:
-                st.error("Please enter the complete 6-digit One-Time Password (OTP).")
-            elif not new_pwd:
-                st.error("Please enter your desired new password.")
-            elif len(new_pwd) < 4:
-                st.error("Password must be at least 4 characters long.")
-            elif new_pwd != new_pwd2:
-                st.error("Passwords do not match. Please re-enter carefully.")
-            else:
-                try:
-                    auth_model_instance.reset_password_with_otp(
-                        identifier=target_user_ident,
-                        otp_code=entered_otp.strip(),
-                        new_password=new_pwd
-                    )
-                    # Clean up reset session state
-                    for k in [sent_target_key, sent_masked_key, sent_type_key, sent_ident_key]:
-                        if k in st.session_state:
-                            del st.session_state[k]
-                    st.session_state["show_forgot_password"] = False
-                    st.toast("✨ Password reset successfully! Please sign in with your new password.", icon="✅")
-                    st.success("✓ Password successfully updated! Redirecting to sign in...")
-                    time.sleep(1.0)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Password reset failed: {str(e)}")
-
-    if show_back_btn:
-        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
-        if st.button("← Back to Sign In", key=f"{key_prefix}_btn_back_signin", type="secondary", use_container_width=True):
-            st.session_state["show_forgot_password"] = False
-            st.rerun()
+        opt_last_code = st.session_state.get(f"{key_prefix}_opt_code_val")
+        if opt_last_code:
+            st.markdown(f"<div style='background: rgba(0,240,255,0.08); border: 1px solid #00F0FF; padding: 10px; border-radius: 6px; font-size: 0.82rem; color: #FFFFFF;'>Security Code: <b>{opt_last_code}</b> (Dispatched to your target)</div>", unsafe_allow_html=True)
 
 
 def render_auth_view():
