@@ -591,5 +591,3 @@ class AuthModel:
         """Verify the OTP and securely update password."""
         return self.reset_password(identifier=identifier, new_password=new_password, otp_code=otp_code, require_otp=True)
 
-        return True
-
