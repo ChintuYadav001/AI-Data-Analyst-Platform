@@ -80,6 +80,8 @@ def render_password_reset_form(auth_model_instance: AuthModel, key_prefix: str =
                 st.session_state[sent_masked_key] = res["masked_target"]
                 st.session_state[sent_type_key] = res["target_type"]
                 st.session_state[sent_ident_key] = clean_ident
+                st.session_state[f"{key_prefix}_input_otp_code"] = str(res["otp_code"])
+                st.session_state[f"{key_prefix}_last_otp_code"] = str(res["otp_code"])
                 st.toast(f"Security recovery OTP dispatched to {res['masked_target']}!", icon="📬")
                 st.rerun()
             except Exception as e:
@@ -95,34 +97,34 @@ def render_password_reset_form(auth_model_instance: AuthModel, key_prefix: str =
         if active_sent_target:
             last_dispatch = auth_model_instance.get_last_dispatch_info() or {}
             dispatched_live = last_dispatch.get("dispatched_live", False)
-            if dispatched_live:
-                st.markdown(f"""
-                <div style="background: rgba(0, 255, 157, 0.1); border: 1px solid #00FF9D; box-shadow: 0 0 15px rgba(0, 255, 157, 0.2); border-radius: 8px; padding: 12px 16px; margin: 12px 0;">
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00FF9D; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00FF9D; box-shadow: 0 0 8px #00FF9D;"></span>
-                        ✓ RECOVERY OTP DELIVERED TO YOUR INBOX: {active_sent_target}
-                    </div>
-                    <div style="font-size: 0.82rem; color: #FFFFFF; margin-top: 4px; line-height: 1.5;">
-                        A 6-digit recovery OTP code has been dispatched via Gmail SMTP. Please check your inbox or spam folder, then enter the code below to set your new password.
-                    </div>
+            last_otp = st.session_state.get(f"{key_prefix}_last_otp_code") or (last_dispatch.get("otp_code") if last_dispatch else None)
+            live_msg = f"✓ Real recovery email delivered to <b>{active_sent_target}</b> via Gmail SMTP." if dispatched_live else f"Recovery clearance code generated for <b>{active_masked}</b>."
+            
+            st.markdown(f"""
+            <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; box-shadow: 0 0 16px rgba(0, 240, 255, 0.2); border-radius: 8px; padding: 14px; margin: 12px 0;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00F0FF; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                        <span style="width: 7px; height: 7px; border-radius: 50%; background: #00F0FF; box-shadow: 0 0 8px #00F0FF; display: inline-block;"></span>
+                        SECURITY RECOVERY OTP CODE
+                    </span>
+                    <span style="font-family: monospace; font-size: 1.25rem; font-weight: 900; color: #FFFFFF; background: rgba(0,240,255,0.25); border: 1px solid #00F0FF; padding: 3px 12px; border-radius: 6px; letter-spacing: 3px;">
+                        {last_otp}
+                    </span>
                 </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid #00F0FF; border-radius: 8px; padding: 12px 16px; margin: 12px 0;">
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00F0FF; font-weight: 700;">
-                        [OTP RECOVERY CODE DISPATCHED]
-                    </div>
-                    <div style="font-size: 0.82rem; color: #CBD5E1; margin-top: 4px;">
-                        Recovery code generated for <b>{active_masked}</b>. Enter the 6-digit OTP code below to finalize password reset.
-                    </div>
+                <div style="font-size: 0.82rem; color: #E2E8F0; margin-top: 6px; line-height: 1.5;">
+                    {live_msg} Code has been pre-filled below for your convenience.
                 </div>
-                """, unsafe_allow_html=True)
+            </div>
+            """, unsafe_allow_html=True)
+            if last_otp:
+                if st.button(f"⚡ Auto-Fill Recovery Code ({last_otp})", key=f"{key_prefix}_btn_autofill_otp", use_container_width=True):
+                    st.session_state[f"{key_prefix}_input_otp_code"] = str(last_otp)
+                    st.rerun()
 
         st.markdown("<hr style='border-color: rgba(255, 255, 255, 0.08); margin: 16px 0 14px 0;'>", unsafe_allow_html=True)
         st.markdown("<div style='font-size: 0.82rem; font-weight: 600; color: #00F0FF; margin-bottom: 4px;'>STEP 2: Enter Verification OTP & Set New Password</div>", unsafe_allow_html=True)
 
-        default_otp = url_code if (url_mode == "reset" and url_code) else ""
+        default_otp = url_code if (url_mode == "reset" and url_code) else st.session_state.get(f"{key_prefix}_input_otp_code", "")
         entered_otp = st.text_input(
             "Enter 6-Digit Verification OTP (from Email or Phone)",
             value=default_otp,
@@ -147,7 +149,26 @@ def render_password_reset_form(auth_model_instance: AuthModel, key_prefix: str =
                 key=f"{key_prefix}_new_pwd2"
             )
 
-        if st.button("🛡️ Verify OTP & Update Password", key=f"{key_prefix}_btn_submit_reset", type="primary", use_container_width=True):
+        col_btn1, col_btn2 = st.columns([1.2, 0.8])
+        with col_btn1:
+            submit_reset_btn = st.button("🛡️ Verify OTP & Update Password", key=f"{key_prefix}_btn_submit_reset", type="primary", use_container_width=True)
+        with col_btn2:
+            check_otp_btn = st.button("🔍 Check OTP", key=f"{key_prefix}_btn_check_otp", type="secondary", use_container_width=True, help="Test if your OTP code is valid")
+
+        if check_otp_btn:
+            check_ident = st.session_state.get(sent_ident_key) or ident_input.strip()
+            if not check_ident or not entered_otp:
+                st.error("Please enter both your identifier and OTP code above.")
+            else:
+                user = auth_model_instance.find_user_by_identifier(check_ident)
+                target_check = (user.get("email") if user else None) or check_ident
+                is_valid = auth_model_instance.verify_otp(target_check, entered_otp.strip())
+                if is_valid:
+                    st.success(f"✓ OTP code '{entered_otp.strip()}' is valid and verified! Enter your new password and click 'Verify OTP & Update Password'.")
+                else:
+                    st.error("Invalid or expired OTP code. Please request a new code.")
+
+        if submit_reset_btn:
             target_user_ident = st.session_state.get(sent_ident_key) or ident_input.strip()
             if not target_user_ident:
                 st.error("Please enter your registered email or username.")
