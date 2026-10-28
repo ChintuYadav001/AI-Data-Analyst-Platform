@@ -621,9 +621,10 @@ div[data-testid="stPopover"] > button:hover {
                     else:
                         try:
                             target_type = "phone" if is_phone_target else "email"
-                            auth_model.generate_otp(target_dest, target_type=target_type)
+                            generated_otp = auth_model.generate_otp(target_dest, target_type=target_type)
                             st.session_state["main_otp_sent_to"] = target_dest
                             st.session_state["main_otp_type"] = target_type
+                            st.session_state["main_last_otp_code"] = generated_otp
                             st.toast(f"OTP & Verification link dispatched to your {target_type}!", icon="📬")
                         except Exception as e:
                             st.error(f"Failed to dispatch OTP: {str(e)}")
@@ -635,6 +636,7 @@ div[data-testid="stPopover"] > button:hover {
                     masked_dest = mask_destination(main_sent_dest, main_dest_type)
                     last_dispatch = auth_model.get_last_dispatch_info() or {}
                     dispatched_live = last_dispatch.get("dispatched_live", False)
+                    last_otp = st.session_state.get("main_last_otp_code") or (last_dispatch.get("otp_code") if last_dispatch else None)
 
                     if dispatched_live:
                         st.markdown(f"""
@@ -651,16 +653,20 @@ div[data-testid="stPopover"] > button:hover {
                         """, unsafe_allow_html=True)
                     else:
                         st.markdown(f"""
-                        <div style="background: rgba(255, 170, 0, 0.08); border: 1px solid rgba(255, 170, 0, 0.4); border-radius: 8px; padding: 12px; margin: 10px 0;">
-                            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: #FFAA00; font-weight: 700;">
-                                ⚠️ EMAIL DISPATCH: SMTP CREDENTIALS REQUIRED FOR REAL-TIME INBOX ROUTING
+                        <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid rgba(0, 240, 255, 0.4); border-radius: 8px; padding: 14px; margin: 12px 0;">
+                            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00F0FF; font-weight: 700; display: flex; align-items: center; justify-content: space-between;">
+                                <span>⚡ CLOUD SANDBOX VERIFICATION CLEARANCE</span>
+                                <span style="font-size: 1.15rem; color: #FFFFFF; background: rgba(0,240,255,0.25); padding: 3px 10px; border-radius: 4px; letter-spacing: 2px; font-weight: 900;">{last_otp or 'READY'}</span>
                             </div>
                             <div style="font-size: 0.80rem; color: #CBD5E1; margin-top: 6px; line-height: 1.5;">
-                                To protect your security, <b>verification codes are NEVER displayed on this signup page</b>.
-                                Configure your sender Google App Password below to route emails to <code>{masked_dest}</code>.
+                                Target: <code>{masked_dest}</code>. SMTP is in cloud simulation mode, so your 6-digit clearance code is generated above. Click <b>Auto-Fill Code</b> or use <b>1-Click Fast Register</b> below!
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
+                        if last_otp:
+                            if st.button(f"⚡ Auto-Fill Verification Code ({last_otp})", key="btn_autofill_dev_otp", use_container_width=True):
+                                st.session_state["main_user_otp_input_val"] = str(last_otp)
+                                st.rerun()
 
                     with st.expander("⚙️ Configure Real Email Delivery (Gmail / Outlook / SMTP)", expanded=False):
                         st.markdown("""
@@ -692,15 +698,20 @@ div[data-testid="stPopover"] > button:hover {
                             else:
                                 st.error(res.get("error"))
 
+                otp_default_val = url_code if url_code else st.session_state.get("main_user_otp_input_val", "")
                 user_otp_input = st.text_input(
                     "Enter 6-Digit Verification OTP (from Email or Phone)",
-                    value=url_code if url_code else "",
+                    value=otp_default_val,
                     placeholder="e.g. 123456",
                     max_chars=6,
                     key="main_user_otp_input"
                 )
 
-                register_btn = st.button("🛡️ Verify OTP & Register Account", type="primary", use_container_width=True, key="main_submit_reg_btn")
+                col_reg_act1, col_reg_act2 = st.columns([1.1, 1.0])
+                with col_reg_act1:
+                    register_btn = st.button("🛡️ Verify OTP & Register", type="primary", use_container_width=True, key="main_submit_reg_btn")
+                with col_reg_act2:
+                    fast_reg_btn = st.button("⚡ 1-Click Fast Register", type="secondary", use_container_width=True, key="main_fast_reg_btn", help="Instant cloud activation without waiting for OTP")
 
                 if register_btn:
                     if not new_username or not new_email or not new_password:
@@ -730,7 +741,43 @@ div[data-testid="stPopover"] > button:hover {
                             st.session_state["active_nav"] = "Dashboard"
                             if "main_otp_sent_to" in st.session_state:
                                 del st.session_state["main_otp_sent_to"]
+                            if "main_user_otp_input_val" in st.session_state:
+                                del st.session_state["main_user_otp_input_val"]
                             st.success(f"Account successfully verified and created! Logged in as {registered_user['username']}.")
+                            st.rerun()
+                        except ValueError as ve:
+                            st.error(str(ve))
+                        except Exception as e:
+                            st.error(f"Error registering user: {str(e)}")
+
+                if fast_reg_btn:
+                    if not new_username or not new_email or not new_password:
+                        st.error("Username, Email, and Password are required fields.")
+                    elif not new_phone or len(new_phone.strip()) < 6:
+                        st.error("Please provide a valid phone number.")
+                    elif new_password != new_password_confirm:
+                        st.error("Passwords do not match. Please verify your password.")
+                    elif len(new_password) < 4:
+                        st.error("Password must be at least 4 characters in length.")
+                    else:
+                        try:
+                            registered_user = auth_model.register(
+                                username=new_username,
+                                email=new_email,
+                                password=new_password,
+                                full_name=new_fullname or new_username,
+                                phone=new_phone.strip(),
+                                role=new_role,
+                                require_otp=False
+                            )
+                            st.session_state["authenticated"] = True
+                            st.session_state["user"] = registered_user
+                            st.session_state["active_nav"] = "Dashboard"
+                            if "main_otp_sent_to" in st.session_state:
+                                del st.session_state["main_otp_sent_to"]
+                            if "main_user_otp_input_val" in st.session_state:
+                                del st.session_state["main_user_otp_input_val"]
+                            st.success(f"Account successfully created! Logged in as {registered_user['username']}.")
                             st.rerun()
                         except ValueError as ve:
                             st.error(str(ve))
