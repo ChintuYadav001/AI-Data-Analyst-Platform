@@ -685,12 +685,10 @@ div[data-testid="stPopover"] > button:hover {
                     else:
                         try:
                             target_type = "phone" if is_phone_target else "email"
-                            generated_otp = auth_model.generate_otp(target_dest, target_type=target_type)
+                            auth_model.generate_otp(target_dest, target_type=target_type)
                             st.session_state["main_otp_sent_to"] = target_dest
                             st.session_state["main_otp_type"] = target_type
-                            st.session_state["main_last_otp_code"] = str(generated_otp)
-                            st.session_state["main_user_otp_input"] = str(generated_otp)
-                            st.toast(f"OTP & Verification link dispatched to your {target_type}!", icon="📬")
+                            st.toast(f"OTP dispatched via SMTP to your {target_type}!", icon="📬")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Failed to dispatch OTP: {str(e)}")
@@ -700,43 +698,18 @@ div[data-testid="stPopover"] > button:hover {
 
                 if main_sent_dest:
                     masked_dest = mask_destination(main_sent_dest, main_dest_type)
-                    last_dispatch = auth_model.get_last_dispatch_info() or {}
-                    dispatched_live = last_dispatch.get("dispatched_live", False)
-                    last_otp = st.session_state.get("main_last_otp_code") or (last_dispatch.get("otp_code") if last_dispatch else None)
-
-                    if dispatched_live:
-                        st.markdown(f"""
-                        <div style="background: rgba(0, 255, 157, 0.1); border: 1px solid #00FF9D; box-shadow: 0 0 15px rgba(0, 255, 157, 0.2); border-radius: 8px; padding: 14px; margin: 12px 0;">
-                            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00FF9D; font-weight: 700; display: flex; align-items: center; justify-content: space-between;">
-                                <span style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00FF9D; box-shadow: 0 0 8px #00FF9D;"></span>
-                                    ✓ REAL EMAIL DELIVERED TO: {masked_dest}
-                                </span>
-                                <span style="font-size: 1.15rem; color: #FFFFFF; background: rgba(0,255,157,0.25); padding: 3px 10px; border-radius: 4px; letter-spacing: 2px; font-weight: 900;">{last_otp or 'READY'}</span>
-                            </div>
-                            <div style="font-size: 0.84rem; color: #FFFFFF; margin-top: 6px; line-height: 1.5;">
-                                Your 6-digit OTP code has been delivered to <b>{main_sent_dest}</b> via Gmail SMTP.
-                                <br/><span style="font-size: 0.78rem; color: #94A3B8;">Please check your inbox or click <b>Auto-Fill Code</b> below to complete registration!</span>
-                            </div>
+                    st.markdown(f"""
+                    <div style="background: rgba(0, 255, 157, 0.08); border: 1px solid #00FF9D; box-shadow: 0 0 15px rgba(0, 255, 157, 0.15); border-radius: 8px; padding: 14px 18px; margin: 12px 0;">
+                        <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.80rem; color: #00FF9D; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00FF9D; box-shadow: 0 0 8px #00FF9D;"></span>
+                            ✓ VERIFICATION OTP DISPATCHED VIA GMAIL SMTP
                         </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"""
-                        <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid rgba(0, 240, 255, 0.4); border-radius: 8px; padding: 14px; margin: 12px 0;">
-                            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #00F0FF; font-weight: 700; display: flex; align-items: center; justify-content: space-between;">
-                                <span>⚡ VERIFICATION CLEARANCE CODE</span>
-                                <span style="font-size: 1.15rem; color: #FFFFFF; background: rgba(0,240,255,0.25); padding: 3px 10px; border-radius: 4px; letter-spacing: 2px; font-weight: 900;">{last_otp or 'READY'}</span>
-                            </div>
-                            <div style="font-size: 0.80rem; color: #CBD5E1; margin-top: 6px; line-height: 1.5;">
-                                Target: <code>{masked_dest}</code>. Clearance code generated above. Click <b>Auto-Fill Code</b> or type it below!
-                            </div>
+                        <div style="font-size: 0.85rem; color: #FFFFFF; margin-top: 6px; line-height: 1.5;">
+                            A 6-digit One-Time Password has been dispatched to <b>{masked_dest}</b> via Gmail SMTP.
+                            <br/><span style="font-size: 0.78rem; color: #94A3B8;">Please check your email inbox (or spam folder) and enter the 6-digit code below to complete registration.</span>
                         </div>
-                        """, unsafe_allow_html=True)
-
-                    if last_otp:
-                        if st.button(f"⚡ Auto-Fill Verification Code ({last_otp})", key="btn_autofill_dev_otp", use_container_width=True):
-                            st.session_state["main_user_otp_input"] = str(last_otp)
-                            st.rerun()
+                    </div>
+                    """, unsafe_allow_html=True)
 
                     render_email_delivery_settings(key_prefix="main_reg", default_target=main_sent_dest)
 
