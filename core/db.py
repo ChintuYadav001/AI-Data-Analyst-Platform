@@ -169,16 +169,25 @@ def get_connection(target_db_type: Optional[str] = None) -> DatabaseConnectionWr
         try:
             import psycopg2
             from psycopg2.extras import RealDictCursor
+            from core.neon_db import get_neon_url
 
-            raw_conn = psycopg2.connect(
-                host=config.PG_HOST,
-                port=config.PG_PORT,
-                user=config.PG_USER,
-                password=config.PG_PASSWORD,
-                dbname=config.PG_DATABASE,
-                cursor_factory=RealDictCursor,
-                connect_timeout=5,
-            )
+            neon_url = get_neon_url(getattr(config, "NEON_DATABASE_URL", None))
+            if neon_url:
+                raw_conn = psycopg2.connect(
+                    neon_url,
+                    cursor_factory=RealDictCursor,
+                    connect_timeout=8,
+                )
+            else:
+                raw_conn = psycopg2.connect(
+                    host=config.PG_HOST,
+                    port=config.PG_PORT,
+                    user=config.PG_USER,
+                    password=config.PG_PASSWORD,
+                    dbname=config.PG_DATABASE,
+                    cursor_factory=RealDictCursor,
+                    connect_timeout=5,
+                )
             return DatabaseConnectionWrapper(raw_conn, "postgres")
         except Exception as e:
             import logging
