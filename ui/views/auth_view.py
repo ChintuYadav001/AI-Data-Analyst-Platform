@@ -430,11 +430,15 @@ div[data-testid="stPopover"] > button:hover {
                     col_demo1, col_demo2 = st.columns(2)
                     with col_demo1:
                         if st.button("🔑 Default Analyst", key="btn_quick_fill_analyst", use_container_width=True, help="Auto-fill default Analyst demo credentials"):
+                            st.session_state["pro_signin_identifier"] = "analyst@quantum.ai"
+                            st.session_state["pro_signin_password"] = "QuantumPassword2026!"
                             st.session_state["pro_signin_identifier_val"] = "analyst@quantum.ai"
                             st.session_state["pro_signin_password_val"] = "QuantumPassword2026!"
                             st.rerun()
                     with col_demo2:
                         if st.button("👑 Admin Chintu", key="btn_quick_fill_chintu", use_container_width=True, help="Auto-fill Chintu Kumar admin credentials"):
+                            st.session_state["pro_signin_identifier"] = "chintukumaredu00@gmail.com"
+                            st.session_state["pro_signin_password"] = "QuantumPassword2026!"
                             st.session_state["pro_signin_identifier_val"] = "chintukumaredu00@gmail.com"
                             st.session_state["pro_signin_password_val"] = "QuantumPassword2026!"
                             st.rerun()
