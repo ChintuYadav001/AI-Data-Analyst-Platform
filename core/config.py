@@ -24,7 +24,9 @@ DUCKDB_PATH = str(DATA_DIR / "analytics.duckdb")
 AUTH_DB_PATH = DATA_DIR / "auth.db"
 
 # Database Backend Configuration (sqlite, mysql, postgres)
-DB_TYPE = os.getenv("DB_TYPE", "sqlite").lower()
+NEON_DATABASE_URL = os.getenv("NEON_DATABASE_URL", os.getenv("DATABASE_URL", ""))
+_default_db = "postgres" if NEON_DATABASE_URL else "sqlite"
+DB_TYPE = os.getenv("DB_TYPE", _default_db).lower()
 
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
 MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
