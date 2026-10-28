@@ -1,5 +1,7 @@
 # ⚡ AI-Powered End-to-End Data Analyst Platform
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ChintuYadav001/AI-Data-Analyst-Platform)
+
 A production-quality web application and modular analytical engine designed as an **autonomous, explainable, and reproducible AI Data Analyst**.
 
 ---
