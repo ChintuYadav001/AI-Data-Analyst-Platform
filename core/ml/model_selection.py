@@ -24,6 +24,7 @@ def run_benchmark(
     cv_folds: int = 3,
     scaler_type: str = "standard",
     cat_encoding: str = "onehot",
+    use_log_transform: Any = False,
     progress_callback: Optional[Any] = None,
     dataset_name: str = "dataset",
     **kwargs: Any,
@@ -72,6 +73,7 @@ def run_benchmark(
                 cv_folds=cv_folds,
                 scaler_type=scaler_type,
                 cat_encoding=cat_encoding,
+                use_log_transform=use_log_transform,
             )
             results[m_id] = res
 
@@ -83,6 +85,9 @@ def run_benchmark(
                 "metrics": res["metrics"],
                 "training_time": res["training_time_seconds"],
                 "is_overfitting": res["is_overfitting"],
+                "is_underfitting": res.get("is_underfitting", False),
+                "fit_status": res.get("fit_status", "optimal"),
+                "log_transformed": res.get("log_transformed", False),
                 "warnings": res["warnings"],
             })
         except Exception as e:
@@ -94,6 +99,8 @@ def run_benchmark(
                 "metrics": {},
                 "training_time": 0.0,
                 "is_overfitting": False,
+                "is_underfitting": False,
+                "fit_status": "error",
                 "warnings": [f"Training failed: {str(e)}"],
             })
 
