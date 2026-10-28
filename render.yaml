@@ -6,8 +6,8 @@ services:
     plan: free
     branch: main
     healthCheckPath: /
-    buildCommand: pip install --no-cache-dir -r requirements.txt
-    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true --server.fileWatcherType none
+    buildCommand: pip install --no-cache-dir -r requirements.txt && python -m compileall -q .
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true --server.fileWatcherType none --server.enableWebsocketCompression true --server.fastReruns true
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
