@@ -166,8 +166,9 @@ def render_ml_view():
 
     st.markdown("<div style='margin-bottom: 8px;'></div>", unsafe_allow_html=True)
 
-    # 13 Institutional Tabs
-    tabs = st.tabs([
+    # 14 Institutional Tabs (with 1-Click Autonomous Lifecycle as Flagship Tab)
+    tabs_list = st.tabs([
+        "⚡ 1-Click Autonomous ML",
         "Overview",
         "ML Readiness",
         "Target",
@@ -182,6 +183,15 @@ def render_ml_view():
         "Scenario Analysis (What-If)",
         "Experiments & Registry",
     ])
+
+    # =========================================================================
+    # FLAGSHIP TAB: 1-CLICK AUTONOMOUS PREDICTIVE PIPELINE (ALL 10 STEPS)
+    # =========================================================================
+    with tabs_list[0]:
+        from ui.views.autonomous_ml_card import render_autonomous_1click_ml_tab
+        render_autonomous_1click_ml_tab(df, proj_name)
+
+    tabs = tabs_list[1:]
 
     # =========================================================================
     # TAB 1: OVERVIEW
