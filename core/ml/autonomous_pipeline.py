@@ -532,12 +532,14 @@ def predict(record: dict):
 
     # Baseline drift bounds
     drift_baseline = {}
-    for col in numeric_for_outliers[:6]:
+    for col in [c for c in feature_cols if pd.api.types.is_numeric_dtype(engineered_df[c])][:6]:
+        mean_v = float(engineered_df[col].mean())
+        std_v = float(engineered_df[col].std())
         drift_baseline[col] = {
-            "mean": round(float(clean_df[col].mean()), 3),
-            "std": round(float(clean_df[col].std()), 3),
-            "lower_bound": round(float(clean_df[col].mean() - 3 * clean_df[col].std()), 3),
-            "upper_bound": round(float(clean_df[col].mean() + 3 * clean_df[col].std()), 3),
+            "mean": round(mean_v, 3),
+            "std": round(std_v, 3),
+            "lower_bound": round(mean_v - 3 * std_v, 3),
+            "upper_bound": round(mean_v + 3 * std_v, 3),
         }
 
     notify(10, "Deployment & Monitoring", {
