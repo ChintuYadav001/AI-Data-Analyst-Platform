@@ -322,6 +322,25 @@
         }
       },
       "active_version": "dataset_v1"
+    },
+    "ds_218358a0": {
+      "dataset_id": "ds_218358a0",
+      "name": "Sample - Superstore",
+      "dataset_hash": "a98aed91784974ec",
+      "created_at": 1793251147.6609442,
+      "versions": {
+        "dataset_v1": {
+          "parquet_path": "D:\\antigrevity_project\\data analyse\\data\\parquet\\a98aed91784974ec.parquet",
+          "rows": 9994,
+          "columns": 21,
+          "registered_at": 1793251147.6609485,
+          "lineage": {
+            "source_file": "Sample - Superstore.xlsx",
+            "source_type": "xlsx"
+          }
+        }
+      },
+      "active_version": "dataset_v1"
     }
   },
   "hashes": {
@@ -331,7 +350,7 @@
     "2d594c24215cd8d6": "ds_d4c1e5d6",
     "4a437fde05fe5264": "ds_f32593dd",
     "97f5dfae139737aa": "ds_dafc683c",
-    "a98aed91784974ec": "ds_4f788338",
+    "a98aed91784974ec": "ds_218358a0",
     "e90ad92359001b26": "ds_6e69a7a9",
     "2f206e8db8389efe": "ds_282a0780",
     "362c2cfa4ece349a": "ds_57da8c2c",
