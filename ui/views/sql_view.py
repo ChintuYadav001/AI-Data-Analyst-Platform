@@ -55,77 +55,209 @@ def _init_sql_state():
 
 
 # ── Presets Builder ───────────────────────────────────────────────────
+# ── Presets Builder (Basic to Extreme Advanced) ─────────────────────
 def _build_smart_presets(df: pd.DataFrame, table: str):
-    """Generate contextual preset queries from schema."""
+    """Generate comprehensive SQL templates from schema across Basic to Extreme Advanced levels."""
     num_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c]) and "id" not in str(c).lower()]
-    cat_cols = [c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c]) and df[c].nunique() <= 50 and "id" not in str(c).lower()]
+    cat_cols = [c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c]) and df[c].nunique() <= 100 and "id" not in str(c).lower()]
     date_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c]) or any(k in str(c).lower() for k in ["date", "time", "timestamp"])]
+    id_cols = [c for c in df.columns if any(k in str(c).lower() for k in ["id", "code", "ticket", "identifier"])]
     all_cols = list(df.columns)
+
+    p_metric = num_cols[0] if num_cols else "Sales"
+    sec_metric = num_cols[1] if len(num_cols) > 1 else p_metric
+    p_dim = cat_cols[0] if cat_cols else "Category"
+    sec_dim = cat_cols[1] if len(cat_cols) > 1 else (cat_cols[0] if cat_cols else "Region")
+    d_col = date_cols[0] if date_cols else None
+    id_col = id_cols[0] if id_cols else (cat_cols[0] if cat_cols else all_cols[0])
+
+    clean_pm = p_metric.replace(" ", "_")
+    clean_sm = sec_metric.replace(" ", "_")
+    clean_dim = p_dim.replace(" ", "_")
 
     presets = []
 
+    # ═══════════════════════════════════════════════════════════════════
+    # LEVEL 1: BASIC SQL (Retrieval, Filtering, Scalar Aggregations)
+    # ═══════════════════════════════════════════════════════════════════
     presets.append({
-        "label": "👀 Preview First 20 Rows",
+        "label": "🟢 [Basic] Preview First 25 Records",
         "icon": "👀",
-        "query": f'SELECT * FROM "{table}" LIMIT 20;',
+        "level": "Level 1: Basic",
+        "query": f'SELECT * FROM "{table}" LIMIT 25;',
         "category": "Basic"
     })
 
     presets.append({
-        "label": "📊 Total Row Count",
-        "icon": "📊",
-        "query": f'SELECT COUNT(*) AS total_rows FROM "{table}";',
+        "label": "🟢 [Basic] Total Record Count & Summary",
+        "icon": "🔢",
+        "level": "Level 1: Basic",
+        "query": f'SELECT COUNT(*) AS total_records FROM "{table}";',
         "category": "Basic"
     })
 
     if num_cols:
-        stats_parts = ", ".join([
-            f'ROUND(AVG("{c}"), 2) AS avg_{c.replace(" ", "_")}, '
-            f'ROUND(MIN("{c}"), 2) AS min_{c.replace(" ", "_")}, '
-            f'ROUND(MAX("{c}"), 2) AS max_{c.replace(" ", "_")}'
-            for c in num_cols[:4]
-        ])
+        stats_exprs = [
+            f'ROUND(SUM("{p_metric}"), 2) AS total_{clean_pm}',
+            f'ROUND(AVG("{p_metric}"), 2) AS avg_{clean_pm}',
+            f'ROUND(MIN("{p_metric}"), 2) AS min_{clean_pm}',
+            f'ROUND(MAX("{p_metric}"), 2) AS max_{clean_pm}',
+            f'ROUND(STDDEV_SAMP("{p_metric}"), 2) AS std_{clean_pm}'
+        ]
         presets.append({
-            "label": "📈 Summary Statistics",
+            "label": f"🟢 [Basic] Descriptive Statistics ({p_metric})",
             "icon": "📈",
-            "query": f'SELECT {stats_parts}\nFROM "{table}";',
-            "category": "Statistics"
+            "level": "Level 1: Basic",
+            "query": f'SELECT\n  ' + ",\n  ".join(stats_exprs) + f'\nFROM "{table}";',
+            "category": "Basic"
         })
 
-    if cat_cols:
-        c = cat_cols[0]
+    presets.append({
+        "label": f"🟢 [Basic] Top 10 Highest {p_metric} Records",
+        "icon": "🏆",
+        "level": "Level 1: Basic",
+        "query": f'SELECT * FROM "{table}"\nORDER BY "{p_metric}" DESC\nLIMIT 10;',
+        "category": "Basic"
+    })
+
+    presets.append({
+        "label": f"🟢 [Basic] Distinct Count of {p_dim}",
+        "icon": "👥",
+        "level": "Level 1: Basic",
+        "query": f'SELECT COUNT(DISTINCT "{p_dim}") AS unique_{clean_dim}\nFROM "{table}";',
+        "category": "Basic"
+    })
+
+    # ═══════════════════════════════════════════════════════════════════
+    # LEVEL 2: INTERMEDIATE SQL (Group Aggregations, Having, Dates)
+    # ═══════════════════════════════════════════════════════════════════
+    if cat_cols and num_cols:
         presets.append({
-            "label": f"🏆 Top {c} by Count",
-            "icon": "🏆",
-            "query": f'SELECT "{c}", COUNT(*) AS count\nFROM "{table}"\nGROUP BY "{c}"\nORDER BY count DESC\nLIMIT 10;',
-            "category": "Segments"
+            "label": f"🔵 [Intermediate] Total {p_metric} & {sec_metric} by {p_dim}",
+            "icon": "📊",
+            "level": "Level 2: Intermediate",
+            "query": f'SELECT\n  "{p_dim}",\n  ROUND(SUM("{p_metric}"), 2) AS total_{clean_pm},\n  ROUND(SUM("{sec_metric}"), 2) AS total_{clean_sm},\n  COUNT(*) AS orders_count\nFROM "{table}"\nGROUP BY "{p_dim}"\nORDER BY total_{clean_pm} DESC\nLIMIT 15;',
+            "category": "Intermediate"
+        })
+
+        if len(cat_cols) >= 2:
+            presets.append({
+                "label": f"🔵 [Intermediate] Cross-Breakdown: {p_dim} × {sec_dim}",
+                "icon": "🗂️",
+                "level": "Level 2: Intermediate",
+                "query": f'SELECT\n  "{p_dim}",\n  "{sec_dim}",\n  ROUND(SUM("{p_metric}"), 2) AS total_{clean_pm},\n  COUNT(*) AS records\nFROM "{table}"\nGROUP BY "{p_dim}", "{sec_dim}"\nORDER BY "{p_dim}" ASC, total_{clean_pm} DESC\nLIMIT 20;',
+                "category": "Intermediate"
+            })
+
+        presets.append({
+            "label": f"🔵 [Intermediate] High-Volume Segments (HAVING Threshold)",
+            "icon": "⚖️",
+            "level": "Level 2: Intermediate",
+            "query": f'SELECT\n  "{p_dim}",\n  ROUND(SUM("{p_metric}"), 2) AS total_{clean_pm},\n  COUNT(*) AS order_count\nFROM "{table}"\nGROUP BY "{p_dim}"\nHAVING COUNT(*) >= 10\nORDER BY total_{clean_pm} DESC;',
+            "category": "Intermediate"
+        })
+
+    if d_col and num_cols:
+        presets.append({
+            "label": f"🔵 [Intermediate] Monthly Aggregation with DATE_TRUNC",
+            "icon": "📅",
+            "level": "Level 2: Intermediate",
+            "query": f'SELECT\n  DATE_TRUNC(\'month\', TRY_CAST("{d_col}" AS TIMESTAMP)) AS month,\n  ROUND(SUM("{p_metric}"), 2) AS monthly_{clean_pm},\n  COUNT(*) AS orders_count\nFROM "{table}"\nWHERE "{d_col}" IS NOT NULL\nGROUP BY month\nORDER BY month ASC;',
+            "category": "Intermediate"
+        })
+
+    presets.append({
+        "label": f"🔵 [Intermediate] Benchmark Filtering (Above Average {p_metric})",
+        "icon": "🎯",
+        "level": "Level 2: Intermediate",
+        "query": f'SELECT * FROM "{table}"\nWHERE "{p_metric}" > (SELECT AVG("{p_metric}") FROM "{table}")\nORDER BY "{p_metric}" DESC\nLIMIT 25;',
+        "category": "Intermediate"
+    })
+
+    if len(date_cols) >= 2 and cat_cols:
+        presets.append({
+            "label": f"🔵 [Intermediate] Fulfillment Duration (DATEDIFF Days)",
+            "icon": "🚚",
+            "level": "Level 2: Intermediate",
+            "query": f'SELECT\n  "{p_dim}",\n  ROUND(AVG(DATEDIFF(\'day\', TRY_CAST("{date_cols[0]}" AS TIMESTAMP), TRY_CAST("{date_cols[1]}" AS TIMESTAMP))), 1) AS avg_duration_days,\n  COUNT(*) AS total_shipments\nFROM "{table}"\nWHERE "{date_cols[0]}" IS NOT NULL AND "{date_cols[1]}" IS NOT NULL\nGROUP BY "{p_dim}"\nORDER BY avg_duration_days ASC;',
+            "category": "Intermediate"
+        })
+
+    # ═══════════════════════════════════════════════════════════════════
+    # LEVEL 3: ADVANCED SQL (Window Functions, Rankings, Moving Averages)
+    # ═══════════════════════════════════════════════════════════════════
+    if len(cat_cols) >= 2 and num_cols:
+        presets.append({
+            "label": f"🟣 [Advanced] Top 3 {sec_dim} in Each {p_dim} (PARTITION BY)",
+            "icon": "🥇",
+            "level": "Level 3: Advanced",
+            "query": f'WITH ranked_items AS (\n  SELECT\n    "{p_dim}",\n    "{sec_dim}",\n    ROUND(SUM("{p_metric}"), 2) AS total_{clean_pm},\n    ROW_NUMBER() OVER (PARTITION BY "{p_dim}" ORDER BY SUM("{p_metric}") DESC) AS rank\n  FROM "{table}"\n  GROUP BY "{p_dim}", "{sec_dim}"\n)\nSELECT "{p_dim}", "{sec_dim}", total_{clean_pm}, rank\nFROM ranked_items\nWHERE rank <= 3\nORDER BY "{p_dim}" ASC, rank ASC;',
+            "category": "Advanced"
+        })
+
+    if d_col and num_cols:
+        presets.append({
+            "label": f"🟣 [Advanced] Cumulative Running Total of {p_metric}",
+            "icon": "📈",
+            "level": "Level 3: Advanced",
+            "query": f'WITH monthly_data AS (\n  SELECT\n    DATE_TRUNC(\'month\', TRY_CAST("{d_col}" AS TIMESTAMP)) AS month,\n    ROUND(SUM("{p_metric}"), 2) AS monthly_{clean_pm}\n  FROM "{table}"\n  WHERE "{d_col}" IS NOT NULL\n  GROUP BY 1\n)\nSELECT\n  month,\n  monthly_{clean_pm},\n  ROUND(SUM(monthly_{clean_pm}) OVER (ORDER BY month ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), 2) AS cumulative_{clean_pm}\nFROM monthly_data\nORDER BY month ASC;',
+            "category": "Advanced"
+        })
+
+        presets.append({
+            "label": f"🟣 [Advanced] 3-Period Smoothed Moving Average",
+            "icon": "🌊",
+            "level": "Level 3: Advanced",
+            "query": f'WITH monthly_totals AS (\n  SELECT\n    DATE_TRUNC(\'month\', TRY_CAST("{d_col}" AS TIMESTAMP)) AS month,\n    ROUND(SUM("{p_metric}"), 2) AS monthly_{clean_pm}\n  FROM "{table}"\n  WHERE "{d_col}" IS NOT NULL\n  GROUP BY 1\n)\nSELECT\n  month,\n  monthly_{clean_pm},\n  ROUND(AVG(monthly_{clean_pm}) OVER (ORDER BY month ASC ROWS BETWEEN 2 PRECEDING AND CURRENT ROW), 2) AS rolling_3_period_avg\nFROM monthly_totals\nORDER BY month ASC;',
+            "category": "Advanced"
         })
 
     if cat_cols and num_cols:
-        c, n = cat_cols[0], num_cols[0]
         presets.append({
-            "label": f"💰 Total {n} by {c}",
-            "icon": "💰",
-            "query": f'SELECT "{c}", ROUND(SUM("{n}"), 2) AS total_{n.replace(" ", "_")}, COUNT(*) AS records\nFROM "{table}"\nGROUP BY "{c}"\nORDER BY total_{n.replace(" ", "_")} DESC\nLIMIT 15;',
-            "category": "Aggregation"
+            "label": f"🟣 [Advanced] Percentage Share of Total Revenue (SUM OVER)",
+            "icon": "🥧",
+            "level": "Level 3: Advanced",
+            "query": f'SELECT\n  "{p_dim}",\n  ROUND(SUM("{p_metric}"), 2) AS total_{clean_pm},\n  ROUND(100.0 * SUM("{p_metric}") / NULLIF(SUM(SUM("{p_metric}")) OVER (), 0), 2) AS pct_of_total\nFROM "{table}"\nGROUP BY "{p_dim}"\nORDER BY total_{clean_pm} DESC\nLIMIT 15;',
+            "category": "Advanced"
         })
 
-    if date_cols and num_cols:
-        d, n = date_cols[0], num_cols[0]
+    # ═══════════════════════════════════════════════════════════════════
+    # LEVEL 4: EXTREME ADVANCED (MoM Growth, Pareto 80/20, RFM, Outliers)
+    # ═══════════════════════════════════════════════════════════════════
+    if d_col and num_cols:
         presets.append({
-            "label": f"📅 Monthly Trend of {n}",
-            "icon": "📅",
-            "query": f'SELECT DATE_TRUNC(\'month\', TRY_CAST("{d}" AS TIMESTAMP)) AS month,\n  ROUND(SUM("{n}"), 2) AS total_{n.replace(" ", "_")},\n  COUNT(*) AS records\nFROM "{table}"\nGROUP BY month\nORDER BY month;',
-            "category": "Time Series"
+            "label": f"🔴 [Extreme] Month-over-Month (MoM) Growth Rate % (LAG)",
+            "icon": "🚀",
+            "level": "Level 4: Extreme",
+            "query": f'WITH monthly_perf AS (\n  SELECT\n    DATE_TRUNC(\'month\', TRY_CAST("{d_col}" AS TIMESTAMP)) AS month,\n    ROUND(SUM("{p_metric}"), 2) AS current_{clean_pm}\n  FROM "{table}"\n  WHERE "{d_col}" IS NOT NULL\n  GROUP BY 1\n),\ngrowth_calc AS (\n  SELECT\n    month,\n    current_{clean_pm},\n    LAG(current_{clean_pm}, 1) OVER (ORDER BY month ASC) AS prior_{clean_pm},\n    ROUND(((current_{clean_pm} - LAG(current_{clean_pm}, 1) OVER (ORDER BY month ASC)) / NULLIF(LAG(current_{clean_pm}, 1) OVER (ORDER BY month ASC), 0)) * 100.0, 2) AS mom_growth_pct\n  FROM monthly_perf\n)\nSELECT month, current_{clean_pm}, prior_{clean_pm}, mom_growth_pct\nFROM growth_calc\nORDER BY month ASC;',
+            "category": "Extreme"
         })
 
-    null_checks = " + ".join([f'CASE WHEN "{c}" IS NULL THEN 1 ELSE 0 END' for c in all_cols[:10]])
+    if cat_cols and num_cols:
+        presets.append({
+            "label": f"🔴 [Extreme] Pareto 80/20 Revenue Concentration Analysis",
+            "icon": "⚖️",
+            "level": "Level 4: Extreme",
+            "query": f'WITH item_volume AS (\n  SELECT\n    "{p_dim}",\n    ROUND(SUM("{p_metric}"), 2) AS total_{clean_pm}\n  FROM "{table}"\n  GROUP BY "{p_dim}"\n),\npareto_eval AS (\n  SELECT\n    "{p_dim}",\n    total_{clean_pm},\n    ROUND(100.0 * SUM(total_{clean_pm}) OVER (ORDER BY total_{clean_pm} DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) / NULLIF(SUM(total_{clean_pm}) OVER (), 0), 2) AS cumulative_pct\n  FROM item_volume\n)\nSELECT "{p_dim}", total_{clean_pm}, cumulative_pct\nFROM pareto_eval\nORDER BY total_{clean_pm} DESC\nLIMIT 25;',
+            "category": "Extreme"
+        })
+
     presets.append({
-        "label": "🕳️ Null Value Scan",
-        "icon": "🕳️",
-        "query": f'SELECT\n  COUNT(*) AS total_rows,\n  ' + ", ".join([f'SUM(CASE WHEN "{c}" IS NULL THEN 1 ELSE 0 END) AS null_{c.replace(" ", "_")}' for c in all_cols[:10]]) + f'\nFROM "{table}";',
-        "category": "Quality"
+        "label": f"🔴 [Extreme] RFM Customer Segmentation (NTILE 5 & Tiers)",
+        "icon": "💎",
+        "level": "Level 4: Extreme",
+        "query": f'WITH cust_totals AS (\n  SELECT\n    "{p_dim}" AS entity,\n    COUNT(DISTINCT "{id_col}") AS frequency,\n    ROUND(SUM("{p_metric}"), 2) AS monetary\n  FROM "{table}"\n  WHERE "{p_dim}" IS NOT NULL\n  GROUP BY 1\n),\nscored AS (\n  SELECT\n    entity,\n    frequency,\n    monetary,\n    NTILE(5) OVER (ORDER BY frequency ASC) AS f_score,\n    NTILE(5) OVER (ORDER BY monetary ASC) AS m_score\n  FROM cust_totals\n)\nSELECT\n  entity,\n  frequency,\n  monetary,\n  f_score,\n  m_score,\n  CASE\n    WHEN m_score >= 4 AND f_score >= 4 THEN \'Champions / VIP\'\n    WHEN m_score >= 3 AND f_score >= 3 THEN \'Loyal Accounts\'\n    WHEN m_score >= 3 AND f_score <= 2 THEN \'High-Value / At Risk\'\n    ELSE \'Standard Tier\'\n  END AS segment_tier\nFROM scored\nORDER BY monetary DESC\nLIMIT 25;',
+        "category": "Extreme"
     })
+
+    if num_cols:
+        presets.append({
+            "label": f"🔴 [Extreme] Statistical Z-Score Outlier Radar (>2.0 σ)",
+            "icon": "🚨",
+            "level": "Level 4: Extreme",
+            "query": f'WITH stats AS (\n  SELECT\n    AVG("{p_metric}") AS avg_val,\n    STDDEV_SAMP("{p_metric}") AS std_val\n  FROM "{table}"\n)\nSELECT\n  d."{id_col}",\n  d."{p_dim}",\n  d."{p_metric}",\n  ROUND(ABS(d."{p_metric}" - s.avg_val) / NULLIF(s.std_val, 0), 2) AS z_score\nFROM "{table}" d, stats s\nWHERE ABS(d."{p_metric}" - s.avg_val) / NULLIF(s.std_val, 0) > 2.0\nORDER BY z_score DESC\nLIMIT 25;',
+            "category": "Extreme"
+        })
 
     return presets
 
