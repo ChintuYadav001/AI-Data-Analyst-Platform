@@ -266,7 +266,10 @@ class DataProfilerModel:
             # Mode from sample
             mode_val = None
             try:
-                mode_series = mode_sample[col].mode()
+                if series.dtype == "object":
+                    mode_series = cls._safe_to_str(mode_sample[col]).mode()
+                else:
+                    mode_series = mode_sample[col].mode()
                 if not mode_series.empty:
                     mode_val = str(mode_series.iloc[0])
             except Exception:
