@@ -128,48 +128,86 @@ class DataProfilerModel:
         is_large = n_rows > cls.LARGE_DATASET_THRESHOLD
 
         # ── Memory estimation (always sampled for large) ──
-        if n_rows > 5000:
-            sample_n = 1000
-            sample_mem = int(df.sample(sample_n, random_state=42).memory_usage(deep=True).sum())
-            mem_bytes = int((sample_mem / sample_n) * n_rows)
-        else:
-            mem_bytes = int(df.memory_usage(deep=True).sum())
+        try:
+            if n_rows > 5000:
+                sample_n = 1000
+                sample_mem = int(df.sample(sample_n, random_state=42).memory_usage(deep=True).sum())
+                mem_bytes = int((sample_mem / sample_n) * n_rows)
+            else:
+                mem_bytes = int(df.memory_usage(deep=True).sum())
+        except Exception:
+            try:
+                mem_bytes = int(df.memory_usage().sum())
+            except Exception:
+                mem_bytes = 0
         mem_mb = round(mem_bytes / (1024 * 1024), 2)
 
-        # ── Duplicate detection (sampled for large datasets) ──
+        # ── Duplicate detection (sampled for large datasets, resilient to unhashables) ──
         cached_dups = AnalyticsCache.get(df, "duplicate_rows")
         if cached_dups is not None:
             dup_rows = cached_dups
         else:
-            if is_large:
-                # Sample-based duplicate estimation — much faster than full scan
-                dup_sample_size = min(cls.SAMPLE_SIZE_FOR_DUPS, n_rows)
-                sample_df = df.sample(dup_sample_size, random_state=42)
-                sample_dups = int(sample_df.duplicated().sum())
-                dup_rows = int(sample_dups * (n_rows / dup_sample_size))
-            else:
-                dup_rows = int(df.duplicated().sum())
+            try:
+                if is_large:
+                    dup_sample_size = min(cls.SAMPLE_SIZE_FOR_DUPS, n_rows)
+                    sample_df = df.sample(dup_sample_size, random_state=42)
+                    sample_dups = int(sample_df.duplicated().sum())
+                    dup_rows = int(sample_dups * (n_rows / dup_sample_size))
+                else:
+                    dup_rows = int(df.duplicated().sum())
+            except TypeError:
+                # Handle unhashable types (dict, list, etc.)
+                try:
+                    hashable_cols = [c for c in df.columns if df[c].dtype != "object" or not df[c].dropna().map(lambda x: isinstance(x, (list, dict, set, bytearray))).any()]
+                    if hashable_cols:
+                        dup_rows = int(df.duplicated(subset=hashable_cols).sum())
+                    else:
+                        dup_rows = 0
+                except Exception:
+                    dup_rows = 0
+            except Exception:
+                dup_rows = 0
             AnalyticsCache.set(df, "duplicate_rows", dup_rows)
         dup_pct = round((dup_rows / n_rows) * 100, 2) if n_rows > 0 else 0.0
 
-        # ── Missing values (vectorized — fast even for large) ──
-        null_counts_series = df.isna().sum()
-        total_cells = n_rows * n_cols
-        total_missing = int(null_counts_series.sum())
+        # ── Missing values (vectorized — safe against duplicate columns & complex dtypes) ──
+        try:
+            null_counts_series = df.isna().sum()
+            total_cells = n_rows * n_cols
+            total_missing = int(np.nan_to_num(null_counts_series.sum()))
+        except Exception:
+            null_counts_series = pd.Series({c: int(df[c].isna().sum()) for c in df.columns})
+            total_cells = n_rows * n_cols
+            total_missing = int(null_counts_series.sum())
         missing_pct = round((total_missing / total_cells) * 100, 2) if total_cells > 0 else 0.0
 
         # ── Batch unique counts ──
         unique_counts = cls._fast_unique_counts(df)
 
-        # ── Batch numeric statistics (vectorized) ──
+        # ── Batch numeric statistics (vectorized with Skew & Outliers) ──
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         numeric_stats = {}
         if numeric_cols:
             desc = df[numeric_cols].describe(percentiles=[0.25, 0.5, 0.75])
             for col in numeric_cols:
                 if col in desc.columns:
+                    col_series = df[col].dropna()
                     q25 = float(desc.loc["25%", col]) if pd.notna(desc.loc["25%", col]) else 0.0
                     q75 = float(desc.loc["75%", col]) if pd.notna(desc.loc["75%", col]) else 0.0
+                    iqr = round(q75 - q25, 4)
+                    
+                    # Outliers (IQR method) & Skewness
+                    outliers_count = 0
+                    skew_val = 0.0
+                    if not col_series.empty:
+                        try:
+                            lower_bound = q25 - 1.5 * iqr
+                            upper_bound = q75 + 1.5 * iqr
+                            outliers_count = int(((col_series < lower_bound) | (col_series > upper_bound)).sum())
+                            skew_val = round(float(col_series.skew()), 4) if len(col_series) > 2 else 0.0
+                        except Exception:
+                            pass
+
                     numeric_stats[col] = {
                         "min": float(desc.loc["min", col]) if pd.notna(desc.loc["min", col]) else 0.0,
                         "max": float(desc.loc["max", col]) if pd.notna(desc.loc["max", col]) else 0.0,
@@ -179,7 +217,10 @@ class DataProfilerModel:
                         "q25": round(q25, 4),
                         "q50": round(float(desc.loc["50%", col]), 4) if pd.notna(desc.loc["50%", col]) else 0.0,
                         "q75": round(q75, 4),
-                        "iqr": round(q75 - q25, 4),
+                        "iqr": iqr,
+                        "skewness": skew_val,
+                        "outliers": outliers_count,
+                        "outlier_pct": round((outliers_count / len(col_series) * 100), 2) if len(col_series) > 0 else 0.0
                     }
 
         # ── Per-column profiling ──
@@ -195,7 +236,9 @@ class DataProfilerModel:
         for col in df.columns:
             series = df[col]
             unique_count = unique_counts.get(col, 0)
-            null_count = int(null_counts_series[col])
+            
+            raw_null = null_counts_series.get(col, 0)
+            null_count = int(raw_null.iloc[0] if isinstance(raw_null, pd.Series) else raw_null)
             col_null_pct = round((null_count / n_rows) * 100, 2) if n_rows > 0 else 0.0
 
             # Classification uses sample for large datasets
@@ -221,6 +264,7 @@ class DataProfilerModel:
                 "null_count": null_count,
                 "null_pct": col_null_pct,
                 "unique_count": unique_count,
+                "unique_pct": round((unique_count / n_rows) * 100, 2) if n_rows > 0 else 0.0,
                 "mode": mode_val
             }
 
@@ -247,6 +291,12 @@ class DataProfilerModel:
 
             columns_profile.append(col_info)
 
+        # Composite Data Quality Health Score (0-100%)
+        completeness_score = max(0.0, 100.0 - missing_pct)
+        uniqueness_score = max(0.0, 100.0 - dup_pct)
+        suspicious_penalty = min(30.0, len(suspicious_columns) * 5.0)
+        health_score = round(max(5.0, min(100.0, (completeness_score * 0.5) + (uniqueness_score * 0.3) + 20.0 - suspicious_penalty)), 1)
+
         res = {
             "dataset_info": {
                 "rows": n_rows,
@@ -256,6 +306,7 @@ class DataProfilerModel:
                 "duplicate_pct": dup_pct,
                 "total_missing": total_missing,
                 "missing_pct": missing_pct,
+                "health_score": health_score,
             },
             "columns": columns_profile,
             "suspicious_columns": suspicious_columns
