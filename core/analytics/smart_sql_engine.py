@@ -768,48 +768,43 @@ class SmartSQLEngine:
             con = duckdb.connect(database=":memory:")
             con.register(table, df)
 
-        # Step 1: Check if external LLM can provide high-fidelity SQL
-        # (with strict fallback to our deterministic engine)
-        generated_sql = None
-        intent_info = {}
+        # Step 1: Generate high-accuracy DuckDB SQL using SmartSQLEngine (instantaneous & deterministic)
+        intent_info = cls.generate_smart_sql(question, df, table=table)
+        generated_sql = intent_info["sql"]
 
-        provider = LLMClient.get_configured_provider()
-        if provider != "offline":
-            metadata = cls.extract_metadata(df)
-            col_types = [f'"{c}" ({df[c].dtype})' for c in df.columns[:25]]
-            schema_str = ", ".join(col_types)
-            prompt = (
-                f"You are a DuckDB SQL expert. Write a single analytical DuckDB SQL query to answer this question.\n"
-                f"TABLE: \"{table}\"\n"
-                f"COLUMNS: {schema_str}\n"
-                f"QUESTION: {question}\n"
-                f"RULES:\n"
-                f"1. Output ONLY the SQL string. No markdown, no backticks, no comments.\n"
-                f"2. Quote all column names with double quotes.\n"
-                f"3. Use standard DuckDB functions: DATE_TRUNC, EXTRACT, ROUND, SUM, AVG, COUNT.\n"
-                f"4. Limit large queries to 20 rows unless aggregated.\n"
-                f"SQL:"
-            )
-            try:
-                res_llm = LLMClient.call_llm(prompt=prompt, max_tokens=300, temperature=0.0)
-                if res_llm.get("success") and res_llm.get("text"):
-                    txt = res_llm["text"].strip()
-                    if txt.startswith("```"):
-                        lines = [l for l in txt.split("\n") if not l.strip().startswith("```")]
-                        txt = "\n".join(lines).strip()
-                    if not txt.endswith(";"):
-                        txt += ";"
-                    # Validate basic security
-                    is_safe, _ = SQLAnalyticsModel.validate_sql_security(txt)
-                    if is_safe:
-                        generated_sql = txt
-            except Exception:
-                pass
-
-        # Step 2: If LLM didn't produce or is offline, use SmartSQLEngine
-        if not generated_sql:
-            intent_info = cls.generate_smart_sql(question, df, table=table)
-            generated_sql = intent_info["sql"]
+        # Step 2: If intent was an unclassified preview, attempt external LLM if configured
+        if intent_info.get("intent") == "preview":
+            provider = LLMClient.get_configured_provider()
+            if provider != "offline":
+                try:
+                    metadata = cls.extract_metadata(df)
+                    col_types = [f'"{c}" ({df[c].dtype})' for c in df.columns[:25]]
+                    schema_str = ", ".join(col_types)
+                    prompt = (
+                        f"You are a DuckDB SQL expert. Write a single analytical DuckDB SQL query to answer this question.\n"
+                        f"TABLE: \"{table}\"\n"
+                        f"COLUMNS: {schema_str}\n"
+                        f"QUESTION: {question}\n"
+                        f"RULES:\n"
+                        f"1. Output ONLY the SQL string. No markdown, no backticks, no comments.\n"
+                        f"2. Quote all column names with double quotes.\n"
+                        f"3. Use standard DuckDB functions: DATE_TRUNC, EXTRACT, ROUND, SUM, AVG, COUNT.\n"
+                        f"4. Limit large queries to 20 rows unless aggregated.\n"
+                        f"SQL:"
+                    )
+                    res_llm = LLMClient.call_llm(prompt=prompt, max_tokens=300, temperature=0.0)
+                    if res_llm.get("success") and res_llm.get("text"):
+                        txt = res_llm["text"].strip()
+                        if txt.startswith("```"):
+                            lines = [l for l in txt.split("\n") if not l.strip().startswith("```")]
+                            txt = "\n".join(lines).strip()
+                        if not txt.endswith(";"):
+                            txt += ";"
+                        is_safe, _ = SQLAnalyticsModel.validate_sql_security(txt)
+                        if is_safe:
+                            generated_sql = txt
+                except Exception:
+                    pass
 
         # Step 3: Execute on DuckDB with self-healing
         exec_result = cls.execute_with_self_healing(con, generated_sql, df, table=table)
