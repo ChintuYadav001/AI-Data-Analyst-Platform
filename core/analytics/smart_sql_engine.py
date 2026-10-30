@@ -107,6 +107,63 @@ class SmartSQLEngine:
         }
 
     @classmethod
+    def get_informative_columns(
+        cls,
+        df: pd.DataFrame,
+        metadata: Dict[str, Any],
+        primary_metric: str,
+        secondary_metric: Optional[str] = None
+    ) -> List[str]:
+        """Picks the most informative, descriptive columns for record drill-downs on any dataset."""
+        selected: List[str] = []
+        all_cols = list(df.columns)
+
+        # 1. Primary ID / Code if available
+        id_cols = metadata.get("id_cols", [])
+        for id_c in id_cols:
+            if id_c in all_cols and id_c not in selected:
+                selected.append(id_c)
+                break
+
+        # 2. Key descriptive columns (Name, Title, Product, Customer, Category, City, etc.)
+        cat_cols = [c for c in metadata.get("cat_cols", []) if c in all_cols and c not in selected]
+
+        def desc_score(c: str) -> int:
+            c_low = str(c).lower()
+            if any(w in c_low for w in ["name", "title"]):
+                return 0
+            if any(w in c_low for w in ["product", "item", "article"]):
+                return 1
+            if any(w in c_low for w in ["customer", "client", "user"]):
+                return 2
+            if any(w in c_low for w in ["category", "type", "segment", "department"]):
+                return 3
+            if any(w in c_low for w in ["city", "state", "region", "country"]):
+                return 4
+            return 5
+
+        cat_cols.sort(key=desc_score)
+        for c in cat_cols[:3]:
+            if c not in selected:
+                selected.append(c)
+
+        # 3. Primary Metric
+        if primary_metric and primary_metric in all_cols and primary_metric not in selected:
+            selected.append(primary_metric)
+
+        # 4. Secondary Metric
+        if secondary_metric and secondary_metric in all_cols and secondary_metric not in selected:
+            selected.append(secondary_metric)
+
+        # Fallback if too few columns
+        if len(selected) < 3:
+            for c in all_cols:
+                if c not in selected and len(selected) < 5:
+                    selected.append(c)
+
+        return selected
+
+    @classmethod
     def resolve_column(
         cls,
         text: str,
