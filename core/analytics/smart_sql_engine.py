@@ -368,10 +368,13 @@ class SmartSQLEngine:
         is_group_intent = any(k in q_low for k in ["by", "per", "each", "across", "for each", "breakdown", "distribution"])
 
         # Assign primary dimension only if matched or explicitly requested by ranking/grouping intent
-        if matched_cats:
-            primary_dim = matched_cats[0]
-            secondary_dim = matched_cats[1] if len(matched_cats) > 1 else None
-        elif is_ranking_intent or is_group_intent:
+        filter_cols = {f["column"] for f in filter_explanations if "column" in f}
+        candidate_dims = [c for c in matched_cats if c not in filter_cols]
+
+        if candidate_dims:
+            primary_dim = candidate_dims[0]
+            secondary_dim = candidate_dims[1] if len(candidate_dims) > 1 else None
+        elif is_group_intent:
             primary_dim = cls.resolve_column("category", cat_cols, "category") or (cat_cols[0] if cat_cols else None)
             secondary_dim = None
         else:
@@ -458,31 +461,61 @@ class SmartSQLEngine:
                 "explanation": f"Chronological trend of {primary_metric} grouped by {period_alias}."
             }
 
-        # Case 4: Top N or Bottom N Ranking with Group By
-        if (is_top or is_bottom) and primary_dim and primary_metric:
+        # Case 4: Top N or Bottom N Ranking
+        if is_top or is_bottom:
             order_dir = "ASC" if is_bottom else "DESC"
-            agg_func = "AVG" if any(k in q_low for k in ["average", "avg", "mean"]) else "SUM"
-            metric_alias = f'{"avg" if agg_func == "AVG" else "total"}_{primary_metric.replace(" ", "_")}'
 
-            metric_exprs = [f'ROUND({agg_func}("{primary_metric}"), 2) AS {metric_alias}']
-            if secondary_metric and has_multi_metric:
-                sec_alias = f'total_{secondary_metric.replace(" ", "_")}'
-                metric_exprs.append(f'ROUND(SUM("{secondary_metric}"), 2) AS {sec_alias}')
-            metric_exprs.append('COUNT(*) AS order_count')
+            # Subcase 4A: Grouped Top N (e.g. "top 3 categories in west region", "top 5 products by profit")
+            if primary_dim and primary_metric:
+                agg_func = "AVG" if any(k in q_low for k in ["average", "avg", "mean"]) else "SUM"
+                metric_alias = f'{"avg" if agg_func == "AVG" else "total"}_{primary_metric.replace(" ", "_")}'
 
-            sql = f'SELECT "{primary_dim}",\n  ' + ",\n  ".join(metric_exprs) + f'\nFROM "{table}"{where_clause}\nGROUP BY "{primary_dim}"\nORDER BY {metric_alias} {order_dir}\nLIMIT {limit_n};'
+                metric_exprs = [f'ROUND({agg_func}("{primary_metric}"), 2) AS {metric_alias}']
+                if secondary_metric and has_multi_metric:
+                    sec_alias = f'total_{secondary_metric.replace(" ", "_")}'
+                    metric_exprs.append(f'ROUND(SUM("{secondary_metric}"), 2) AS {sec_alias}')
+                metric_exprs.append('COUNT(*) AS order_count')
 
-            return {
-                "sql": sql,
-                "intent": "ranking",
-                "primary_metric": metric_alias,
-                "secondary_metric": f"total_{secondary_metric.replace(' ', '_')}" if (secondary_metric and has_multi_metric) else None,
-                "primary_dim": primary_dim,
-                "limit": limit_n,
-                "order": order_dir,
-                "filters": filter_explanations,
-                "explanation": f"{'Top' if order_dir == 'DESC' else 'Bottom'} {limit_n} {primary_dim} ranked by {agg_func} of {primary_metric}."
-            }
+                sql = f'SELECT "{primary_dim}",\n  ' + ",\n  ".join(metric_exprs) + f'\nFROM "{table}"{where_clause}\nGROUP BY "{primary_dim}"\nORDER BY {metric_alias} {order_dir}\nLIMIT {limit_n};'
+
+                return {
+                    "sql": sql,
+                    "intent": "ranking",
+                    "primary_metric": metric_alias,
+                    "secondary_metric": f"total_{secondary_metric.replace(' ', '_')}" if (secondary_metric and has_multi_metric) else None,
+                    "primary_dim": primary_dim,
+                    "limit": limit_n,
+                    "order": order_dir,
+                    "filters": filter_explanations,
+                    "explanation": f"{'Top' if order_dir == 'DESC' else 'Bottom'} {limit_n} {primary_dim} ranked by {agg_func} of {primary_metric}."
+                }
+
+            # Subcase 4B: Individual Record Top N (e.g. "top 3 highest sales in west region", "top 5 sales")
+            elif primary_metric:
+                info_cols = cls.get_informative_columns(df, metadata, primary_metric, secondary_metric)
+                select_clause = ",\n  ".join([f'"{c}"' for c in info_cols])
+                sql = f'SELECT\n  {select_clause}\nFROM "{table}"{where_clause}\nORDER BY "{primary_metric}" {order_dir}\nLIMIT {limit_n};'
+
+                desc_col = None
+                for c in info_cols:
+                    if not pd.api.types.is_numeric_dtype(df[c]) and any(w in str(c).lower() for w in ["name", "title", "product", "customer", "item"]):
+                        desc_col = c
+                        break
+                if not desc_col:
+                    desc_col = info_cols[1] if len(info_cols) > 1 else info_cols[0]
+
+                return {
+                    "sql": sql,
+                    "intent": "individual_top_records",
+                    "primary_metric": primary_metric,
+                    "secondary_metric": secondary_metric,
+                    "primary_dim": desc_col,
+                    "limit": limit_n,
+                    "order": order_dir,
+                    "filters": filter_explanations,
+                    "info_cols": info_cols,
+                    "explanation": f"{'Top' if order_dir == 'DESC' else 'Bottom'} {limit_n} highest {primary_metric} records."
+                }
 
         # Case 5: Multi-Dimension Breakdown (e.g. Sales by Category and Region)
         if primary_dim and secondary_dim and primary_metric and any(k in q_low for k in ["by", "per", "each", "across"]):
@@ -676,8 +709,97 @@ class SmartSQLEngine:
             except Exception:
                 return str(v)
 
+        # Case 0: Individual Record Drill-down (e.g. "top 3 highest sales in west region")
+        if intent == "individual_top_records" and num_rows >= 1:
+            pm = intent_info.get("primary_metric")
+            if not pm or pm not in result_df.columns:
+                num_cs = [c for c in cols if pd.api.types.is_numeric_dtype(result_df[c])]
+                pm = num_cs[0] if num_cs else cols[-1]
+
+            sec_m = intent_info.get("secondary_metric")
+            if sec_m and sec_m not in result_df.columns:
+                sec_m = None
+
+            is_asc = intent_info.get("order") == "ASC"
+            rank_title = "Lowest" if is_asc else "Highest"
+
+            filters = intent_info.get("filters", [])
+            filter_desc = ""
+            if filters:
+                parts = [f"**{f.get('column')}** = '{f.get('value', f.get('year', ''))}'" for f in filters if 'column' in f]
+                filter_desc = f" in {', '.join(parts)}"
+
+            # Find best descriptive column for labeling (e.g. Product Name, Customer Name)
+            desc_col = intent_info.get("primary_dim")
+            if not desc_col or desc_col not in result_df.columns or pd.api.types.is_numeric_dtype(result_df[desc_col]):
+                for c in result_df.columns:
+                    if not pd.api.types.is_numeric_dtype(result_df[c]) and any(w in str(c).lower() for w in ["name", "title", "product", "customer", "item"]):
+                        desc_col = c
+                        break
+            if not desc_col:
+                str_cs = [c for c in cols if not pd.api.types.is_numeric_dtype(result_df[c])]
+                desc_col = str_cs[0] if str_cs else cols[0]
+
+            top_row = result_df.iloc[0]
+            top_val = top_row[pm] if pm in top_row else 0
+            top_desc = str(top_row[desc_col]) if desc_col in top_row else "Top Record"
+
+            # KPI Cards
+            kpi_cards.append({
+                "label": f"#1 {pm.replace('_', ' ').title()}",
+                "value": fmt_val(top_val, pm),
+                "subtext": top_desc[:30]
+            })
+
+            combined_sum = result_df[pm].sum() if pm in result_df and pd.api.types.is_numeric_dtype(result_df[pm]) else 0
+            kpi_cards.append({
+                "label": f"Combined Top {num_rows} {pm.replace('_', ' ').title()}",
+                "value": fmt_val(combined_sum, pm),
+                "subtext": f"Sum of top {num_rows} records"
+            })
+
+            if sec_m and sec_m in result_df and pd.api.types.is_numeric_dtype(result_df[sec_m]):
+                kpi_cards.append({
+                    "label": f"Combined {sec_m.replace('_', ' ').title()}",
+                    "value": fmt_val(result_df[sec_m].sum(), sec_m),
+                    "subtext": f"#1: {fmt_val(top_row[sec_m], sec_m)}"
+                })
+
+            kpi_cards.append({
+                "label": "Records Displayed",
+                "value": f"{num_rows:,}",
+                "subtext": f"Ranked observations"
+            })
+
+            # Narrative list
+            answer_parts.append(f"🏆 **Top {num_rows} {rank_title} {pm.replace('_', ' ').title()} records{filter_desc}:**<br>")
+            for i in range(num_rows):
+                r = result_df.iloc[i]
+                r_desc = str(r[desc_col]) if desc_col in r else f"Record #{i+1}"
+                r_val = fmt_val(r[pm], pm)
+                
+                context_tags = []
+                for ec in result_df.columns:
+                    if ec != desc_col and ec != pm and ec in r and not pd.isna(r[ec]):
+                        ec_low = str(ec).lower()
+                        if any(w in ec_low for w in ["customer", "category", "city", "state", "type"]):
+                            context_tags.append(f"{ec}: {r[ec]}")
+                tag_str = f" ({', '.join(context_tags[:2])})" if context_tags else ""
+
+                answer_parts.append(f"• **#{i+1}: {r_desc}** — **{r_val}**{tag_str}<br>")
+
+            answer_parts.append(f"<br>💡 Combined {pm.replace('_', ' ')} for these {num_rows} records is **{fmt_val(combined_sum, pm)}**.")
+
+            chart_spec = {
+                "type": "bar",
+                "x": desc_col,
+                "y": pm,
+                "metrics": [pm],
+                "title": f"Top {num_rows} {pm.replace('_', ' ').title()} Records{filter_desc}"
+            }
+
         # Case 1: Scalar Count or Single Row Summary
-        if num_rows == 1:
+        elif num_rows == 1:
             row = result_df.iloc[0]
             metric_cols = [c for c in cols if pd.api.types.is_numeric_dtype(result_df[c])]
 
