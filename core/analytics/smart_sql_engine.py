@@ -118,10 +118,23 @@ class SmartSQLEngine:
         selected: List[str] = []
         all_cols = list(df.columns)
 
-        # 1. Primary ID / Code if available
+        # 1. Primary ID / Code if available (prefer Order ID, Transaction ID, clean IDs)
         id_cols = metadata.get("id_cols", [])
-        for id_c in id_cols:
-            if id_c in all_cols and id_c not in selected:
+        def id_priority(c: str) -> int:
+            c_low = str(c).lower()
+            if "order" in c_low or "transaction" in c_low:
+                return 0
+            if c_low == "id":
+                return 1
+            if "customer" in c_low:
+                return 2
+            if "product" in c_low:
+                return 3
+            return 4
+
+        id_cols_sorted = sorted(id_cols, key=id_priority)
+        for id_c in id_cols_sorted:
+            if id_c in all_cols and id_c not in selected and "+" not in str(id_c):
                 selected.append(id_c)
                 break
 
@@ -130,17 +143,21 @@ class SmartSQLEngine:
 
         def desc_score(c: str) -> int:
             c_low = str(c).lower()
-            if any(w in c_low for w in ["name", "title"]):
+            if "product name" in c_low or "item name" in c_low:
                 return 0
-            if any(w in c_low for w in ["product", "item", "article"]):
+            if "customer name" in c_low or "client name" in c_low:
                 return 1
-            if any(w in c_low for w in ["customer", "client", "user"]):
+            if any(w in c_low for w in ["name", "title"]):
                 return 2
-            if any(w in c_low for w in ["category", "type", "segment", "department"]):
+            if any(w in c_low for w in ["product", "item", "article"]):
                 return 3
-            if any(w in c_low for w in ["city", "state", "region", "country"]):
+            if any(w in c_low for w in ["customer", "client", "user"]):
                 return 4
-            return 5
+            if any(w in c_low for w in ["category", "type", "segment", "department"]):
+                return 5
+            if any(w in c_low for w in ["city", "state", "region", "country"]):
+                return 6
+            return 7
 
         cat_cols.sort(key=desc_score)
         for c in cat_cols[:3]:
