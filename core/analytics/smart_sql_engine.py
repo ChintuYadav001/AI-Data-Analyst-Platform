@@ -63,8 +63,14 @@ class SmartSQLEngine:
 
         for col in df.columns:
             c_str = str(col)
-            c_low = c_str.lower()
-            if any(k in c_low for k in ["_id", "id_", "identifier", "row_id", "row id", "index", "ticket"]):
+            c_low = c_str.lower().strip()
+            is_id = (
+                any(k in c_low for k in ["_id", "id_", "identifier", "row_id", "row id", "index", "ticket"])
+                or c_low.endswith(" id")
+                or c_low.endswith(" code")
+                or c_low == "id"
+            )
+            if is_id:
                 id_cols.append(col)
             elif pd.api.types.is_numeric_dtype(df[col]):
                 numeric_cols.append(col)
