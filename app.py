@@ -355,8 +355,10 @@ def dispatch_active_view(route: str):
         from ui.views.ml_view import render_ml_view
         render_ml_view()
     elif route == "SQL Analytics":
-        from ui.views.sql_view import render_sql_view
-        render_sql_view()
+        import importlib
+        import ui.views.sql_view
+        importlib.reload(ui.views.sql_view)
+        ui.views.sql_view.render_sql_view()
     elif route == "AI Insights":
         from ui.views.insights_view import render_insights_view
         render_insights_view()
