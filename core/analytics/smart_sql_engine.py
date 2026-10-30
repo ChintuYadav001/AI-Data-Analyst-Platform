@@ -373,13 +373,28 @@ class SmartSQLEngine:
         where_clause = f"\nWHERE {' AND '.join(where_conds)}" if where_conds else ""
 
         # Step 3: Classify Intent
-        # A. Ranking / Top N / Bottom N
+        # Advanced & Extreme Intent Detections
+        is_pareto = any(k in q_low for k in ["pareto", "80/20", "80-20", "80 20", "cumulative revenue share", "80% of", "cumulative share"])
+        is_growth = any(k in q_low for k in ["mom", "yoy", "month over month", "year over year", "growth rate", "period over period", "sales growth", "growth by month", "growth by year"]) and bool(date_cols)
+        is_running_total = any(k in q_low for k in ["running total", "cumulative total", "cumulative sum", "cumulative sales", "running sum", "cumulative profit"]) and bool(date_cols)
+        is_moving_avg = any(k in q_low for k in ["moving average", "rolling average", "moving avg", "rolling avg", "rolling sales", "smoothed"]) and bool(date_cols)
+        is_pct_of_total = any(k in q_low for k in ["percent of total", "percentage of total", "share of total", "pct of total", "contribution of each", "revenue share"])
+        is_rfm = any(k in q_low for k in ["rfm", "customer tier", "customer segments", "champion", "customer segmentation", "monetary frequency"])
+        is_outlier = any(k in q_low for k in ["outlier", "outliers", "anomaly", "anomalies", "z-score", "z score", "anomalous", "unusual"])
+        is_above_avg = any(k in q_low for k in ["above average", "greater than average", "higher than average", "exceeding average"])
+        is_below_avg = any(k in q_low for k in ["below average", "less than average", "lower than average"])
+        is_duration = any(k in q_low for k in ["duration", "days to ship", "shipping delay", "delivery time", "time to ship", "shipping time"]) and len(date_cols) >= 2
+        is_having = any(k in q_low for k in ["having", "with more than", "with greater than", "who ordered more than", "with sales greater than", "with orders over"])
+
+        # Ranking / Top N / Bottom N
         is_top = any(k in q_low for k in ["top", "highest", "best", "most", "largest", "maximum", "max", "leader", "greatest", "peak"])
         is_bottom = any(k in q_low for k in ["bottom", "lowest", "worst", "least", "smallest", "minimum", "min", "laggard"])
         limit_match = re.search(r'\b(top|bottom|first|last|highest|lowest)\s*(\d+)\b', q_low)
         limit_n = int(limit_match.group(2)) if limit_match else (1 if ("which" in q_low or "what is the highest" in q_low or "what is the best" in q_low) else 10)
         if limit_n > 50:
             limit_n = 50
+
+        is_partitioned_top = (is_top or is_bottom) and any(k in q_low for k in ["in each", "for each", "per each", "within each", "in every", "for every", "per category", "per region"])
 
         is_ranking_intent = is_top or is_bottom or any(k in q_low for k in ["which", "leader", "worst"])
         is_group_intent = any(k in q_low for k in ["by", "per", "each", "across", "for each", "breakdown", "distribution"])
@@ -391,7 +406,7 @@ class SmartSQLEngine:
         if candidate_dims:
             primary_dim = candidate_dims[0]
             secondary_dim = candidate_dims[1] if len(candidate_dims) > 1 else None
-        elif is_group_intent:
+        elif is_group_intent or is_pct_of_total:
             primary_dim = cls.resolve_column("category", cat_cols, "category") or (cat_cols[0] if cat_cols else None)
             secondary_dim = None
         else:
@@ -411,7 +426,387 @@ class SmartSQLEngine:
         # E. Multi-Metric (e.g. Sales AND Profit)
         has_multi_metric = len(matched_nums) >= 2 or (primary_metric and secondary_metric and any(k in q_low for k in ["and", "both", "versus", "vs", "compare", "with"]))
 
-        # ── SYNTHESIS LOGIC ──
+        # ── SYNTHESIS LOGIC (ADVANCED TO BASIC PRIORITY) ──
+
+        # Case 0A: Partitioned Window Ranking (Top N within each group)
+        if is_partitioned_top and primary_metric:
+            group_dim = None
+            item_dim = None
+            for c in matched_cats:
+                c_low_w = str(c).lower()
+                if any(w in c_low_w for w in ["region", "category", "segment", "department", "state"]):
+                    if not group_dim:
+                        group_dim = c
+                elif any(w in c_low_w for w in ["product", "item", "customer", "sub"]):
+                    if not item_dim:
+                        item_dim = c
+            if not group_dim and cat_cols:
+                group_dim = cat_cols[0]
+            if not item_dim:
+                item_dim = cat_cols[1] if len(cat_cols) > 1 and cat_cols[1] != group_dim else (cat_cols[2] if len(cat_cols) > 2 else "item")
+            if not item_dim or item_dim == group_dim:
+                item_dim = all_cols[0]
+
+            order_dir = "ASC" if is_bottom else "DESC"
+            clean_m = primary_metric.replace(" ", "_")
+            sql = (
+                f'WITH ranked_partition AS (\n'
+                f'  SELECT\n'
+                f'    "{group_dim}",\n'
+                f'    "{item_dim}",\n'
+                f'    ROUND(SUM("{primary_metric}"), 2) AS total_{clean_m},\n'
+                f'    ROW_NUMBER() OVER (PARTITION BY "{group_dim}" ORDER BY SUM("{primary_metric}") {order_dir}) AS rank\n'
+                f'  FROM "{table}"{where_clause}\n'
+                f'  GROUP BY "{group_dim}", "{item_dim}"\n'
+                f')\n'
+                f'SELECT "{group_dim}", "{item_dim}", total_{clean_m}, rank\n'
+                f'FROM ranked_partition\n'
+                f'WHERE rank <= {limit_n}\n'
+                f'ORDER BY "{group_dim}" ASC, rank ASC;'
+            )
+            return {
+                "sql": sql,
+                "intent": "window_ranking_per_group",
+                "primary_metric": f"total_{clean_m}",
+                "secondary_metric": "rank",
+                "primary_dim": group_dim,
+                "secondary_dim": item_dim,
+                "limit": limit_n,
+                "filters": filter_explanations,
+                "explanation": f"Top {limit_n} {item_dim} ranked within each {group_dim} by {primary_metric} using window function partitioning."
+            }
+
+        # Case 0B: Period-over-Period Growth (MoM / YoY Growth Rate)
+        if is_growth and primary_metric and date_cols:
+            d_col = date_cols[0]
+            is_yearly = any(k in q_low for k in ["year over year", "yoy", "annual", "by year"])
+            if is_yearly:
+                p_expr = f'EXTRACT(YEAR FROM TRY_CAST("{d_col}" AS TIMESTAMP))'
+                p_alias = "period_year"
+                growth_label = "YoY"
+            else:
+                p_expr = f'DATE_TRUNC(\'month\', TRY_CAST("{d_col}" AS TIMESTAMP))'
+                p_alias = "period_month"
+                growth_label = "MoM"
+            clean_m = primary_metric.replace(" ", "_")
+            sql = (
+                f'WITH period_summary AS (\n'
+                f'  SELECT\n'
+                f'    {p_expr} AS {p_alias},\n'
+                f'    ROUND(SUM("{primary_metric}"), 2) AS current_{clean_m}\n'
+                f'  FROM "{table}"{where_clause}\n'
+                f'  WHERE {p_expr} IS NOT NULL\n'
+                f'  GROUP BY 1\n'
+                f'),\n'
+                f'growth_calc AS (\n'
+                f'  SELECT\n'
+                f'    {p_alias},\n'
+                f'    current_{clean_m},\n'
+                f'    LAG(current_{clean_m}, 1) OVER (ORDER BY {p_alias} ASC) AS prior_{clean_m},\n'
+                f'    ROUND(((current_{clean_m} - LAG(current_{clean_m}, 1) OVER (ORDER BY {p_alias} ASC)) / NULLIF(LAG(current_{clean_m}, 1) OVER (ORDER BY {p_alias} ASC), 0)) * 100.0, 2) AS {growth_label.lower()}_growth_pct\n'
+                f'  FROM period_summary\n'
+                f')\n'
+                f'SELECT {p_alias}, current_{clean_m}, prior_{clean_m}, {growth_label.lower()}_growth_pct\n'
+                f'FROM growth_calc\n'
+                f'ORDER BY {p_alias} ASC;'
+            )
+            return {
+                "sql": sql,
+                "intent": "period_over_period",
+                "primary_metric": f"current_{clean_m}",
+                "secondary_metric": f"{growth_label.lower()}_growth_pct",
+                "primary_dim": p_alias,
+                "filters": filter_explanations,
+                "growth_type": growth_label,
+                "explanation": f"{growth_label} growth rate analysis of {primary_metric} over time using LAG() window functions."
+            }
+
+        # Case 0C: Cumulative Running Total
+        if is_running_total and primary_metric and date_cols:
+            d_col = date_cols[0]
+            p_expr = f'DATE_TRUNC(\'month\', TRY_CAST("{d_col}" AS TIMESTAMP))'
+            clean_m = primary_metric.replace(" ", "_")
+            sql = (
+                f'WITH monthly_totals AS (\n'
+                f'  SELECT\n'
+                f'    {p_expr} AS month,\n'
+                f'    ROUND(SUM("{primary_metric}"), 2) AS monthly_{clean_m}\n'
+                f'  FROM "{table}"{where_clause}\n'
+                f'  WHERE {p_expr} IS NOT NULL\n'
+                f'  GROUP BY 1\n'
+                f')\n'
+                f'SELECT\n'
+                f'  month,\n'
+                f'  monthly_{clean_m},\n'
+                f'  ROUND(SUM(monthly_{clean_m}) OVER (ORDER BY month ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), 2) AS cumulative_{clean_m}\n'
+                f'FROM monthly_totals\n'
+                f'ORDER BY month ASC;'
+            )
+            return {
+                "sql": sql,
+                "intent": "running_total",
+                "primary_metric": f"cumulative_{clean_m}",
+                "secondary_metric": f"monthly_{clean_m}",
+                "primary_dim": "month",
+                "filters": filter_explanations,
+                "explanation": f"Cumulative running total progression of {primary_metric} using unbounded preceding window frames."
+            }
+
+        # Case 0D: Moving / Rolling Average
+        if is_moving_avg and primary_metric and date_cols:
+            d_col = date_cols[0]
+            p_expr = f'DATE_TRUNC(\'month\', TRY_CAST("{d_col}" AS TIMESTAMP))'
+            clean_m = primary_metric.replace(" ", "_")
+            sql = (
+                f'WITH period_data AS (\n'
+                f'  SELECT\n'
+                f'    {p_expr} AS period,\n'
+                f'    ROUND(SUM("{primary_metric}"), 2) AS period_{clean_m}\n'
+                f'  FROM "{table}"{where_clause}\n'
+                f'  WHERE {p_expr} IS NOT NULL\n'
+                f'  GROUP BY 1\n'
+                f')\n'
+                f'SELECT\n'
+                f'  period,\n'
+                f'  period_{clean_m},\n'
+                f'  ROUND(AVG(period_{clean_m}) OVER (ORDER BY period ASC ROWS BETWEEN 2 PRECEDING AND CURRENT ROW), 2) AS rolling_3_period_avg\n'
+                f'FROM period_data\n'
+                f'ORDER BY period ASC;'
+            )
+            return {
+                "sql": sql,
+                "intent": "moving_average",
+                "primary_metric": f"period_{clean_m}",
+                "secondary_metric": "rolling_3_period_avg",
+                "primary_dim": "period",
+                "filters": filter_explanations,
+                "explanation": f"Smoothed 3-period moving average of {primary_metric} across time."
+            }
+
+        # Case 0E: Pareto 80/20 Cumulative Share Analysis
+        if is_pareto and primary_metric:
+            target_dim = primary_dim or (cat_cols[0] if cat_cols else all_cols[0])
+            clean_m = primary_metric.replace(" ", "_")
+            sql = (
+                f'WITH item_aggregation AS (\n'
+                f'  SELECT "{target_dim}", ROUND(SUM("{primary_metric}"), 2) AS total_{clean_m}\n'
+                f'  FROM "{table}"{where_clause}\n'
+                f'  GROUP BY "{target_dim}"\n'
+                f'),\n'
+                f'pareto_calc AS (\n'
+                f'  SELECT\n'
+                f'    "{target_dim}",\n'
+                f'    total_{clean_m},\n'
+                f'    ROUND(100.0 * SUM(total_{clean_m}) OVER (ORDER BY total_{clean_m} DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) / NULLIF(SUM(total_{clean_m}) OVER (), 0), 2) AS cumulative_pct\n'
+                f'  FROM item_aggregation\n'
+                f')\n'
+                f'SELECT "{target_dim}", total_{clean_m}, cumulative_pct\n'
+                f'FROM pareto_calc\n'
+                f'ORDER BY total_{clean_m} DESC\n'
+                f'LIMIT 25;'
+            )
+            return {
+                "sql": sql,
+                "intent": "pareto_80_20",
+                "primary_metric": f"total_{clean_m}",
+                "secondary_metric": "cumulative_pct",
+                "primary_dim": target_dim,
+                "filters": filter_explanations,
+                "explanation": f"Pareto 80/20 cumulative revenue share of {primary_metric} across {target_dim}."
+            }
+
+        # Case 0F: RFM Customer Segmentation
+        if is_rfm and primary_metric:
+            cust_col = None
+            for c in cat_cols + all_cols:
+                if any(w in str(c).lower() for w in ["customer", "client", "user", "account", "buyer"]):
+                    cust_col = c
+                    break
+            if not cust_col:
+                cust_col = cat_cols[0] if cat_cols else all_cols[0]
+
+            id_col = None
+            for c in metadata.get("id_cols", []) + all_cols:
+                if any(w in str(c).lower() for w in ["order", "trans", "invoice", "ticket"]):
+                    id_col = c
+                    break
+            if not id_col:
+                id_col = all_cols[0]
+
+            sql = (
+                f'WITH customer_summary AS (\n'
+                f'  SELECT\n'
+                f'    "{cust_col}",\n'
+                f'    COUNT(DISTINCT "{id_col}") AS frequency,\n'
+                f'    ROUND(SUM("{primary_metric}"), 2) AS monetary\n'
+                f'  FROM "{table}"{where_clause}\n'
+                f'  WHERE "{cust_col}" IS NOT NULL\n'
+                f'  GROUP BY "{cust_col}"\n'
+                f'),\n'
+                f'rfm_scored AS (\n'
+                f'  SELECT\n'
+                f'    "{cust_col}",\n'
+                f'    frequency,\n'
+                f'    monetary,\n'
+                f'    NTILE(5) OVER (ORDER BY frequency ASC) AS f_score,\n'
+                f'    NTILE(5) OVER (ORDER BY monetary ASC) AS m_score\n'
+                f'  FROM customer_summary\n'
+                f')\n'
+                f'SELECT\n'
+                f'  "{cust_col}",\n'
+                f'  frequency,\n'
+                f'  monetary,\n'
+                f'  f_score,\n'
+                f'  m_score,\n'
+                f'  CASE\n'
+                f'    WHEN m_score >= 4 AND f_score >= 4 THEN \'Champions / VIP\'\n'
+                f'    WHEN m_score >= 3 AND f_score >= 3 THEN \'Loyal Customers\'\n'
+                f'    WHEN m_score >= 3 AND f_score <= 2 THEN \'High-Value / At Risk\'\n'
+                f'    ELSE \'Standard Customers\'\n'
+                f'  END AS customer_tier\n'
+                f'FROM rfm_scored\n'
+                f'ORDER BY monetary DESC\n'
+                f'LIMIT 30;'
+            )
+            return {
+                "sql": sql,
+                "intent": "rfm_segmentation",
+                "primary_metric": "monetary",
+                "secondary_metric": "frequency",
+                "primary_dim": cust_col,
+                "filters": filter_explanations,
+                "explanation": f"RFM customer segmentation modeling using NTILE(5) scoring."
+            }
+
+        # Case 0G: Outlier Detection via Statistical Z-Score
+        if is_outlier and primary_metric:
+            info_cols = cls.get_informative_columns(df, metadata, primary_metric)
+            sel_cols = ", ".join([f'd."{c}"' for c in info_cols[:3]])
+            sql = (
+                f'WITH stats AS (\n'
+                f'  SELECT\n'
+                f'    AVG("{primary_metric}") AS avg_val,\n'
+                f'    STDDEV_SAMP("{primary_metric}") AS std_val\n'
+                f'  FROM "{table}"\n'
+                f')\n'
+                f'SELECT\n'
+                f'  {sel_cols},\n'
+                f'  d."{primary_metric}",\n'
+                f'  ROUND(ABS(d."{primary_metric}" - s.avg_val) / NULLIF(s.std_val, 0), 2) AS z_score\n'
+                f'FROM "{table}" d, stats s\n'
+                f'WHERE ABS(d."{primary_metric}" - s.avg_val) / NULLIF(s.std_val, 0) > 2.0\n'
+                f'ORDER BY z_score DESC\n'
+                f'LIMIT 25;'
+            )
+            return {
+                "sql": sql,
+                "intent": "outlier_zscore",
+                "primary_metric": primary_metric,
+                "secondary_metric": "z_score",
+                "primary_dim": info_cols[0],
+                "filters": filter_explanations,
+                "explanation": f"Statistical outlier detection on {primary_metric} with Z-Score > 2.0."
+            }
+
+        # Case 0H: Above / Below Benchmark (Subquery Filtering)
+        if (is_above_avg or is_below_avg) and primary_metric:
+            op = ">" if is_above_avg else "<"
+            op_name = "Above" if is_above_avg else "Below"
+            info_cols = cls.get_informative_columns(df, metadata, primary_metric)
+            sel_cols = ", ".join([f'"{c}"' for c in info_cols[:3]])
+            sub_where = f'{where_clause} AND ' if where_clause else 'WHERE '
+            sql = (
+                f'SELECT\n'
+                f'  {sel_cols},\n'
+                f'  "{primary_metric}",\n'
+                f'  ROUND((SELECT AVG("{primary_metric}") FROM "{table}"), 2) AS benchmark_average\n'
+                f'FROM "{table}"\n'
+                f'{sub_where}"{primary_metric}" {op} (SELECT AVG("{primary_metric}") FROM "{table}")\n'
+                f'ORDER BY "{primary_metric}" {"DESC" if is_above_avg else "ASC"}\n'
+                f'LIMIT 25;'
+            )
+            return {
+                "sql": sql,
+                "intent": "above_below_average",
+                "primary_metric": primary_metric,
+                "secondary_metric": "benchmark_average",
+                "primary_dim": info_cols[0],
+                "filters": filter_explanations,
+                "explanation": f"Records with {primary_metric} {op_name.lower()} overall dataset benchmark average."
+            }
+
+        # Case 0I: Percentage of Total / Contribution Share
+        if is_pct_of_total and primary_metric:
+            target_dim = primary_dim or (cat_cols[0] if cat_cols else all_cols[0])
+            clean_m = primary_metric.replace(" ", "_")
+            sql = (
+                f'SELECT\n'
+                f'  "{target_dim}",\n'
+                f'  ROUND(SUM("{primary_metric}"), 2) AS total_{clean_m},\n'
+                f'  ROUND(100.0 * SUM("{primary_metric}") / NULLIF(SUM(SUM("{primary_metric}")) OVER (), 0), 2) AS pct_of_total\n'
+                f'FROM "{table}"{where_clause}\n'
+                f'GROUP BY "{target_dim}"\n'
+                f'ORDER BY total_{clean_m} DESC\n'
+                f'LIMIT 20;'
+            )
+            return {
+                "sql": sql,
+                "intent": "percent_of_total",
+                "primary_metric": f"total_{clean_m}",
+                "secondary_metric": "pct_of_total",
+                "primary_dim": target_dim,
+                "filters": filter_explanations,
+                "explanation": f"Percentage contribution of {target_dim} to total {primary_metric}."
+            }
+
+        # Case 0J: Shipping Duration / Date-Difference Analysis
+        if is_duration and len(date_cols) >= 2:
+            d1, d2 = date_cols[0], date_cols[1]
+            target_dim = primary_dim or (cat_cols[0] if cat_cols else all_cols[0])
+            sql = (
+                f'SELECT\n'
+                f'  "{target_dim}",\n'
+                f'  ROUND(AVG(DATEDIFF(\'day\', TRY_CAST("{d1}" AS TIMESTAMP), TRY_CAST("{d2}" AS TIMESTAMP))), 1) AS avg_duration_days,\n'
+                f'  COUNT(*) AS total_records\n'
+                f'FROM "{table}"{where_clause}\n'
+                f'WHERE "{d1}" IS NOT NULL AND "{d2}" IS NOT NULL\n'
+                f'GROUP BY "{target_dim}"\n'
+                f'ORDER BY avg_duration_days ASC;'
+            )
+            return {
+                "sql": sql,
+                "intent": "shipping_duration",
+                "primary_metric": "avg_duration_days",
+                "secondary_metric": "total_records",
+                "primary_dim": target_dim,
+                "filters": filter_explanations,
+                "explanation": f"Average duration in days between {d1} and {d2} across {target_dim}."
+            }
+
+        # Case 0K: Grouping with HAVING threshold
+        if is_having and primary_dim and primary_metric:
+            clean_m = primary_metric.replace(" ", "_")
+            thresh_match = re.search(r'\b(greater than|more than|over|>|>=)\s*([0-9\.]+)\b', q_low)
+            thresh_val = float(thresh_match.group(2)) if thresh_match else 1000.0
+            sql = (
+                f'SELECT\n'
+                f'  "{primary_dim}",\n'
+                f'  ROUND(SUM("{primary_metric}"), 2) AS total_{clean_m},\n'
+                f'  COUNT(*) AS total_records\n'
+                f'FROM "{table}"{where_clause}\n'
+                f'GROUP BY "{primary_dim}"\n'
+                f'HAVING SUM("{primary_metric}") > {thresh_val}\n'
+                f'ORDER BY total_{clean_m} DESC;'
+            )
+            return {
+                "sql": sql,
+                "intent": "having_threshold",
+                "primary_metric": f"total_{clean_m}",
+                "secondary_metric": "total_records",
+                "primary_dim": primary_dim,
+                "filters": filter_explanations,
+                "explanation": f"{primary_dim} performance filtered with HAVING threshold > {thresh_val}."
+            }
 
         # Case 1: Simple Row Count
         if is_count_only:
