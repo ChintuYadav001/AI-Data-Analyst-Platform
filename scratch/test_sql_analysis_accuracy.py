@@ -9,8 +9,15 @@ import os
 import sys
 import pandas as pd
 
+if sys.stdout.encoding.lower() != "utf-8":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 # Set working directory & sys.path
 sys.path.insert(0, os.path.abspath("."))
+
 
 from core.analytics.smart_sql_engine import SmartSQLEngine
 
