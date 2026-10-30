@@ -153,29 +153,35 @@ class SmartSQLEngine:
         q_low = question.lower()
         matched = []
 
-        # Check explicit column mentions
+        # 1. Check multi-word and single-word column mentions
         for c in columns:
-            c_low = str(c).lower()
-            # Singular and plural
-            words = [c_low]
-            if c_low.endswith("y"):
-                words.append(c_low[:-1] + "ies")
-            elif not c_low.endswith("s"):
-                words.append(c_low + "s")
+            c_str = str(c)
+            c_low = c_str.lower()
+            c_words = [w for w in re.split(r"[\s_\-]+", c_low) if len(w) > 2]
 
-            for w in words:
-                pattern = r"\b" + re.escape(w.replace("_", " ")) + r"\b"
-                if re.search(pattern, q_low) or (len(w) > 4 and w in q_low):
+            # Exact phrase match in question (e.g. "product name", "sub category")
+            c_phrase = " ".join(c_words)
+            if c_phrase and re.search(r"\b" + re.escape(c_phrase) + r"\b", q_low):
+                if c not in matched:
+                    matched.append(c)
+                continue
+
+            # Check significant individual words (e.g. "products" in question matches "Product Name")
+            for w in c_words:
+                singular = w.rstrip("s")
+                plural = w + "s" if not w.endswith("s") else w
+                if re.search(r"\b" + re.escape(w) + r"\b", q_low) or \
+                   re.search(r"\b" + re.escape(singular) + r"\b", q_low) or \
+                   re.search(r"\b" + re.escape(plural) + r"\b", q_low):
                     if c not in matched:
                         matched.append(c)
                     break
 
-        # Check synonym families
+        # 2. Check synonym families
         for fam, words in COLUMN_SYNONYMS.items():
             if any(re.search(r"\b" + re.escape(w) + r"\b", q_low) for w in words):
-                # Find matching column
                 for c in columns:
-                    c_clean = str(c).lower().replace(" ", "_")
+                    c_clean = str(c).lower().replace(" ", "_").replace("-", "_")
                     if any(w in c_clean for w in words) and c not in matched:
                         matched.append(c)
 
