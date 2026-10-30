@@ -1641,15 +1641,26 @@ class SmartSQLEngine:
                     col_types = [f'"{c}" ({df[c].dtype})' for c in df.columns[:25]]
                     schema_str = ", ".join(col_types)
                     prompt = (
-                        f"You are a DuckDB SQL expert. Write a single analytical DuckDB SQL query to answer this question.\n"
+                        f"You are an Elite DuckDB SQL Analytics Architect.\n"
+                        f"Write a syntactically perfect, production-grade DuckDB SQL query to answer this question.\n"
                         f"TABLE: \"{table}\"\n"
                         f"COLUMNS: {schema_str}\n"
-                        f"QUESTION: {question}\n"
+                        f"QUESTION: {question}\n\n"
+                        f"CAPABILITIES & PATTERNS TO EMPLOY (Basic to Extreme Advanced):\n"
+                        f"- Window Functions: ROW_NUMBER(), RANK(), DENSE_RANK() OVER (PARTITION BY ... ORDER BY ...)\n"
+                        f"- Growth & Lags: LAG(val, 1) OVER (ORDER BY date) for MoM / YoY growth rate %\n"
+                        f"- Running Totals: SUM(val) OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\n"
+                        f"- Moving Averages: AVG(val) OVER (ORDER BY date ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)\n"
+                        f"- Pareto 80/20 & Percent of Total: SUM(val) / NULLIF(SUM(SUM(val)) OVER (), 0) * 100.0\n"
+                        f"- Advanced CTEs: WITH cte1 AS (...), cte2 AS (...) SELECT ...\n"
+                        f"- Quantiles: NTILE(4), NTILE(5), MEDIAN(val), STDDEV_SAMP(val)\n"
+                        f"- Date Handling: DATE_TRUNC('month', TRY_CAST(date_col AS TIMESTAMP)), EXTRACT(YEAR FROM TRY_CAST(date_col AS TIMESTAMP))\n"
+                        f"- String & Subqueries: WHERE val > (SELECT AVG(val) FROM \"{table}\")\n\n"
                         f"RULES:\n"
-                        f"1. Output ONLY the SQL string. No markdown, no backticks, no comments.\n"
-                        f"2. Quote all column names with double quotes.\n"
-                        f"3. Use standard DuckDB functions: DATE_TRUNC, EXTRACT, ROUND, SUM, AVG, COUNT.\n"
-                        f"4. Limit large queries to 20 rows unless aggregated.\n"
+                        f"1. Output ONLY the raw executable SQL query ending with a semicolon. No markdown fences, no explanation.\n"
+                        f"2. Always quote every column name with double quotes: \"Column Name\".\n"
+                        f"3. Use TRY_CAST for date conversions to prevent runtime exceptions.\n"
+                        f"4. Limit large unaggregated outputs to 25 rows.\n"
                         f"SQL:"
                     )
                     res_llm = LLMClient.call_llm(prompt=prompt, max_tokens=300, temperature=0.0)
