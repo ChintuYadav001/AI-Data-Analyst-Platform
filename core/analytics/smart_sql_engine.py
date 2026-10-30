@@ -1211,6 +1211,274 @@ class SmartSQLEngine:
                 "title": f"Top {num_rows} {pm.replace('_', ' ').title()} Records" + (f" ({clean_f_desc})" if clean_f_desc else "")
             }
 
+        # Case: Period-over-Period Growth (MoM / YoY)
+        elif intent == "period_over_period" and num_rows >= 2:
+            p_col = cols[0]
+            cur_col = cols[1]
+            growth_col = cols[-1]
+            last_row = result_df.iloc[-1]
+            prev_row = result_df.iloc[-2]
+
+            latest_p = str(last_row[p_col])[:10]
+            latest_val = last_row[cur_col]
+            latest_growth = last_row[growth_col]
+
+            kpi_cards.append({
+                "label": f"Latest Period ({latest_p})",
+                "value": fmt_val(latest_val, cur_col),
+                "subtext": "Current Period Volume"
+            })
+            kpi_cards.append({
+                "label": "Latest Growth Rate",
+                "value": f"{'+' if pd.notna(latest_growth) and latest_growth > 0 else ''}{latest_growth:.1f}%" if pd.notna(latest_growth) else "N/A",
+                "subtext": f"vs prior period ({fmt_val(prev_row[cur_col], cur_col)})"
+            })
+            valid_growths = result_df[growth_col].dropna()
+            avg_growth = valid_growths.mean() if not valid_growths.empty else 0.0
+            kpi_cards.append({
+                "label": "Average Growth Rate",
+                "value": f"{'+' if avg_growth > 0 else ''}{avg_growth:.1f}%",
+                "subtext": f"Across {num_rows} historical periods"
+            })
+            kpi_cards.append({
+                "label": "Total Tracked Volume",
+                "value": fmt_val(result_df[cur_col].sum(), cur_col),
+                "subtext": "Cumulative period sum"
+            })
+
+            growth_sign = "expanded" if pd.notna(latest_growth) and latest_growth > 0 else "contracted"
+            abs_g = abs(latest_growth) if pd.notna(latest_growth) else 0.0
+            answer_parts.append(
+                f"📈 **Period-over-Period Growth Trajectory:** In the latest period (**{latest_p}**), "
+                f"volume reached **{fmt_val(latest_val, cur_col)}**, which **{growth_sign} by {abs_g:.1f}%** "
+                f"compared to **{fmt_val(prev_row[cur_col], cur_col)}** in the preceding period."
+            )
+            chart_spec = {
+                "type": "line",
+                "x": p_col,
+                "y": cur_col,
+                "metrics": [cur_col],
+                "title": f"Growth & Trajectory of {cur_col.replace('_', ' ').title()}"
+            }
+
+        # Case: Cumulative Running Total
+        elif intent == "running_total" and num_rows >= 1:
+            p_col = cols[0]
+            period_col = cols[1]
+            cum_col = cols[2] if len(cols) > 2 else cols[-1]
+            final_cum = result_df.iloc[-1][cum_col]
+
+            kpi_cards.append({
+                "label": "Final Cumulative Total",
+                "value": fmt_val(final_cum, cum_col),
+                "subtext": "Total accumulated volume"
+            })
+            kpi_cards.append({
+                "label": "Peak Single Period",
+                "value": fmt_val(result_df[period_col].max(), period_col),
+                "subtext": "Maximum periodic contribution"
+            })
+            kpi_cards.append({
+                "label": "Total Periods Tracked",
+                "value": f"{num_rows:,}",
+                "subtext": "Historical time increments"
+            })
+
+            answer_parts.append(
+                f"📈 **Cumulative Progression:** Across **{num_rows}** recorded periods, "
+                f"cumulative volume steadily advanced to a grand total of **{fmt_val(final_cum, cum_col)}**."
+            )
+            chart_spec = {
+                "type": "line",
+                "x": p_col,
+                "y": cum_col,
+                "metrics": [cum_col, period_col],
+                "title": "Cumulative Progression vs Periodic Volume"
+            }
+
+        # Case: Pareto 80/20 Cumulative Distribution
+        elif intent == "pareto_80_20" and num_rows >= 1:
+            dim_c = cols[0]
+            val_c = cols[1]
+            cum_c = cols[2] if len(cols) > 2 else cols[-1]
+
+            top_row = result_df.iloc[0]
+            under_80_cnt = int((result_df[cum_c] <= 80.0).sum())
+
+            kpi_cards.append({
+                "label": f"#1 {dim_c.replace('_', ' ').title()}",
+                "value": str(top_row[dim_c])[:25],
+                "subtext": f"{fmt_val(top_row[val_c], val_c)} ({top_row[cum_c]:.1f}% cumulative)"
+            })
+            kpi_cards.append({
+                "label": "80% Revenue Concentration",
+                "value": f"{max(1, under_80_cnt)} Entities",
+                "subtext": "Drive ~80% of entire volume"
+            })
+            kpi_cards.append({
+                "label": "Total Ranked Entities",
+                "value": f"{num_rows:,}",
+                "subtext": "In top Pareto sample"
+            })
+
+            answer_parts.append(
+                f"⚖️ **Pareto 80/20 Distribution:** **{str(top_row[dim_c])}** ranks #1 with "
+                f"**{fmt_val(top_row[val_c], val_c)}**, accounting for **{top_row[cum_c]:.1f}%** of total volume. "
+                f"The top **{max(1, under_80_cnt)}** entities drive the majority (~80%) of entire aggregate revenue."
+            )
+            chart_spec = {
+                "type": "bar",
+                "x": dim_c,
+                "y": val_c,
+                "metrics": [val_c],
+                "title": f"Pareto 80/20 Analysis by {dim_c.replace('_', ' ').title()}"
+            }
+
+        # Case: RFM Customer Segmentation
+        elif intent == "rfm_segmentation" and num_rows >= 1:
+            cust_c = cols[0]
+            freq_c = cols[1]
+            mon_c = cols[2]
+            tier_c = cols[-1]
+
+            tier_counts = result_df[tier_c].value_counts()
+            top_tier = tier_counts.index[0] if not tier_counts.empty else "Standard"
+
+            kpi_cards.append({
+                "label": "Dominant Segment",
+                "value": str(top_tier),
+                "subtext": f"{tier_counts.iloc[0]} customers in cohort"
+            })
+            kpi_cards.append({
+                "label": "Top Customer",
+                "value": str(result_df.iloc[0][cust_c])[:25],
+                "subtext": f"{fmt_val(result_df.iloc[0][mon_c], mon_c)} ({result_df.iloc[0][freq_c]} orders)"
+            })
+            kpi_cards.append({
+                "label": "Cohort Total Spend",
+                "value": fmt_val(result_df[mon_c].sum(), mon_c),
+                "subtext": f"Across top {num_rows} customers"
+            })
+
+            answer_parts.append(
+                f"💎 **RFM Customer Segmentation:** Segmented customers based on order frequency and monetary value. "
+                f"The leading customer is **{result_df.iloc[0][cust_c]}** with **{fmt_val(result_df.iloc[0][mon_c], mon_c)}** across **{result_df.iloc[0][freq_c]} orders**. "
+                f"The dominant tier is **{top_tier}** ({tier_counts.iloc[0]} accounts)."
+            )
+            chart_spec = {
+                "type": "bar",
+                "x": cust_c,
+                "y": mon_c,
+                "metrics": [mon_c],
+                "title": "Top Customers by Monetary Value & Segment Tier"
+            }
+
+        # Case: Statistical Z-Score Outliers
+        elif intent == "outlier_zscore" and num_rows >= 1:
+            z_c = "z_score"
+            max_z = result_df[z_c].max() if z_c in result_df else 0.0
+            top_outlier = result_df.iloc[0]
+            target_metric = intent_info.get("primary_metric", cols[-2])
+
+            kpi_cards.append({
+                "label": "Detected Anomalies",
+                "value": f"{num_rows:,} Records",
+                "subtext": "Z-Score > 2.0 standard deviations"
+            })
+            kpi_cards.append({
+                "label": "Peak Anomaly Z-Score",
+                "value": f"{max_z:.2f} σ",
+                "subtext": "Standard deviations from mean"
+            })
+            kpi_cards.append({
+                "label": "Peak Outlier Value",
+                "value": fmt_val(top_outlier[target_metric], target_metric) if target_metric in top_outlier else "N/A",
+                "subtext": "Extreme observation"
+            })
+
+            answer_parts.append(
+                f"🚨 **Statistical Outlier Radar:** Identified **{num_rows:,} anomalous transactions** exceeding 2.0 standard deviations. "
+                f"The most extreme observation has a Z-Score of **{max_z:.2f} σ** with **{target_metric} = {fmt_val(top_outlier[target_metric], target_metric) if target_metric in top_outlier else 'N/A'}**."
+            )
+            chart_spec = {
+                "type": "bar",
+                "x": cols[0],
+                "y": z_c,
+                "metrics": [z_c],
+                "title": "Statistical Outliers by Z-Score Deviation"
+            }
+
+        # Case: Partitioned Window Ranking (Top N within each group)
+        elif intent == "window_ranking_per_group" and num_rows >= 1:
+            grp_c = cols[0]
+            item_c = cols[1]
+            val_c = cols[2]
+
+            unique_grps = result_df[grp_c].nunique()
+            top_1 = result_df.iloc[0]
+
+            kpi_cards.append({
+                "label": "Categories / Groups",
+                "value": f"{unique_grps:,}",
+                "subtext": "Partitioned dimensions"
+            })
+            kpi_cards.append({
+                "label": f"Overall Top {item_c.replace('_', ' ').title()}",
+                "value": str(top_1[item_c])[:25],
+                "subtext": f"{fmt_val(top_1[val_c], val_c)} in {top_1[grp_c]}"
+            })
+            kpi_cards.append({
+                "label": "Total Ranked Volume",
+                "value": fmt_val(result_df[val_c].sum(), val_c),
+                "subtext": f"Across {num_rows} ranked items"
+            })
+
+            answer_parts.append(
+                f"🏆 **Partitioned Ranking by Group:** Extracted the top-ranking **{item_c.replace('_', ' ')}** observations within each **{grp_c.replace('_', ' ')}**. "
+                f"Overall leader is **{top_1[item_c]}** in **{top_1[grp_c]}** generating **{fmt_val(top_1[val_c], val_c)}**."
+            )
+            chart_spec = {
+                "type": "bar",
+                "x": item_c,
+                "y": val_c,
+                "metrics": [val_c],
+                "title": f"Top {item_c.replace('_', ' ').title()} across {grp_c.replace('_', ' ').title()}"
+            }
+
+        # Case: Percentage of Total / Contribution Share
+        elif intent == "percent_of_total" and num_rows >= 1:
+            dim_c = cols[0]
+            val_c = cols[1]
+            pct_c = cols[2] if len(cols) > 2 else cols[-1]
+            top_1 = result_df.iloc[0]
+
+            kpi_cards.append({
+                "label": f"#1 {dim_c.replace('_', ' ').title()}",
+                "value": str(top_1[dim_c])[:25],
+                "subtext": f"{top_1[pct_c]:.1f}% contribution share"
+            })
+            kpi_cards.append({
+                "label": f"Top {val_c.replace('_', ' ').title()}",
+                "value": fmt_val(top_1[val_c], val_c),
+                "subtext": "Absolute volume"
+            })
+            kpi_cards.append({
+                "label": "Total Volume",
+                "value": fmt_val(result_df[val_c].sum(), val_c),
+                "subtext": f"Across all {num_rows} categories"
+            })
+
+            answer_parts.append(
+                f"🥧 **Contribution Share Analysis:** **{top_1[dim_c]}** leads with **{fmt_val(top_1[val_c], val_c)}**, "
+                f"representing **{top_1[pct_c]:.1f}% of total volume**."
+            )
+            chart_spec = {
+                "type": "donut",
+                "names": dim_c,
+                "values": val_c,
+                "title": f"Share of {val_c.replace('_', ' ').title()} by {dim_c.replace('_', ' ').title()}"
+            }
+
         # Case 1: Scalar Count or Single Row Summary
         elif num_rows == 1:
             row = result_df.iloc[0]
