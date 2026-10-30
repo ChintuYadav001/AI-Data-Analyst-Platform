@@ -799,7 +799,7 @@ class SmartSQLEngine:
                 for ec in result_df.columns:
                     if ec != desc_col and ec != pm and ec in r and not pd.isna(r[ec]):
                         ec_low = str(ec).lower()
-                        if any(w in ec_low for w in ["customer", "category", "city", "state", "type"]):
+                        if any(w in ec_low for w in ["product", "item", "customer", "category", "city", "state", "type"]):
                             context_tags.append(f"{ec}: {r[ec]}")
                 tag_str = f" ({', '.join(context_tags[:2])})" if context_tags else ""
 
@@ -807,12 +807,13 @@ class SmartSQLEngine:
 
             answer_parts.append(f"<br>💡 Combined {pm.replace('_', ' ')} for these {num_rows} records is **{fmt_val(combined_sum, pm)}**.")
 
+            clean_f_desc = filter_desc.replace("**", "").strip()
             chart_spec = {
                 "type": "bar",
                 "x": desc_col,
                 "y": pm,
                 "metrics": [pm],
-                "title": f"Top {num_rows} {pm.replace('_', ' ').title()} Records{filter_desc}"
+                "title": f"Top {num_rows} {pm.replace('_', ' ').title()} Records" + (f" ({clean_f_desc})" if clean_f_desc else "")
             }
 
         # Case 1: Scalar Count or Single Row Summary
