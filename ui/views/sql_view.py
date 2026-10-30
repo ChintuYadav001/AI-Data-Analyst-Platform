@@ -577,20 +577,86 @@ def render_sql_view():
 
         suggested_chips = [
             f"Which {c_col} has the highest {n_col}?",
-            f"Top 5 {cat_cols[1] if len(cat_cols) > 1 else c_col} by {sec_num}",
+            f"Top 5 highest {n_col}",
             f"Total {n_col} and {sec_num} by {c_col}" if sec_num != n_col else f"Total {n_col} by {c_col}",
             f"What is the total {n_col} in {sample_entity[1]}?" if sample_entity else f"What is the total {n_col}?",
             f"Monthly {n_col} trend" if d_col else f"What is the total revenue?",
-            f"How many orders had negative {sec_num}?" if "profit" in str(sec_num).lower() else "How many rows are in the dataset?",
+            f"Month over month {n_col} growth rate" if d_col else f"Percentage of total {n_col} by {c_col}",
         ]
 
-        st.markdown("**💡 Suggested Questions** — click to test accuracy:")
+        st.markdown("**💡 Quick Questions** — click to test accuracy:")
         q_cols = st.columns(3)
         selected_suggestion = None
         for i, sq in enumerate(suggested_chips[:6]):
             with q_cols[i % 3]:
                 if st.button(f"❓ {sq}", key=f"sq_chip_{i}", width="stretch"):
                     selected_suggestion = sq
+
+        # ── Interactive SQL Mastery Catalog (Basic to Extreme Advanced) ──
+        with st.expander("📚 SQL Mastery Catalog: Basic to Extreme Advanced (Click any to run)", expanded=False):
+            st.markdown("""
+            <div style="font-size: 0.82rem; color: #94A3B8; margin-bottom: 8px;">
+                Explore real enterprise analytical queries trained across 4 levels of SQL sophistication. 
+                Click any question to translate, execute on DuckDB, and visualize instantly.
+            </div>
+            """, unsafe_allow_html=True)
+            cat_tabs = st.tabs(["🟢 Level 1: Basic", "🔵 Level 2: Intermediate", "🟣 Level 3: Advanced", "🔴 Level 4: Extreme Advanced"])
+
+            with cat_tabs[0]:
+                st.caption("Foundational SQL: Row retrieval, scalar metrics, and simple filtering.")
+                b_cols = st.columns(2)
+                l1_queries = [
+                    f"What is the total {n_col}?",
+                    f"Top 5 highest {n_col}",
+                    f"How many unique {c_col} are there?",
+                    f"What is the average {n_col} in the dataset?",
+                ]
+                for i, lq in enumerate(l1_queries):
+                    with b_cols[i % 2]:
+                        if st.button(f"🟢 {lq}", key=f"l1_btn_{i}", width="stretch"):
+                            selected_suggestion = lq
+
+            with cat_tabs[1]:
+                st.caption("Intermediate SQL: Multi-column GROUP BY, HAVING thresholds, and date truncations.")
+                i_cols = st.columns(2)
+                l2_queries = [
+                    f"Total {n_col} and {sec_num} by {c_col}",
+                    f"Monthly {n_col} trend" if d_col else f"Total {n_col} by {c_col}",
+                    f"Which {c_col} has the highest {n_col}?",
+                    f"Products with {n_col} above average",
+                ]
+                for i, lq in enumerate(l2_queries):
+                    with i_cols[i % 2]:
+                        if st.button(f"🔵 {lq}", key=f"l2_btn_{i}", width="stretch"):
+                            selected_suggestion = lq
+
+            with cat_tabs[2]:
+                st.caption("Advanced SQL: Window functions (ROW_NUMBER, RANK), running sums, and moving averages.")
+                a_cols = st.columns(2)
+                l3_queries = [
+                    f"Top 3 {cat_cols[1] if len(cat_cols) > 1 else 'items'} in each {c_col}",
+                    f"Running total of {n_col} over time" if d_col else f"Top 5 {n_col}",
+                    f"3 month moving average of {n_col}" if d_col else f"Average {n_col} by {c_col}",
+                    f"Percentage of total {n_col} by {c_col}",
+                ]
+                for i, lq in enumerate(l3_queries):
+                    with a_cols[i % 2]:
+                        if st.button(f"🟣 {lq}", key=f"l3_btn_{i}", width="stretch"):
+                            selected_suggestion = lq
+
+            with cat_tabs[3]:
+                st.caption("Extreme Advanced SQL: Period-over-period lags, Pareto 80/20 distribution, RFM tiers, and Z-score outliers.")
+                e_cols = st.columns(2)
+                l4_queries = [
+                    f"Month over month {n_col} growth rate" if d_col else f"Year over year {n_col} growth",
+                    "Pareto top products driving 80% of revenue",
+                    "RFM customer segmentation",
+                    f"Outliers in {n_col} with high z score",
+                ]
+                for i, lq in enumerate(l4_queries):
+                    with e_cols[i % 2]:
+                        if st.button(f"🔴 {lq}", key=f"l4_btn_{i}", width="stretch"):
+                            selected_suggestion = lq
 
         st.markdown("---")
 
@@ -599,7 +665,7 @@ def render_sql_view():
             user_question = st.text_input(
                 "🔍 Ask your data a question:",
                 value=selected_suggestion or "",
-                placeholder="e.g. Which category has the highest sales? or Total sales and profit by region",
+                placeholder="e.g. Which category has the highest sales? or Month over month sales growth rate",
                 key="nl_question_input",
                 label_visibility="collapsed"
             )
