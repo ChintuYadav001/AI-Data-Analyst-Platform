@@ -79,24 +79,42 @@ class EDAProfiler:
             return cls._empty_profile()
 
         n_rows, n_cols = df.shape
-        if n_rows > 10000:
-            sample_n = min(2000, n_rows)
-            sample_mem = int(df.sample(sample_n, random_state=42).memory_usage(deep=True).sum())
-            memory_bytes = int((sample_mem / sample_n) * n_rows)
-        else:
-            memory_bytes = int(df.memory_usage(deep=True).sum())
+        try:
+            if n_rows > 10000:
+                sample_n = min(2000, n_rows)
+                sample_mem = int(df.sample(sample_n, random_state=42).memory_usage(deep=True).sum())
+                memory_bytes = int((sample_mem / sample_n) * n_rows)
+            else:
+                memory_bytes = int(df.memory_usage(deep=True).sum())
+        except Exception:
+            try:
+                memory_bytes = int(df.memory_usage().sum())
+            except Exception:
+                memory_bytes = 0
         memory_mb = round(float(memory_bytes) / (1024 * 1024), 2)
 
         cached_dups = AnalyticsCache.get(df, "duplicate_rows")
         if cached_dups is not None:
             duplicate_rows = cached_dups
         else:
-            duplicate_rows = int(df.duplicated().sum())
+            try:
+                duplicate_rows = int(df.duplicated().sum())
+            except TypeError:
+                try:
+                    hashable_cols = [c for c in df.columns if df[c].dtype != "object" or not df[c].dropna().map(lambda x: isinstance(x, (list, dict, set))).any()]
+                    duplicate_rows = int(df.duplicated(subset=hashable_cols).sum()) if hashable_cols else 0
+                except Exception:
+                    duplicate_rows = 0
+            except Exception:
+                duplicate_rows = 0
             AnalyticsCache.set(df, "duplicate_rows", duplicate_rows)
         duplicate_pct = round((duplicate_rows / n_rows) * 100, 2) if n_rows > 0 else 0.0
 
         total_cells = n_rows * n_cols
-        total_missing = int(df.isna().sum().sum())
+        try:
+            total_missing = int(df.isna().sum().sum())
+        except Exception:
+            total_missing = int(sum(df[c].isna().sum() for c in df.columns))
         missing_pct = round((total_missing / total_cells) * 100, 2) if total_cells > 0 else 0.0
 
         numerical_cols: List[str] = []
