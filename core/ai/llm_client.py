@@ -95,9 +95,12 @@ class LLMClient:
                                 "error": None
                             }
                     except Exception as e:
+                        err_msg = str(e).lower()
+                        if "404" in err_msg or "not found" in err_msg or "401" in err_msg or "403" in err_msg:
+                            raise e
                         if attempt == MAX_RETRIES:
                             raise e
-                        time.sleep(1.0 * (attempt + 1))
+                        time.sleep(0.5 * (attempt + 1))
 
             except Exception as e:
                 logger.warning(f"Gemini API call failed: {e}")
