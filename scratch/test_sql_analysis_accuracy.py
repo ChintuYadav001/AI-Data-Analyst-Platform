@@ -32,6 +32,8 @@ def run_tests():
     print(f"[INFO] Loaded Superstore dataset: {df.shape[0]} rows x {df.shape[1]} columns")
 
     test_queries = [
+        ("top 3 highest sales in west region", "individual_top_records", "West"),
+        ("top 3 categories in west region by sales", "ranking", "Category"),
         ("Which category has the highest sales?", "ranking", "Category"),
         ("Top 5 products by profit", "ranking", "Product Name"),
         ("Total sales and profit by region", "group_aggregation", "Region"),
