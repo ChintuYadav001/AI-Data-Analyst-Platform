@@ -288,9 +288,6 @@ class SmartSQLEngine:
         primary_metric = matched_nums[0] if matched_nums else (cls.resolve_column("sales", num_cols, "sales") or (num_cols[0] if num_cols else None))
         secondary_metric = matched_nums[1] if len(matched_nums) > 1 else (cls.resolve_column("profit", num_cols, "profit") if primary_metric != cls.resolve_column("profit", num_cols, "profit") else None)
         
-        primary_dim = matched_cats[0] if matched_cats else (cls.resolve_column("category", cat_cols, "category") or (cat_cols[0] if cat_cols else None))
-        secondary_dim = matched_cats[1] if len(matched_cats) > 1 else None
-
         # Step 2: Extract WHERE filters
         where_conds, filter_explanations = cls.extract_filters(q_clean, metadata)
         where_clause = f"\nWHERE {' AND '.join(where_conds)}" if where_conds else ""
@@ -304,6 +301,20 @@ class SmartSQLEngine:
         if limit_n > 50:
             limit_n = 50
 
+        is_ranking_intent = is_top or is_bottom or any(k in q_low for k in ["which", "leader", "worst"])
+        is_group_intent = any(k in q_low for k in ["by", "per", "each", "across", "for each", "breakdown", "distribution"])
+
+        # Assign primary dimension only if matched or explicitly requested by ranking/grouping intent
+        if matched_cats:
+            primary_dim = matched_cats[0]
+            secondary_dim = matched_cats[1] if len(matched_cats) > 1 else None
+        elif is_ranking_intent or is_group_intent:
+            primary_dim = cls.resolve_column("category", cat_cols, "category") or (cat_cols[0] if cat_cols else None)
+            secondary_dim = None
+        else:
+            primary_dim = None
+            secondary_dim = None
+
         # B. Time-series / Chronological
         is_timeseries = any(k in q_low for k in ["trend", "monthly", "by month", "over time", "history", "trajectory", "by year", "yearly", "quarterly", "daily"]) and bool(date_cols)
 
@@ -312,7 +323,7 @@ class SmartSQLEngine:
         is_distinct_count = any(k in q_low for k in ["how many unique", "how many distinct", "distinct customers", "unique customers", "how many different"])
 
         # D. Summary / Scalar KPI (Total, Average, Overall)
-        is_scalar_total = any(k in q_low for k in ["what is the total", "what is total", "overall", "entire", "grand total", "sum of all"]) and not any(k in q_low for k in ["by", "per", "each", "across"])
+        is_scalar_total = any(k in q_low for k in ["what is the total", "what is total", "overall", "entire", "grand total", "sum of all"]) and not is_group_intent
 
         # E. Multi-Metric (e.g. Sales AND Profit)
         has_multi_metric = len(matched_nums) >= 2 or (primary_metric and secondary_metric and any(k in q_low for k in ["and", "both", "versus", "vs", "compare", "with"]))
