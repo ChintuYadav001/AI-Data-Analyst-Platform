@@ -335,8 +335,10 @@ def dispatch_active_view(route: str):
         from ui.views.upload_view import render_upload_view
         render_upload_view()
     elif route == "Data Profile":
-        from ui.views.profile_view import render_profile_view
-        render_profile_view()
+        import importlib
+        import ui.views.profile_view
+        importlib.reload(ui.views.profile_view)
+        ui.views.profile_view.render_profile_view()
     elif route == "Data Quality":
         from ui.views.quality_view import render_quality_view
         render_quality_view()
