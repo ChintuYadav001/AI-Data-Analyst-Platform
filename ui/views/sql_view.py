@@ -1,13 +1,15 @@
 """
 ui.views.sql_view
 =================
-AI-Powered SQL Analytics Engine with:
-  - Natural-language question → DuckDB SQL generation (AI or deterministic)
+AI-Powered Enterprise SQL Analytics Engine with:
+  - Natural-language question → High-accuracy DuckDB SQL generation via SmartSQLEngine
+  - Direct, evidence-backed Executive Natural Language Answer with key numbers highlighted
+  - Prominent interactive Plotly visualizations (Bar, Donut, Line, Area, Treemap, KPI Stat Cards)
+  - Interactive Chart Switcher toolbar to toggle views on the fly
   - Smart preset query library based on detected schema
-  - Live query editor with syntax guidance
-  - Auto-visualization: bar, line, scatter, pie, heatmap
-  - Query history & bookmarks
-  - CSV/Excel export of results
+  - DuckDB SQL Workbench editor with syntax validation & self-healing execution
+  - Query history & bookmarks with 1-click re-execution
+  - Instant CSV & JSON export
   - Full schema explorer
 """
 
@@ -16,8 +18,10 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from core.models import SQLAnalyticsModel, ChartModel
-from core.ai.llm_client import LLMClient
+from typing import Dict, Any, List, Optional
+
+from core.models import SQLAnalyticsModel
+from core.analytics.smart_sql_engine import SmartSQLEngine
 
 
 # ── Palette & Layout Constants ─────────────────────────────────────────
@@ -31,7 +35,7 @@ DARK_BG = "#0A0E1A"
 CHART_PALETTE = [NEON_CYAN, NEON_VIOLET, NEON_GREEN, NEON_ROSE, NEON_AMBER, "#38BDF8", "#A855F7", "#06B6D4"]
 
 
-# ── Helpers ─────────────────────────────────────────────────────────────
+# ── State Initialization ───────────────────────────────────────────────
 def _init_sql_state():
     """Ensure all session keys exist."""
     defaults = {
@@ -39,23 +43,27 @@ def _init_sql_state():
         "sql_query_history": [],
         "sql_last_result_df": None,
         "sql_last_query": "",
+        "sql_last_answer": "",
+        "sql_last_kpis": [],
+        "sql_last_chart_spec": None,
         "sql_bookmarks": [],
+        "sql_chart_view_mode": "auto",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
 
 
+# ── Presets Builder ───────────────────────────────────────────────────
 def _build_smart_presets(df: pd.DataFrame, table: str):
     """Generate contextual preset queries from schema."""
-    num_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c]) and "id" not in c.lower()]
-    cat_cols = [c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c]) and df[c].nunique() <= 50]
-    date_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c]) or any(k in c.lower() for k in ["date", "time", "timestamp"])]
+    num_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c]) and "id" not in str(c).lower()]
+    cat_cols = [c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c]) and df[c].nunique() <= 50 and "id" not in str(c).lower()]
+    date_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c]) or any(k in str(c).lower() for k in ["date", "time", "timestamp"])]
     all_cols = list(df.columns)
 
     presets = []
 
-    # Always add a basic preview
     presets.append({
         "label": "👀 Preview First 20 Rows",
         "icon": "👀",
@@ -63,7 +71,6 @@ def _build_smart_presets(df: pd.DataFrame, table: str):
         "category": "Basic"
     })
 
-    # Row count
     presets.append({
         "label": "📊 Total Row Count",
         "icon": "📊",
@@ -71,7 +78,6 @@ def _build_smart_presets(df: pd.DataFrame, table: str):
         "category": "Basic"
     })
 
-    # Summary statistics
     if num_cols:
         stats_parts = ", ".join([
             f'ROUND(AVG("{c}"), 2) AS avg_{c.replace(" ", "_")}, '
@@ -86,7 +92,6 @@ def _build_smart_presets(df: pd.DataFrame, table: str):
             "category": "Statistics"
         })
 
-    # Top categories
     if cat_cols:
         c = cat_cols[0]
         presets.append({
@@ -96,7 +101,6 @@ def _build_smart_presets(df: pd.DataFrame, table: str):
             "category": "Segments"
         })
 
-    # Aggregation by category
     if cat_cols and num_cols:
         c, n = cat_cols[0], num_cols[0]
         presets.append({
@@ -105,34 +109,16 @@ def _build_smart_presets(df: pd.DataFrame, table: str):
             "query": f'SELECT "{c}", ROUND(SUM("{n}"), 2) AS total_{n.replace(" ", "_")}, COUNT(*) AS records\nFROM "{table}"\nGROUP BY "{c}"\nORDER BY total_{n.replace(" ", "_")} DESC\nLIMIT 15;',
             "category": "Aggregation"
         })
-        presets.append({
-            "label": f"📐 Average {n} by {c}",
-            "icon": "📐",
-            "query": f'SELECT "{c}", ROUND(AVG("{n}"), 2) AS avg_{n.replace(" ", "_")}, COUNT(*) AS sample_size\nFROM "{table}"\nGROUP BY "{c}"\nHAVING COUNT(*) >= 2\nORDER BY avg_{n.replace(" ", "_")} DESC\nLIMIT 15;',
-            "category": "Aggregation"
-        })
 
-    # Percentile / distribution
-    if num_cols:
-        n = num_cols[0]
-        presets.append({
-            "label": f"📊 Distribution of {n}",
-            "icon": "📊",
-            "query": f'SELECT\n  ROUND(PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY "{n}"), 2) AS p25,\n  ROUND(PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY "{n}"), 2) AS median,\n  ROUND(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY "{n}"), 2) AS p75,\n  ROUND(STDDEV("{n}"), 2) AS std_dev,\n  COUNT(*) AS total\nFROM "{table}";',
-            "category": "Statistics"
-        })
-
-    # Time-series
     if date_cols and num_cols:
         d, n = date_cols[0], num_cols[0]
         presets.append({
             "label": f"📅 Monthly Trend of {n}",
             "icon": "📅",
-            "query": f'SELECT DATE_TRUNC(\'month\', "{d}") AS month,\n  ROUND(SUM("{n}"), 2) AS total_{n.replace(" ", "_")},\n  COUNT(*) AS records\nFROM "{table}"\nGROUP BY month\nORDER BY month;',
+            "query": f'SELECT DATE_TRUNC(\'month\', TRY_CAST("{d}" AS TIMESTAMP)) AS month,\n  ROUND(SUM("{n}"), 2) AS total_{n.replace(" ", "_")},\n  COUNT(*) AS records\nFROM "{table}"\nGROUP BY month\nORDER BY month;',
             "category": "Time Series"
         })
 
-    # Null analysis
     null_checks = " + ".join([f'CASE WHEN "{c}" IS NULL THEN 1 ELSE 0 END' for c in all_cols[:10]])
     presets.append({
         "label": "🕳️ Null Value Scan",
@@ -141,240 +127,213 @@ def _build_smart_presets(df: pd.DataFrame, table: str):
         "category": "Quality"
     })
 
-    # Correlation proxy
-    if len(num_cols) >= 2:
-        n1, n2 = num_cols[0], num_cols[1]
-        presets.append({
-            "label": f"🔗 Correlation: {n1} vs {n2}",
-            "icon": "🔗",
-            "query": f'SELECT ROUND(CORR("{n1}", "{n2}"), 4) AS correlation,\n  COUNT(*) AS sample_size\nFROM "{table}"\nWHERE "{n1}" IS NOT NULL AND "{n2}" IS NOT NULL;',
-            "category": "Statistics"
-        })
-
-    # Outlier detection
-    if num_cols:
-        n = num_cols[0]
-        presets.append({
-            "label": f"🚨 Outliers in {n}",
-            "icon": "🚨",
-            "query": f'WITH stats AS (\n  SELECT AVG("{n}") AS mu, STDDEV("{n}") AS sigma FROM "{table}"\n)\nSELECT *\nFROM "{table}", stats\nWHERE ABS("{n}" - mu) > 3 * sigma\nLIMIT 50;',
-            "category": "Anomaly"
-        })
-
     return presets
 
 
-def _nl_to_sql(question: str, df: pd.DataFrame, table: str) -> str:
-    """Convert a natural-language question into a DuckDB SQL query."""
-    col_info = []
-    for c in df.columns:
-        dtype = str(df[c].dtype)
-        sample_vals = df[c].dropna().head(3).tolist()
-        sample_str = ", ".join([str(v) for v in sample_vals])
-        col_info.append(f'  - "{c}" ({dtype}) e.g. {sample_str}')
-    schema_block = "\n".join(col_info)
-
-    prompt = f"""You are a DuckDB SQL expert. Convert the user's question into a single valid DuckDB SELECT query.
-
-TABLE: "{table}" ({len(df)} rows, {len(df.columns)} columns)
-COLUMNS:
-{schema_block}
-
-RULES:
-1. Output ONLY the SQL query. No explanation, no markdown, no backticks.
-2. Use only SELECT/WITH statements. No DDL/DML.
-3. Always quote column names with double quotes.
-4. Use DuckDB syntax (not MySQL or PostgreSQL-specific).
-5. Limit large results to 100 rows unless the user asks for all.
-6. Use aggregation functions when the question implies totals, averages, or counts.
-
-USER QUESTION: {question}
-
-SQL:"""
-
-    response = LLMClient.call_llm(
-        prompt=prompt,
-        system_instruction="You are a SQL generation engine. Output ONLY valid DuckDB SQL. No explanations.",
-        max_tokens=400,
-        temperature=0.1,
-    )
-
-    if response["success"] and response["text"]:
-        sql = response["text"].strip()
-        # Clean markdown fences if LLM wraps them
-        if sql.startswith("```"):
-            lines = sql.split("\n")
-            lines = [l for l in lines if not l.strip().startswith("```")]
-            sql = "\n".join(lines).strip()
-        if not sql.endswith(";"):
-            sql += ";"
-        return sql
-
-    # ── Deterministic fallback: pattern-match common questions ──
-    return _deterministic_nl_to_sql(question, df, table)
+# ── KPI Stat Cards Renderer ───────────────────────────────────────────
+def _render_kpi_cards(kpi_cards: List[Dict[str, str]]):
+    """Render executive Neon KPI Stat Cards."""
+    if not kpi_cards:
+        return
+    cols = st.columns(min(len(kpi_cards), 4))
+    for i, card in enumerate(kpi_cards[:4]):
+        with cols[i]:
+            val_str = str(card.get('value', '—'))
+            val_size = "1.25rem" if len(val_str) > 18 else "1.55rem"
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(30, 41, 59, 0.65));
+                        border: 1px solid rgba(0, 240, 255, 0.22); border-radius: 12px;
+                        padding: 12px 16px; margin-bottom: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);">
+                <div style="font-size: 0.70rem; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.06em;">
+                    {card.get('label', 'Metric')}
+                </div>
+                <div style="font-size: {val_size}; font-weight: 800; color: {NEON_CYAN}; margin: 3px 0 2px 0; font-family: 'JetBrains Mono', monospace; word-break: break-word;">
+                    {val_str}
+                </div>
+                <div style="font-size: 0.72rem; color: #64748B;">
+                    {card.get('subtext', '')}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
 
-def _deterministic_nl_to_sql(question: str, df: pd.DataFrame, table: str) -> str:
-    """Rule-based NL→SQL for offline/no-API scenarios."""
-    q = question.lower().strip()
-    num_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c]) and "id" not in c.lower()]
-    cat_cols = [c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c]) and df[c].nunique() <= 50]
-    date_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c]) or "date" in c.lower()]
-
-    # Match specific column mentions
-    mentioned_num = [c for c in num_cols if c.lower().replace("_", " ") in q]
-    mentioned_cat = [c for c in cat_cols if c.lower().replace("_", " ") in q]
-
-    n_col = mentioned_num[0] if mentioned_num else (num_cols[0] if num_cols else None)
-    c_col = mentioned_cat[0] if mentioned_cat else (cat_cols[0] if cat_cols else None)
-    d_col = date_cols[0] if date_cols else None
-
-    if any(k in q for k in ["how many", "count", "total rows", "number of"]):
-        if c_col and any(k in q for k in ["each", "per", "by", "group"]):
-            return f'SELECT "{c_col}", COUNT(*) AS count\nFROM "{table}"\nGROUP BY "{c_col}"\nORDER BY count DESC\nLIMIT 20;'
-        return f'SELECT COUNT(*) AS total_rows FROM "{table}";'
-
-    if any(k in q for k in ["average", "avg", "mean"]) and n_col:
-        if c_col:
-            return f'SELECT "{c_col}", ROUND(AVG("{n_col}"), 2) AS avg_{n_col.replace(" ", "_")}\nFROM "{table}"\nGROUP BY "{c_col}"\nORDER BY avg_{n_col.replace(" ", "_")} DESC\nLIMIT 15;'
-        return f'SELECT ROUND(AVG("{n_col}"), 2) AS average FROM "{table}";'
-
-    if any(k in q for k in ["sum", "total"]) and n_col:
-        if c_col:
-            return f'SELECT "{c_col}", ROUND(SUM("{n_col}"), 2) AS total_{n_col.replace(" ", "_")}\nFROM "{table}"\nGROUP BY "{c_col}"\nORDER BY total_{n_col.replace(" ", "_")} DESC\nLIMIT 15;'
-        return f'SELECT ROUND(SUM("{n_col}"), 2) AS total FROM "{table}";'
-
-    if any(k in q for k in ["top", "highest", "best", "maximum", "largest"]) and n_col:
-        return f'SELECT *\nFROM "{table}"\nORDER BY "{n_col}" DESC\nLIMIT 10;'
-
-    if any(k in q for k in ["bottom", "lowest", "worst", "minimum", "smallest"]) and n_col:
-        return f'SELECT *\nFROM "{table}"\nORDER BY "{n_col}" ASC\nLIMIT 10;'
-
-    if any(k in q for k in ["trend", "over time", "monthly", "by month"]) and d_col and n_col:
-        return f'SELECT DATE_TRUNC(\'month\', "{d_col}") AS month, ROUND(SUM("{n_col}"), 2) AS total\nFROM "{table}"\nGROUP BY month\nORDER BY month;'
-
-    if any(k in q for k in ["distribution", "spread", "histogram"]) and n_col:
-        return f'SELECT\n  ROUND(PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY "{n_col}"), 2) AS p25,\n  ROUND(PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY "{n_col}"), 2) AS median,\n  ROUND(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY "{n_col}"), 2) AS p75,\n  ROUND(STDDEV("{n_col}"), 2) AS std_dev\nFROM "{table}";'
-
-    if any(k in q for k in ["null", "missing", "empty"]):
-        checks = ", ".join([f'SUM(CASE WHEN "{c}" IS NULL THEN 1 ELSE 0 END) AS null_{c.replace(" ", "_")}' for c in df.columns[:12]])
-        return f'SELECT COUNT(*) AS total_rows, {checks}\nFROM "{table}";'
-
-    if any(k in q for k in ["unique", "distinct"]):
-        if c_col:
-            return f'SELECT COUNT(DISTINCT "{c_col}") AS unique_values FROM "{table}";'
-        return f'SELECT ' + ", ".join([f'COUNT(DISTINCT "{c}") AS distinct_{c.replace(" ", "_")}' for c in df.columns[:8]]) + f' FROM "{table}";'
-
-    if any(k in q for k in ["correlat"]) and len(num_cols) >= 2:
-        return f'SELECT ROUND(CORR("{num_cols[0]}", "{num_cols[1]}"), 4) AS correlation FROM "{table}";'
-
-    if any(k in q for k in ["outlier", "anomal"]) and n_col:
-        return f'WITH s AS (SELECT AVG("{n_col}") AS mu, STDDEV("{n_col}") AS sig FROM "{table}")\nSELECT * FROM "{table}", s WHERE ABS("{n_col}" - mu) > 3 * sig LIMIT 50;'
-
-    # Fallback: show preview
-    return f'SELECT * FROM "{table}" LIMIT 20;'
-
-
-def _auto_visualize(result_df: pd.DataFrame):
-    """Render smart auto-visualizations for any query result."""
-    if result_df is None or result_df.empty or len(result_df.columns) < 1:
+# ── Smart Visualizer with Multi-Chart Toolbar ──────────────────────────
+def _render_smart_visualization(
+    result_df: pd.DataFrame,
+    chart_spec: Optional[Dict[str, Any]] = None,
+    key_prefix: str = "sql_chart"
+):
+    """
+    Renders interactive Plotly visual graphs with on-the-fly chart type switching.
+    Supports: Bar Chart, Donut Chart, Line Trend, Treemap, and Grouped Comparisons.
+    """
+    if result_df is None or result_df.empty:
         st.info("No data available for visualization.")
         return
 
     num_cols = [c for c in result_df.columns if pd.api.types.is_numeric_dtype(result_df[c])]
-    str_cols = [c for c in result_df.columns if result_df[c].dtype == "object" or str(result_df[c].dtype) == "category"]
-    date_cols = [c for c in result_df.columns if pd.api.types.is_datetime64_any_dtype(result_df[c])]
+    str_cols = [c for c in result_df.columns if not pd.api.types.is_numeric_dtype(result_df[c])]
+    date_cols = [c for c in result_df.columns if pd.api.types.is_datetime64_any_dtype(result_df[c]) or any(k in str(c).lower() for k in ["month", "year", "date", "quarter"])]
+
+    # Single Row / Scalar KPI Card
+    if len(result_df) == 1 and num_cols:
+        row = result_df.iloc[0]
+        kpi_list = [{"label": c.replace("_", " ").title(), "value": f"{row[c]:,.2f}" if isinstance(row[c], (int, float)) else str(row[c]), "subtext": "Computed KPI"} for c in num_cols[:4]]
+        _render_kpi_cards(kpi_list)
+        return
+
+    # Determine recommended view
+    spec_type = (chart_spec or {}).get("type", "auto")
+
+    # Interactive Chart-Type Toolbar
+    col_t1, col_t2 = st.columns([3, 1])
+    with col_t2:
+        chart_options = ["📊 Bar Chart", "🍩 Donut Chart", "📈 Line Trend", "📦 Treemap", "📋 Table"]
+        default_idx = 0
+        if spec_type == "line" or (date_cols and num_cols):
+            default_idx = 2
+        selected_view = st.selectbox(
+            "Visual Format:",
+            chart_options,
+            index=default_idx,
+            key=f"{key_prefix}_view_mode",
+            label_visibility="collapsed"
+        )
 
     layout_cfg = dict(
         template="plotly_dark",
         paper_bgcolor=DARK_BG,
         plot_bgcolor=DARK_BG,
-        margin=dict(l=20, r=20, t=50, b=30),
+        margin=dict(l=25, r=25, t=40, b=35),
         font=dict(family="JetBrains Mono, sans-serif", size=11, color="#94A3B8"),
         xaxis=dict(showgrid=True, gridcolor="#172033", linecolor="#1E293B"),
         yaxis=dict(showgrid=True, gridcolor="#172033", linecolor="#1E293B"),
     )
 
-    charts_rendered = 0
-    max_charts = 3
-
-    # Pattern 1: Category + Number → Bar Chart
-    if str_cols and num_cols and charts_rendered < max_charts:
-        x_col, y_col = str_cols[0], num_cols[0]
-        plot_df = result_df.head(30)
-        fig = px.bar(plot_df, x=x_col, y=y_col, color=x_col,
-                     color_discrete_sequence=CHART_PALETTE,
-                     title=f"<span style='color:{NEON_CYAN}'>{y_col} by {x_col}</span>")
-        fig.update_traces(marker_line_width=1, marker_line_color="rgba(255,255,255,0.15)", opacity=0.9)
-        fig.update_layout(**layout_cfg)
-        st.plotly_chart(fig, key=f"auto_bar_{x_col}_{y_col}", width="stretch")
-        charts_rendered += 1
-
-    # Pattern 2: Date + Number → Line/Area
-    if date_cols and num_cols and charts_rendered < max_charts:
-        x_col, y_col = date_cols[0], num_cols[0]
-        plot_df = result_df.sort_values(x_col)
-        fig = px.area(plot_df, x=x_col, y=y_col,
-                      color_discrete_sequence=[NEON_CYAN],
-                      title=f"<span style='color:{NEON_CYAN}'>Trend: {y_col} over {x_col}</span>")
-        fig.update_traces(line=dict(width=2.5), fillcolor="rgba(0,240,255,0.1)")
-        fig.update_layout(**layout_cfg)
-        st.plotly_chart(fig, key=f"auto_trend_{x_col}_{y_col}", width="stretch")
-        charts_rendered += 1
-
-    # Pattern 3: Multiple number columns → Grouped bar or scatter
-    if len(num_cols) >= 2 and charts_rendered < max_charts:
-        if str_cols:
+    # 1. Bar Chart View
+    if "Bar" in selected_view:
+        if str_cols and num_cols:
             x_col = str_cols[0]
-            plot_df = result_df.head(20)
-            fig = go.Figure()
-            for i, nc in enumerate(num_cols[:4]):
-                fig.add_trace(go.Bar(
-                    name=nc, x=plot_df[x_col], y=plot_df[nc],
-                    marker_color=CHART_PALETTE[i % len(CHART_PALETTE)],
-                    opacity=0.9
-                ))
-            fig.update_layout(barmode="group",
-                              title=f"<span style='color:{NEON_CYAN}'>Comparison across {x_col}</span>",
-                              **layout_cfg)
-            st.plotly_chart(fig, key=f"auto_grouped_{x_col}", width="stretch")
-        else:
-            x_col, y_col = num_cols[0], num_cols[1]
-            fig = px.scatter(result_df.head(500), x=x_col, y=y_col,
-                             color_discrete_sequence=[NEON_VIOLET],
-                             title=f"<span style='color:{NEON_VIOLET}'>{y_col} vs {x_col}</span>")
-            fig.update_traces(marker=dict(size=8, opacity=0.8, line=dict(width=1, color=DARK_BG)))
+            # Grouped bar if multiple metrics
+            if len(num_cols) >= 2 and len(result_df) <= 25:
+                fig = go.Figure()
+                for i, nc in enumerate(num_cols[:3]):
+                    fig.add_trace(go.Bar(
+                        name=nc.replace("_", " ").title(),
+                        x=result_df[x_col].astype(str).head(20),
+                        y=result_df[nc].head(20),
+                        marker_color=CHART_PALETTE[i % len(CHART_PALETTE)],
+                        opacity=0.9
+                    ))
+                fig.update_layout(barmode="group", title=f"<span style='color:{NEON_CYAN}'>Comparison across {x_col}</span>", **layout_cfg)
+                st.plotly_chart(fig, key=f"{key_prefix}_grouped_bar", width="stretch")
+            else:
+                y_col = num_cols[0]
+                plot_df = result_df.head(25)
+                fig = px.bar(
+                    plot_df, x=x_col, y=y_col, color=y_col,
+                    color_continuous_scale=[[0, NEON_VIOLET], [1, NEON_CYAN]],
+                    title=f"<span style='color:{NEON_CYAN}'>{y_col.replace('_', ' ').title()} by {x_col.replace('_', ' ').title()}</span>",
+                    text_auto=".2s"
+                )
+                fig.update_traces(marker_line_width=1, marker_line_color="rgba(255,255,255,0.15)", opacity=0.9)
+                fig.update_layout(**layout_cfg)
+                st.plotly_chart(fig, key=f"{key_prefix}_bar", width="stretch")
+        elif num_cols and not str_cols:
+            # Single numeric histogram
+            n = num_cols[0]
+            fig = px.histogram(result_df, x=n, color_discrete_sequence=[NEON_CYAN], title=f"Distribution of {n}")
             fig.update_layout(**layout_cfg)
-            st.plotly_chart(fig, key=f"auto_scatter_{x_col}_{y_col}", width="stretch")
-        charts_rendered += 1
+            st.plotly_chart(fig, key=f"{key_prefix}_hist", width="stretch")
+        else:
+            st.dataframe(result_df, width="stretch", hide_index=True)
 
-    # Pattern 4: Single category column → Pie/Donut
-    if str_cols and not num_cols and charts_rendered < max_charts:
-        c = str_cols[0]
-        counts = result_df[c].value_counts().head(10).reset_index()
-        counts.columns = [c, "count"]
-        fig = px.pie(counts, names=c, values="count", hole=0.55,
-                     color_discrete_sequence=CHART_PALETTE,
-                     title=f"<span style='color:{NEON_CYAN}'>Distribution of {c}</span>")
-        fig.update_traces(textposition="inside", textinfo="percent+label")
-        fig.update_layout(**layout_cfg)
-        st.plotly_chart(fig, key=f"auto_pie_{c}", width="stretch")
-        charts_rendered += 1
+    # 2. Donut Chart View
+    elif "Donut" in selected_view:
+        if str_cols and num_cols:
+            names_col = str_cols[0]
+            values_col = num_cols[0]
+            plot_df = result_df.head(10)
+            fig = px.pie(
+                plot_df, names=names_col, values=values_col, hole=0.55,
+                color_discrete_sequence=CHART_PALETTE,
+                title=f"<span style='color:{NEON_CYAN}'>Share of {values_col.replace('_', ' ').title()} by {names_col}</span>"
+            )
+            fig.update_traces(textposition="inside", textinfo="percent+label")
+            fig.update_layout(**layout_cfg)
+            st.plotly_chart(fig, key=f"{key_prefix}_donut", width="stretch")
+        elif str_cols and not num_cols:
+            c = str_cols[0]
+            counts = result_df[c].value_counts().head(10).reset_index()
+            counts.columns = [c, "count"]
+            fig = px.pie(counts, names=c, values="count", hole=0.55, color_discrete_sequence=CHART_PALETTE)
+            fig.update_layout(**layout_cfg)
+            st.plotly_chart(fig, key=f"{key_prefix}_donut_cat", width="stretch")
+        else:
+            st.info("Donut chart requires at least 1 category column.")
 
-    # Pattern 5: Single numeric → Histogram
-    if num_cols and not str_cols and not date_cols and len(result_df) > 1 and charts_rendered < max_charts:
-        n = num_cols[0]
-        fig = px.histogram(result_df, x=n, color_discrete_sequence=[NEON_VIOLET],
-                           title=f"<span style='color:{NEON_VIOLET}'>Distribution of {n}</span>")
-        fig.update_traces(marker_line_width=1, marker_line_color=NEON_VIOLET, opacity=0.85)
-        fig.update_layout(**layout_cfg)
-        st.plotly_chart(fig, key=f"auto_hist_{n}", width="stretch")
-        charts_rendered += 1
+    # 3. Line Trend View
+    elif "Line" in selected_view:
+        x_col = date_cols[0] if date_cols else (str_cols[0] if str_cols else result_df.columns[0])
+        y_col = num_cols[0] if num_cols else result_df.columns[1]
 
-    if charts_rendered == 0:
-        st.info("📊 Auto-visualization is not available for this result structure. View the data table above.")
+        plot_df = result_df.sort_values(x_col) if x_col in result_df.columns else result_df
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=plot_df[x_col].astype(str),
+            y=plot_df[y_col],
+            mode="lines+markers",
+            line=dict(color=NEON_CYAN, width=3),
+            marker=dict(size=6, color=NEON_CYAN, line=dict(color="#FFFFFF", width=1)),
+            fill="tozeroy",
+            fillcolor="rgba(0, 240, 255, 0.08)",
+            name=y_col.replace("_", " ").title()
+        ))
+        # If secondary numeric column exists
+        if len(num_cols) >= 2:
+            y2 = num_cols[1]
+            fig.add_trace(go.Scatter(
+                x=plot_df[x_col].astype(str),
+                y=plot_df[y2],
+                mode="lines+markers",
+                line=dict(color=NEON_VIOLET, width=2.5, dash="dot"),
+                marker=dict(size=5, color=NEON_VIOLET),
+                name=y2.replace("_", " ").title()
+            ))
+
+        fig.update_layout(
+            title=f"<span style='color:{NEON_CYAN}'>Trajectory: {y_col.replace('_', ' ').title()} over {x_col}</span>",
+            hovermode="x unified",
+            **layout_cfg
+        )
+        st.plotly_chart(fig, key=f"{key_prefix}_line", width="stretch")
+
+    # 4. Treemap View
+    elif "Treemap" in selected_view:
+        if str_cols and num_cols:
+            dim_cols = str_cols[:2] if len(str_cols) >= 2 else [str_cols[0]]
+            val_col = num_cols[0]
+            # Treemap requires positive values
+            clean_df = result_df[result_df[val_col] > 0].head(30)
+            if not clean_df.empty:
+                fig = px.treemap(
+                    clean_df, path=dim_cols, values=val_col,
+                    color=val_col, color_continuous_scale=[[0, NEON_VIOLET], [1, NEON_CYAN]],
+                    title=f"<span style='color:{NEON_CYAN}'>Hierarchical Breakdown: {val_col.replace('_', ' ').title()}</span>"
+                )
+                fig.update_layout(**layout_cfg)
+                st.plotly_chart(fig, key=f"{key_prefix}_treemap", width="stretch")
+            else:
+                st.info("Treemap requires positive metric values.")
+        else:
+            st.info("Treemap requires at least one category and one numeric column.")
+
+    # 5. Table View
+    else:
+        st.dataframe(result_df, width="stretch", hide_index=True)
 
 
+# ── Schema Explorer Panel ──────────────────────────────────────────────
 def _render_schema_explorer(engine, table_name: str, df: pd.DataFrame):
     """Render a rich schema panel."""
     schema = engine.get_table_schema(table_name)
@@ -384,7 +343,6 @@ def _render_schema_explorer(engine, table_name: str, df: pd.DataFrame):
         st.info("Schema information unavailable.")
         return
 
-    # Build enriched schema
     enriched = []
     for ci in cols_info:
         col_name = ci.get("column_name", ci.get("Field", ""))
@@ -417,17 +375,17 @@ def render_sql_view():
 
     # ── Header ──
     st.markdown(f"""
-    <div style="padding: 18px 0 8px 0;">
+    <div style="padding: 16px 0 6px 0;">
         <div style="display: flex; align-items: center; gap: 12px;">
             <div style="width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, {NEON_CYAN} 0%, {NEON_VIOLET} 100%);
                         display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
                         box-shadow: 0 0 20px rgba(0,240,255,0.3);">⚡</div>
             <div>
                 <div style="font-size: 1.5rem; font-weight: 800; color: #FFFFFF; letter-spacing: -0.02em;">
-                    SQL Analytics Engine
+                    SQL Analytics & Natural Language Engine
                 </div>
                 <div style="font-size: 0.82rem; color: {NEON_CYAN}; font-weight: 600;">
-                    Ask questions in plain English or write DuckDB SQL • Auto-visualize results
+                    Ask questions in plain English or write DuckDB SQL • Direct AI answers with interactive charts
                 </div>
             </div>
         </div>
@@ -443,160 +401,220 @@ def render_sql_view():
 
     # ── Layout: 3 tabs ──
     tab_ask, tab_editor, tab_history = st.tabs([
-        "💬 Ask a Question",
-        "⌨️ SQL Editor",
+        "💬 Ask a Question & Visual Answers",
+        "⌨️ DuckDB SQL Workbench",
         "📜 Query History"
     ])
 
     # ═══════════════════════════════════════════════════════════════════
-    # TAB 1: Ask a Question (NL → SQL)
+    # TAB 1: Ask a Question (NL → SQL + Direct Answers + Graphs)
     # ═══════════════════════════════════════════════════════════════════
     with tab_ask:
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, rgba(0,240,255,0.06), rgba(139,92,246,0.06));
-                    border: 1px solid rgba(0,240,255,0.15); border-radius: 12px; padding: 16px 20px; margin: 8px 0 16px 0;">
-            <div style="font-size: 0.78rem; font-weight: 700; color: {NEON_CYAN}; letter-spacing: 0.05em; margin-bottom: 6px;">
-                // ASK ANYTHING ABOUT YOUR DATA
+                    border: 1px solid rgba(0,240,255,0.18); border-radius: 12px; padding: 14px 18px; margin: 8px 0 14px 0;">
+            <div style="font-size: 0.74rem; font-weight: 700; color: {NEON_CYAN}; letter-spacing: 0.05em; margin-bottom: 4px;">
+                // ENTERPRISE NATURAL LANGUAGE ANALYTICS
             </div>
             <div style="font-size: 0.85rem; color: #CBD5E1; line-height: 1.5;">
-                Type a question in plain English. The AI engine will generate the SQL query,
-                execute it on DuckDB, and auto-visualize the results.
+                Ask any analytical question in plain English. The high-accuracy engine translates it to 
+                DuckDB SQL, executes with self-healing validation, generates a direct executive answer with key metrics, 
+                and auto-renders interactive visual graphs.
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        # Smart question suggestions
-        presets = _build_smart_presets(df, table_name)
-        num_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c]) and "id" not in c.lower()]
-        cat_cols = [c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c]) and df[c].nunique() <= 50]
+        # Smart Suggested Questions
+        meta = SmartSQLEngine.extract_metadata(df)
+        num_cols = meta["numeric_cols"]
+        cat_cols = meta["cat_cols"]
+        date_cols = meta["date_cols"]
 
-        suggestion_questions = [
-            "How many rows are in the dataset?",
-            f"What are the top 10 {cat_cols[0]} by count?" if cat_cols else "Show the first 20 rows",
-            f"What is the average {num_cols[0]}?" if num_cols else "List all unique values",
-            f"Show total {num_cols[0]} by {cat_cols[0]}" if num_cols and cat_cols else "Summarize the data",
-            f"Which {cat_cols[0]} has the highest {num_cols[0]}?" if cat_cols and num_cols else "Count distinct values",
-            f"Show the distribution of {num_cols[0]}" if num_cols else "Detect null values",
+        c_col = cat_cols[0] if cat_cols else "category"
+        n_col = num_cols[0] if num_cols else "value"
+        sec_num = num_cols[1] if len(num_cols) > 1 else n_col
+        d_col = date_cols[0] if date_cols else None
+
+        # Sample entity value from dataset for filter suggestion
+        sample_entity = None
+        if cat_cols:
+            for c in cat_cols:
+                if df[c].nunique() <= 50 and df[c].notna().any():
+                    sample_entity = (c, str(df[c].dropna().iloc[0]))
+                    break
+
+        suggested_chips = [
+            f"Which {c_col} has the highest {n_col}?",
+            f"Top 5 {cat_cols[1] if len(cat_cols) > 1 else c_col} by {sec_num}",
+            f"Total {n_col} and {sec_num} by {c_col}" if sec_num != n_col else f"Total {n_col} by {c_col}",
+            f"What is the total {n_col} in {sample_entity[1]}?" if sample_entity else f"What is the total {n_col}?",
+            f"Monthly {n_col} trend" if d_col else f"What is the total revenue?",
+            f"How many orders had negative {sec_num}?" if "profit" in str(sec_num).lower() else "How many rows are in the dataset?",
         ]
 
-        st.markdown("**💡 Suggested Questions** — click to auto-fill:")
+        st.markdown("**💡 Suggested Questions** — click to test accuracy:")
         q_cols = st.columns(3)
         selected_suggestion = None
-        for i, sq in enumerate(suggestion_questions[:6]):
+        for i, sq in enumerate(suggested_chips[:6]):
             with q_cols[i % 3]:
-                if st.button(f"❓ {sq}", key=f"sq_{i}", width="stretch"):
+                if st.button(f"❓ {sq}", key=f"sq_chip_{i}", width="stretch"):
                     selected_suggestion = sq
 
         st.markdown("---")
 
-        user_question = st.text_input(
-            "🔍 Ask your data a question:",
-            value=selected_suggestion or "",
-            placeholder="e.g. What is the average revenue by region?",
-            key="nl_question_input"
-        )
+        col_input, col_btn = st.columns([4, 1])
+        with col_input:
+            user_question = st.text_input(
+                "🔍 Ask your data a question:",
+                value=selected_suggestion or "",
+                placeholder="e.g. Which category has the highest sales? or Total sales and profit by region",
+                key="nl_question_input",
+                label_visibility="collapsed"
+            )
+        with col_btn:
+            ask_btn = st.button("🚀 Analyze Now", type="primary", key="btn_ask_nl", width="stretch")
 
-        col_ask, col_schema = st.columns([1, 1])
-        with col_ask:
-            ask_btn = st.button("🚀 Generate & Run SQL", type="primary", width="stretch")
-        with col_schema:
+        col_schema_t, _ = st.columns([1, 3])
+        with col_schema_t:
             show_schema = st.toggle("📖 Show Schema", value=False, key="toggle_schema_ask")
-
         if show_schema:
-            with st.expander("📋 Table Schema", expanded=True):
+            with st.expander("📋 Table Schema & Data Dictionary", expanded=True):
                 _render_schema_explorer(engine, table_name, df)
 
-        if ask_btn and user_question.strip():
-            with st.spinner("🧠 Generating SQL from your question..."):
-                generated_sql = _nl_to_sql(user_question, df, table_name)
+        # Execution trigger
+        if (ask_btn or selected_suggestion) and user_question.strip():
+            with st.spinner("🧠 Translating question, querying DuckDB & synthesizing answer..."):
+                analysis_res = SmartSQLEngine.answer_question(
+                    question=user_question,
+                    df=df,
+                    con=engine.con,
+                    table=table_name
+                )
 
-            st.markdown(f"""
-            <div style="background: rgba(139,92,246,0.08); border: 1px solid rgba(139,92,246,0.25);
-                        border-radius: 10px; padding: 12px 16px; margin: 8px 0;">
-                <div style="font-size: 0.72rem; font-weight: 700; color: {NEON_VIOLET}; letter-spacing: 0.04em;">
-                    // GENERATED SQL
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            st.code(generated_sql, language="sql")
-
-            # Execute
-            with st.spinner("⚡ Executing on DuckDB..."):
-                res = engine.execute_query(generated_sql)
-
-            if not res["success"]:
-                st.error(f"❌ {res['error']}")
+            if not analysis_res.get("success"):
+                st.error(f"❌ Analysis Error: {analysis_res.get('error')}")
             else:
-                res_df = res["dataframe"]
+                res_df = analysis_res["dataframe"]
+                generated_sql = analysis_res["sql"]
+                answer_md = analysis_res.get("answer_markdown", "")
+                kpi_cards = analysis_res.get("kpi_cards", [])
+                chart_spec = analysis_res.get("chart_spec")
+
+                # Cache in session state
                 st.session_state["sql_last_result_df"] = res_df
                 st.session_state["sql_last_query"] = generated_sql
+                st.session_state["sql_last_answer"] = answer_md
+                st.session_state["sql_last_kpis"] = kpi_cards
+                st.session_state["sql_last_chart_spec"] = chart_spec
 
                 # Add to history
                 st.session_state["sql_query_history"].insert(0, {
                     "question": user_question,
                     "query": generated_sql,
-                    "rows": res["row_count"],
-                    "time_ms": res["execution_time_ms"],
+                    "rows": analysis_res.get("row_count", len(res_df) if res_df is not None else 0),
+                    "time_ms": analysis_res.get("execution_time_ms", 0.0),
                 })
-                # Keep last 30
                 st.session_state["sql_query_history"] = st.session_state["sql_query_history"][:30]
 
-                # Results
-                st.success(f"✅ Returned **{res['row_count']:,} rows** in **{res['execution_time_ms']} ms**")
+        # ── Display Active Result Section ──
+        if st.session_state.get("sql_last_result_df") is not None:
+            active_df = st.session_state["sql_last_result_df"]
+            active_sql = st.session_state.get("sql_last_query", "")
+            active_ans = st.session_state.get("sql_last_answer", "")
+            active_kpis = st.session_state.get("sql_last_kpis", [])
+            active_spec = st.session_state.get("sql_last_chart_spec")
 
-                res_tab, viz_tab, export_tab = st.tabs(["📋 Results", "📊 Visualization", "⬇️ Export"])
+            st.markdown("---")
 
-                with res_tab:
-                    if res_df is not None and not res_df.empty:
-                        st.dataframe(res_df, width="stretch", hide_index=True)
-                    else:
-                        st.info("Query returned 0 rows.")
+            # 1. Executive Answer Hero Card
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(0, 240, 255, 0.08));
+                        border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 14px;
+                        padding: 18px 22px; margin-bottom: 16px; box-shadow: 0 4px 25px rgba(0, 240, 255, 0.12);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="background: {NEON_CYAN}; color: #000000; font-weight: 800; font-size: 0.72rem;
+                                     padding: 2px 8px; border-radius: 6px; letter-spacing: 0.04em;">EXECUTIVE ANSWER</span>
+                        <span style="font-size: 0.78rem; color: #94A3B8;">Verified analytical computation</span>
+                    </div>
+                    <div style="font-size: 0.75rem; color: {NEON_GREEN}; font-weight: 600;">
+                        ✓ DuckDB Execution
+                    </div>
+                </div>
+                <div style="font-size: 1.05rem; color: #FFFFFF; font-weight: 500; line-height: 1.6;">
+                    {active_ans}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-                with viz_tab:
-                    if res_df is not None and not res_df.empty:
-                        _auto_visualize(res_df)
-                    else:
-                        st.info("No data to visualize.")
+            # 2. KPI Stat Cards (High-impact numbers)
+            if active_kpis:
+                _render_kpi_cards(active_kpis)
 
-                with export_tab:
-                    if res_df is not None and not res_df.empty:
-                        col_csv, col_json = st.columns(2)
-                        with col_csv:
-                            st.download_button(
-                                "📥 Download CSV",
-                                data=res_df.to_csv(index=False),
-                                file_name="sql_result.csv",
-                                mime="text/csv",
-                                width="stretch"
-                            )
-                        with col_json:
-                            st.download_button(
-                                "📥 Download JSON",
-                                data=res_df.to_json(orient="records", indent=2),
-                                file_name="sql_result.json",
-                                mime="application/json",
-                                width="stretch"
-                            )
+            # 3. Primary Visual Graphs & Analytical Breakdown
+            res_tabs = st.tabs(["📊 Interactive Visual Graphs", "📋 Data Table", "🔍 Generated SQL & Logic", "⬇️ Export"])
+
+            # Visual Graphs Tab
+            with res_tabs[0]:
+                st.markdown(f"""
+                <div style="font-size: 0.75rem; font-weight: 700; color: {NEON_CYAN}; letter-spacing: 0.05em; margin: 4px 0 10px 0;">
+                    // INTERACTIVE VISUAL EXPLORER
+                </div>
+                """, unsafe_allow_html=True)
+                _render_smart_visualization(active_df, active_spec, key_prefix="nl_main")
+
+            # Data Table Tab
+            with res_tabs[1]:
+                st.dataframe(active_df, width="stretch", hide_index=True)
+                st.caption(f"Showing **{len(active_df):,}** analytical rows.")
+
+            # SQL Logic Tab
+            with res_tabs[2]:
+                st.markdown(f"""
+                <div style="font-size: 0.74rem; font-weight: 700; color: {NEON_VIOLET}; letter-spacing: 0.05em; margin-bottom: 6px;">
+                    // EXECUTED DUCKDB SQL QUERY
+                </div>
+                """, unsafe_allow_html=True)
+                st.code(active_sql, language="sql")
+                st.info("💡 **DuckDB Engine**: This query is executed on an in-memory columnar database with zero data leakage.")
+
+            # Export Tab
+            with res_tabs[3]:
+                col_csv, col_json = st.columns(2)
+                with col_csv:
+                    st.download_button(
+                        "📥 Download Result as CSV",
+                        data=active_df.to_csv(index=False),
+                        file_name="sql_analytics_result.csv",
+                        mime="text/csv",
+                        width="stretch"
+                    )
+                with col_json:
+                    st.download_button(
+                        "📥 Download Result as JSON",
+                        data=active_df.to_json(orient="records", indent=2),
+                        file_name="sql_analytics_result.json",
+                        mime="application/json",
+                        width="stretch"
+                    )
 
     # ═══════════════════════════════════════════════════════════════════
-    # TAB 2: SQL Editor (manual)
+    # TAB 2: DuckDB SQL Workbench (manual editor)
     # ═══════════════════════════════════════════════════════════════════
     with tab_editor:
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, rgba(16,185,129,0.06), rgba(0,240,255,0.06));
-                    border: 1px solid rgba(16,185,129,0.15); border-radius: 12px; padding: 16px 20px; margin: 8px 0 16px 0;">
-            <div style="font-size: 0.78rem; font-weight: 700; color: {NEON_GREEN}; letter-spacing: 0.05em; margin-bottom: 6px;">
+                    border: 1px solid rgba(16,185,129,0.18); border-radius: 12px; padding: 14px 18px; margin: 8px 0 14px 0;">
+            <div style="font-size: 0.74rem; font-weight: 700; color: {NEON_GREEN}; letter-spacing: 0.05em; margin-bottom: 4px;">
                 // DUCKDB SQL WORKBENCH
             </div>
             <div style="font-size: 0.85rem; color: #CBD5E1; line-height: 1.5;">
-                Write and execute SQL queries directly. Supports <code>SELECT</code>, <code>WITH</code>,
-                <code>GROUP BY</code>, <code>ORDER BY</code>, aggregate functions, window functions, and CTEs.
-                Destructive statements (<code>DROP</code>, <code>DELETE</code>, etc.) are blocked.
+                Write and execute raw SQL queries. Full support for <code>SELECT</code>, <code>WITH</code>,
+                window functions, CTEs, and DuckDB analytical expressions.
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        # Preset query selector
         presets = _build_smart_presets(df, table_name)
         preset_labels = ["— Select a preset query —"] + [p["label"] for p in presets]
         selected_preset_idx = st.selectbox("📋 Quick Query Presets:", preset_labels, key="preset_selector")
@@ -611,7 +629,7 @@ def render_sql_view():
         query = st.text_area(
             "SQL Query Editor",
             value=preset_query if preset_query else default_query,
-            height=180,
+            height=160,
             key="sql_editor_textarea",
             help="Write your DuckDB SQL query. Press 'Run Query' to execute."
         )
@@ -630,15 +648,14 @@ def render_sql_view():
                 _render_schema_explorer(engine, table_name, df)
 
         if run_btn and query.strip():
-            with st.spinner("⚡ Executing query on DuckDB..."):
-                res = engine.execute_query(query)
+            with st.spinner("⚡ Executing query on DuckDB with self-healing..."):
+                res = SmartSQLEngine.execute_with_self_healing(engine.con, query, df, table=table_name)
 
             if not res["success"]:
                 st.error(f"❌ {res['error']}")
             else:
                 res_df = res["dataframe"]
-                st.session_state["sql_last_result_df"] = res_df
-                st.session_state["sql_last_query"] = query
+                st.session_state["sql_editor_last_df"] = res_df
 
                 # Add to history
                 st.session_state["sql_query_history"].insert(0, {
@@ -651,41 +668,34 @@ def render_sql_view():
 
                 st.success(f"✅ Returned **{res['row_count']:,} rows** in **{res['execution_time_ms']} ms**")
 
-                res_tab2, viz_tab2, export_tab2 = st.tabs(["📋 Results", "📊 Visualization", "⬇️ Export"])
+                ed_tabs = st.tabs(["📊 Visual Graphs", "📋 Data Table", "⬇️ Export"])
 
-                with res_tab2:
-                    if res_df is not None and not res_df.empty:
-                        st.dataframe(res_df, width="stretch", hide_index=True)
-                    else:
-                        st.info("Query returned 0 rows.")
+                with ed_tabs[0]:
+                    _render_smart_visualization(res_df, key_prefix="editor_chart")
 
-                with viz_tab2:
-                    if res_df is not None and not res_df.empty:
-                        _auto_visualize(res_df)
-                    else:
-                        st.info("No data to visualize.")
+                with ed_tabs[1]:
+                    st.dataframe(res_df, width="stretch", hide_index=True)
 
-                with export_tab2:
-                    if res_df is not None and not res_df.empty:
-                        col_csv2, col_json2 = st.columns(2)
-                        with col_csv2:
-                            st.download_button(
-                                "📥 Download CSV",
-                                data=res_df.to_csv(index=False),
-                                file_name="sql_result.csv",
-                                mime="text/csv",
-                                key="dl_csv_editor",
-                                width="stretch"
-                            )
-                        with col_json2:
-                            st.download_button(
-                                "📥 Download JSON",
-                                data=res_df.to_json(orient="records", indent=2),
-                                file_name="sql_result.json",
-                                mime="application/json",
-                                key="dl_json_editor",
-                                width="stretch"
-                            )
+                with ed_tabs[2]:
+                    col_csv2, col_json2 = st.columns(2)
+                    with col_csv2:
+                        st.download_button(
+                            "📥 Download CSV",
+                            data=res_df.to_csv(index=False),
+                            file_name="sql_workbench_result.csv",
+                            mime="text/csv",
+                            key="dl_csv_editor",
+                            width="stretch"
+                        )
+                    with col_json2:
+                        st.download_button(
+                            "📥 Download JSON",
+                            data=res_df.to_json(orient="records", indent=2),
+                            file_name="sql_workbench_result.json",
+                            mime="application/json",
+                            key="dl_json_editor",
+                            width="stretch"
+                        )
 
     # ═══════════════════════════════════════════════════════════════════
     # TAB 3: Query History
@@ -703,7 +713,8 @@ def render_sql_view():
             """, unsafe_allow_html=True)
 
             for i, entry in enumerate(history):
-                with st.expander(f"{'💬' if entry['question'] != '(Manual SQL)' else '⌨️'} {entry['question']} — {entry['rows']:,} rows in {entry['time_ms']}ms", expanded=False):
+                icon = "💬" if entry["question"] != "(Manual SQL)" else "⌨️"
+                with st.expander(f"{icon} {entry['question']} — {entry['rows']:,} rows ({entry['time_ms']}ms)", expanded=False):
                     st.code(entry["query"], language="sql")
                     if st.button(f"🔄 Re-run this query", key=f"rerun_{i}", width="stretch"):
                         with st.spinner("Re-executing..."):
