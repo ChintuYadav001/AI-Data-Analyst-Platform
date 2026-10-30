@@ -36,6 +36,18 @@ class DataProfilerModel:
             return s.map(_decode)
 
     @classmethod
+    def _safe_nunique(cls, series: pd.Series) -> int:
+        try:
+            return int(series.nunique())
+        except TypeError:
+            try:
+                return int(cls._safe_to_str(series).nunique())
+            except Exception:
+                return len(series.dropna())
+        except Exception:
+            return 0
+
+    @classmethod
     def classify_column(cls, series: pd.Series, col_name: str, total_rows: int, unique_count: Optional[int] = None) -> str:
         name_lower = col_name.lower().strip()
         non_null_count = series.dropna().count()
@@ -44,7 +56,7 @@ class DataProfilerModel:
 
         # Check for Identifier first
         if unique_count is None:
-            unique_count = int(series.nunique())
+            unique_count = cls._safe_nunique(series)
         unique_ratio = unique_count / non_null_count if non_null_count > 0 else 0
         if (unique_ratio > 0.95 and total_rows > 30) or any(k in name_lower for k in ["_id", "id_", "identifier", "uuid", "guid", "ssn"]):
             if unique_ratio > 0.7:
@@ -56,10 +68,13 @@ class DataProfilerModel:
 
         # Check for Boolean (only if unique_count <= 2)
         if unique_count <= 2:
-            sample_u = series.dropna().head(100)
-            if sample_u.isin([0, 1, True, False, "0", "1", "true", "false", "True", "False", "yes", "no", "Y", "N"]).all():
-                if series.dropna().isin([0, 1, True, False, "0", "1", "true", "false", "True", "False", "yes", "no", "Y", "N"]).all():
-                    return "Boolean"
+            try:
+                sample_u = series.dropna().head(100)
+                if sample_u.isin([0, 1, True, False, "0", "1", "true", "false", "True", "False", "yes", "no", "Y", "N"]).all():
+                    if series.dropna().isin([0, 1, True, False, "0", "1", "true", "false", "True", "False", "yes", "no", "Y", "N"]).all():
+                        return "Boolean"
+            except Exception:
+                pass
 
         # Check for Date/Time
         if pd.api.types.is_datetime64_any_dtype(series):
@@ -97,7 +112,7 @@ class DataProfilerModel:
 
     @classmethod
     def _fast_unique_counts(cls, df: pd.DataFrame) -> Dict[str, int]:
-        """Compute unique counts efficiently — use approx for large datasets."""
+        """Compute unique counts efficiently — use approx for large datasets and resilient to unhashables."""
         n_rows = len(df)
         result = {}
         if n_rows > cls.LARGE_DATASET_THRESHOLD:
@@ -105,17 +120,17 @@ class DataProfilerModel:
             sample = df.sample(min(cls.SAMPLE_SIZE_FOR_MODE, n_rows), random_state=42)
             ratio = n_rows / len(sample)
             for col in df.columns:
-                if pd.api.types.is_numeric_dtype(df[col]) or df[col].nunique() < 100:
-                    # Fast for numeric or low-cardinality
-                    result[col] = int(df[col].nunique())
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    result[col] = cls._safe_nunique(df[col])
                 else:
-                    # Approximate from sample
-                    sample_uniq = int(sample[col].nunique())
-                    # Cap at total non-null
-                    result[col] = min(int(sample_uniq * min(ratio, 3)), int(df[col].notna().sum()))
+                    sample_uniq = cls._safe_nunique(sample[col])
+                    if sample_uniq < 100:
+                        result[col] = cls._safe_nunique(df[col])
+                    else:
+                        result[col] = min(int(sample_uniq * min(ratio, 3)), int(df[col].notna().sum()))
         else:
             for col in df.columns:
-                result[col] = int(df[col].nunique())
+                result[col] = cls._safe_nunique(df[col])
         return result
 
     @classmethod
